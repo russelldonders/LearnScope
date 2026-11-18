@@ -13,7 +13,7 @@ function OrganisationAvatar({ organisation, size = 'md' }) {
   const sizeClass = size === 'sm' ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-xs'
   if (organisation.logo_url) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={organisation.logo_url}
         alt=""
         className={`${sizeClass} shrink-0 rounded-md border border-hairline bg-paper object-contain`}

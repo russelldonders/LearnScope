@@ -15,6 +15,7 @@ import {
 import PageContent, { PageMedia } from './PageContent'
 import PageInteractiveEditor from './PageInteractiveEditor'
 import AccessibleDialog from './AccessibleDialog'
+import ConfirmDialog from './ConfirmDialog'
 import { DragHandle } from './DragHandle'
 import { sideOf, findDropTarget } from '../lib/dragReorder'
 
@@ -356,6 +357,12 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   const [pageDocument, setPageDocument] = useState(() => normalisePageDocument(resource?.page_content || EMPTY_PAGE_DOCUMENT))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  // The text range a link is being added to, kept while the link dialog has
+  // focus (focusing its input clears the page's own selection).
+  const [linkRange, setLinkRange] = useState(null)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkError, setLinkError] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null) // { id, side: 'before' | 'after' }
   // Registry of each block wrapper's own DOM node, keyed by block id -- lets
@@ -429,9 +436,13 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     })
   }
 
-  async function closeEditor() {
+  async function closeEditor({ discard = false } = {}) {
     const isDirty = JSON.stringify({ title, pageDocument }) !== initialSnapshotRef.current
-    if (isDirty && !window.confirm("Discard unsaved changes to this page?")) return
+    if (isDirty && !discard) {
+      setConfirmingDiscard(true)
+      return
+    }
+    setConfirmingDiscard(false)
     if (!savedRef.current && sessionUploadsRef.current.size) {
       await Promise.allSettled([...sessionUploadsRef.current].map(removePageMediaAsset))
       sessionUploadsRef.current.clear()
@@ -581,17 +592,33 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   function handleAddLink(event) {
     event.preventDefault()
     const selection = window.getSelection()
-    if (!selection || selection.isCollapsed) {
-      window.alert('Select some text first, then add a link.')
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setError('Select some text first, then add a link.')
       return
     }
-    const url = window.prompt('Link URL (https://…)')
-    if (!url) return
-    if (!/^https?:\/\//i.test(url.trim())) {
-      window.alert('Please enter a full URL starting with http:// or https://')
+    setError(null)
+    setLinkError(null)
+    setLinkUrl('')
+    setLinkRange(selection.getRangeAt(0).cloneRange())
+  }
+
+  function applyLink(event) {
+    event.preventDefault()
+    const url = linkUrl.trim()
+    if (!/^https?:\/\//i.test(url)) {
+      setLinkError('Enter a full web address starting with http:// or https://')
       return
     }
-    window.document.execCommand?.('createLink', false, url.trim())
+    // Put the remembered selection back, in its own editable block, before
+    // turning it into a link.
+    const node = linkRange.startContainer
+    const editable = (node.nodeType === 1 ? node : node.parentElement)?.closest('[contenteditable="true"]')
+    editable?.focus()
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(linkRange)
+    window.document.execCommand?.('createLink', false, url)
+    setLinkRange(null)
   }
 
   return (
@@ -790,6 +817,49 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           </div>
         </main>
         )}
+
+      {confirmingDiscard && (
+        <ConfirmDialog
+          message="Discard unsaved changes to this page?"
+          confirmLabel="Discard changes"
+          onConfirm={() => void closeEditor({ discard: true })}
+          onCancel={() => setConfirmingDiscard(false)}
+        />
+      )}
+
+      {linkRange && (
+        <AccessibleDialog
+          labelledBy="page-link-dialog-title"
+          onClose={() => setLinkRange(null)}
+          overlayClassName="z-[60]"
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+        >
+          <form onSubmit={applyLink} className="space-y-3">
+            <h2 id="page-link-dialog-title" className="font-display text-lg text-ink">Add a link</h2>
+            <div>
+              <label htmlFor="page-link-url" className="block text-sm text-secondary mb-1">Web address</label>
+              <input
+                id="page-link-url"
+                type="url"
+                autoFocus
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://…"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              {linkError && <p role="alert" className="mt-1 text-xs text-red-700">{linkError}</p>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setLinkRange(null)} className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper">
+                Cancel
+              </button>
+              <button type="submit" className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90">
+                Add link
+              </button>
+            </div>
+          </form>
+        </AccessibleDialog>
+      )}
     </AccessibleDialog>
   )
 }

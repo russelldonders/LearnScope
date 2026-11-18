@@ -177,7 +177,7 @@ function CandidateRow({ candidate, selected, onSelect }) {
       }`}
     >
       {candidate.avatar_url ? (
-        <img src={candidate.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+        <img loading="lazy" decoding="async" src={candidate.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
       ) : (
         <div className="w-8 h-8 rounded-full bg-hairline shrink-0" />
       )}

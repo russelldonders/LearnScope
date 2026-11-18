@@ -2,7 +2,7 @@ export default function PersonAvatar({ name, avatarUrl, size = 8 }) {
   const dimension = `${size * 4}px`
   if (avatarUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={avatarUrl}
         alt=""
         style={{ width: dimension, height: dimension }}

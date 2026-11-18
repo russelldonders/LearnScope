@@ -30,7 +30,7 @@ export default function OrganizationLogo({ organizationUrl, size = 24 }) {
   }
 
   return (
-    <img
+    <img loading="lazy" decoding="async"
       src={logoUrl}
       alt=""
       onError={() => setFailed(true)}

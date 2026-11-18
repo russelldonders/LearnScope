@@ -711,7 +711,7 @@ function RaterAvatar({ url, size = 16 }) {
       style={{ width: size, height: size }}
     >
       {url ? (
-        <img src={url} alt="" className="w-full h-full object-cover" />
+        <img loading="lazy" decoding="async" src={url} alt="" className="w-full h-full object-cover" />
       ) : (
         <svg
           width={size * 0.6}

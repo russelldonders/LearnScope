@@ -47,7 +47,7 @@ export default function EvidenceThumbnail({ path, index }) {
       className="w-16 h-16 rounded-md overflow-hidden border border-hairline/70 bg-paper flex items-center justify-center text-[11px] text-secondary hover:border-moss focus:outline-none focus-visible:ring-2 focus-visible:ring-moss"
     >
       {url && !failed ? (
-        <img src={url} alt="" className="w-full h-full object-cover" onError={() => setFailed(true)} />
+        <img loading="lazy" decoding="async" src={url} alt="" className="w-full h-full object-cover" onError={() => setFailed(true)} />
       ) : (
         <span className="px-1 text-center">{failed ? label : t('common.loading')}</span>
       )}

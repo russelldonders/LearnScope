@@ -200,7 +200,7 @@ employers, or both. Clicking a name opens its own page,
 - **Status** — activate or deactivate it, with what that means.
 
 The list itself keeps search, status filters, create, and bulk
-activate/suspend. `?invites=pending` (the Overview's pending-invitations
+reactivate/deactivate. `?invites=pending` (the Overview's pending-invitations
 link) narrows it to organisations with staff invitations not yet accepted.
 
 ![Admin providers list showing four organisations — Acme Logistics, BrightPath Academy, the system LearnScope provider, and inactive Northfield Skills Institute — each with Edit, View courses, and Manage users actions](images/admin-providers.png)
@@ -211,8 +211,8 @@ page. Everything else (website, logo, brand colours, public profile) is
 filled in later, either by you or by the organisation's own admin staff
 once they have access.
 
-**Activate / Suspend**, individually or in bulk via row checkboxes, is how
-you gate an organisation's access without deleting anything: a suspended
+**Deactivate / Reactivate**, individually or in bulk via row checkboxes, is how
+you gate an organisation's access without deleting anything: a deactivated
 organisation's staff lose console access, but nothing about their data is
 touched, and reactivating restores it instantly.
 

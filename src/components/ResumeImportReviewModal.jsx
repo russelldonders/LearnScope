@@ -316,7 +316,7 @@ export default function ResumeImportReviewModal({
                   onChange={(e) => setApplyPhoto(e.target.checked)}
                   className="rounded border-hairline"
                 />
-                <img
+                <img loading="lazy" decoding="async"
                   src={`data:${extracted.photoContentType || 'image/jpeg'};base64,${extracted.photoBase64}`}
                   alt="Found in document"
                   className="w-12 h-12 rounded-full object-cover border border-hairline"

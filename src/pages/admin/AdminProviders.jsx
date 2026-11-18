@@ -161,7 +161,7 @@ export default function AdminProviders() {
     [filtered, selection.selected]
   )
   const selectedToActivate = useMemo(() => selectedOrgs.filter((o) => o.status !== 'active'), [selectedOrgs])
-  const selectedToSuspend = useMemo(() => selectedOrgs.filter((o) => o.status === 'active' && !o.is_system), [selectedOrgs])
+  const selectedToDeactivate = useMemo(() => selectedOrgs.filter((o) => o.status === 'active' && !o.is_system), [selectedOrgs])
   const [bulkAction, setBulkAction] = useState(null)
   const [bulkActing, setBulkActing] = useState(false)
   const pageIds = pageItems.filter((o) => !o.is_system).map((o) => o.id)
@@ -360,16 +360,16 @@ export default function AdminProviders() {
                 busy={bulkActing}
                 actions={[
                   {
-                    label: `Activate selected (${selectedToActivate.length})`,
+                    label: `Reactivate selected (${selectedToActivate.length})`,
                     disabled: selectedToActivate.length === 0,
                     title: selectedToActivate.length === 0 ? 'Every selected organisation is already active' : undefined,
                     onClick: () => setBulkAction({ targets: selectedToActivate, status: 'active' }),
                   },
                   {
-                    label: `Suspend selected (${selectedToSuspend.length})`,
-                    disabled: selectedToSuspend.length === 0,
-                    title: selectedToSuspend.length === 0 ? 'None of the selected organisations are active' : undefined,
-                    onClick: () => setBulkAction({ targets: selectedToSuspend, status: 'inactive' }),
+                    label: `Deactivate selected (${selectedToDeactivate.length})`,
+                    disabled: selectedToDeactivate.length === 0,
+                    title: selectedToDeactivate.length === 0 ? 'None of the selected organisations are active' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToDeactivate, status: 'inactive' }),
                   },
                 ]}
               />
@@ -416,10 +416,10 @@ export default function AdminProviders() {
         <ConfirmDialog
           message={
             bulkAction.status === 'active'
-              ? `Activate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users regain access.`
-              : `Suspend ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users lose access until reactivated.`
+              ? `Reactivate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users regain access.`
+              : `Deactivate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users lose access until reactivated.`
           }
-          confirmLabel={bulkAction.status === 'active' ? 'Activate' : 'Suspend'}
+          confirmLabel={bulkAction.status === 'active' ? 'Reactivate' : 'Deactivate'}
           confirming={bulkActing}
           onConfirm={handleBulkStatusChange}
           onCancel={() => setBulkAction(null)}

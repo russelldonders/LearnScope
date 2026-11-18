@@ -252,6 +252,28 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadySelectedIds, o
   )
 }
 
+// The Info form's values as saved on the course -- the starting form, and
+// what the current form is compared against to show unsaved changes.
+function formFromCourse(data) {
+  return {
+    name: data.name,
+    courseCode: data.course_code ?? '',
+    provider: data.provider ?? '',
+    courseType: data.course_type ?? '',
+    // Legacy free-text duration (pre-structured, or never parsed back
+    // apart -- see courseDuration.js) shown as a read-only hint when there's
+    // no structured value/unit to prefill the picker from, rather than
+    // guessing at parsing it.
+    legacyDuration: data.duration_value == null ? (data.duration ?? '') : '',
+    durationValue: data.duration_value ?? '',
+    durationUnit: data.duration_unit ?? 'hours',
+    synopsis: data.synopsis ?? '',
+    priceAmount: data.price_amount ?? '',
+    priceCurrency: data.price_currency ?? '',
+    completionPolicy: data.completion_policy ?? 'all_content',
+  }
+}
+
 // Info (name/code/type/duration/price/synopsis/image and save/publish) and
 // Content (sections/resources) used to sit stacked on one long page --
 // split into tabs since the two are edited at different times (details
@@ -274,14 +296,22 @@ const TABS = [
 export default function ProviderCourseEditor({ adminMode = false }) {
   const { courseId } = useParams()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const employerContext = searchParams.get('org')
   const { user, organisationMemberships } = useAuth()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
-  const [tab, setTab] = useState('content')
+  // Kept in ?tab= so a refresh, the back button or a shared link opens the
+  // same tab (Content when none is given).
+  const tab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'content'
+  function setTab(id) {
+    const next = new URLSearchParams(searchParams)
+    if (id === 'content') next.delete('tab')
+    else next.set('tab', id)
+    setSearchParams(next)
+  }
   // Name/type/duration/synopsis form state used to live inside CourseHeader
   // (only mounted on the Info tab), with its own Save/Submit buttons. Lifted
   // here so Save/Publish can sit above the tabs and work from either one --
@@ -321,23 +351,7 @@ export default function ProviderCourseEditor({ adminMode = false }) {
         setCourse(data)
         if (loadedCourseIdRef.current !== data.id) {
           loadedCourseIdRef.current = data.id
-          setForm({
-            name: data.name,
-            courseCode: data.course_code ?? '',
-            provider: data.provider ?? '',
-            courseType: data.course_type ?? '',
-            // Legacy free-text duration (pre-structured, or never parsed
-            // back apart -- see courseDuration.js) shown as a read-only
-            // hint when there's no structured value/unit to prefill the
-            // picker from, rather than guessing at parsing it.
-            legacyDuration: data.duration_value == null ? (data.duration ?? '') : '',
-            durationValue: data.duration_value ?? '',
-            durationUnit: data.duration_unit ?? 'hours',
-            synopsis: data.synopsis ?? '',
-            priceAmount: data.price_amount ?? '',
-            priceCurrency: data.price_currency ?? '',
-            completionPolicy: data.completion_policy ?? 'all_content',
-          })
+          setForm(formFromCourse(data))
         }
         if (data.status === 'draft' || data.status === 'rejected') {
           listCurrentVersionCatalogues(data.version_group_id)
@@ -345,8 +359,10 @@ export default function ProviderCourseEditor({ adminMode = false }) {
             .catch(() => setCurrentCatalogues([]))
         }
       }
+      return data
     } catch (err) {
       setError(err.message)
+      return null
     } finally {
       setLoading(false)
     }
@@ -358,7 +374,10 @@ export default function ProviderCourseEditor({ adminMode = false }) {
     setSaveError(null)
     try {
       await updateProviderCourse(course.id, form)
-      await load()
+      // Back to exactly what was stored (trimmed, normalised), so the form
+      // reads as saved rather than still differing by whitespace.
+      const saved = await load()
+      if (saved) setForm(formFromCourse(saved))
     } catch (err) {
       setSaveError(err.message)
     } finally {
@@ -399,6 +418,19 @@ export default function ProviderCourseEditor({ adminMode = false }) {
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === course?.organisation_id)?.role
   const isSystemCourse = Boolean(course?.organisations?.is_system)
   const canEdit = (adminMode ? isSystemCourse : Boolean(myRole)) && (course?.status === 'draft' || course?.status === 'rejected')
+  // Unsaved Info edits (content edits save as they happen). Leaving the page
+  // with any asks first, via the browser's own leave-page prompt.
+  const hasUnsavedDetails = Boolean(canEdit && course && form) &&
+    JSON.stringify(form) !== JSON.stringify(formFromCourse(course))
+  useEffect(() => {
+    if (!hasUnsavedDetails) return undefined
+    function warn(event) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [hasUnsavedDetails])
   const publishedCatalogues = (course?.course_catalogue_publications ?? [])
     .filter((publication) => publication.published_at && publication.catalogues)
     .map((publication) => publication.catalogues)
@@ -467,7 +499,7 @@ export default function ProviderCourseEditor({ adminMode = false }) {
               : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}
           className="text-sm text-secondary hover:text-ink mb-4 inline-block"
         >
-          ← Back to {adminMode ? 'course details' : 'provider console'}
+          ← Back to {adminMode ? 'course details' : 'learning content'}
         </Link>
 
         {loading && <p className="text-secondary">Loading…</p>}
@@ -476,6 +508,15 @@ export default function ProviderCourseEditor({ adminMode = false }) {
 
         {course && form && (
           <div className="space-y-6">
+            {/* On every tab, so it's always clear which course and which
+                version is being edited. */}
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h1 className="font-display text-xl text-ink">{course.name}</h1>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+                Version {course.version_number} · {COURSE_STATUS_LABELS[course.status] ?? course.status}
+              </span>
+            </div>
+
             {/* Rendered above the tabs (rather than inside the Info-tab-only
                 CourseHeader below) so a provider lands on this notice no
                 matter which tab the editor opens on -- Content is the
@@ -505,10 +546,10 @@ export default function ProviderCourseEditor({ adminMode = false }) {
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving || submitting}
+                    disabled={saving || submitting || !hasUnsavedDetails}
                     className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Save'}
+                    {saving ? 'Saving…' : 'Save details'}
                   </button>
                   <button
                     type="button"
@@ -527,6 +568,11 @@ export default function ProviderCourseEditor({ adminMode = false }) {
                     {course.status === 'rejected' ? 'Resubmit to Global catalogue' : 'Submit to Global catalogue'}
                   </button>}
                 </div>
+                <p className="text-xs text-secondary" aria-live="polite">
+                  {hasUnsavedDetails
+                    ? 'Unsaved changes to the course details on the Info tab.'
+                    : 'Course details saved. Content changes save as you make them.'}
+                </p>
               </div>
             )}
 
@@ -644,13 +690,6 @@ export default function ProviderCourseEditor({ adminMode = false }) {
 function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, globalCataloguePending, onPushToCatalogue, adminMode = false }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-        <h1 className="font-display text-xl text-ink">{course.name}</h1>
-        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          Version {course.version_number} · {COURSE_STATUS_LABELS[course.status] ?? course.status}
-        </span>
-      </div>
-
       <CourseImageUpload course={course} canEdit={canEdit} onUpdated={onSaved} />
 
       {course.status === 'approved' && (

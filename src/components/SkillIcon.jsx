@@ -22,7 +22,7 @@ export default function SkillIcon({ name, iconUrl, size = 'md', className = '' }
       style={iconUrl ? undefined : { background: `linear-gradient(135deg, ${from}, ${to})` }}
     >
       {iconUrl ? (
-        <img src={iconUrl} alt="" className="w-full h-full object-cover" />
+        <img loading="lazy" decoding="async" src={iconUrl} alt="" className="w-full h-full object-cover" />
       ) : (
         <span className="font-display text-paper/90">{initial}</span>
       )}

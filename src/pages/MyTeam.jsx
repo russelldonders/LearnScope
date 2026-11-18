@@ -76,7 +76,7 @@ function PersonAvatar({ name, avatarUrl, size = 'md' }) {
   const dimensions = size === 'lg' ? 'h-14 w-14 text-base' : 'h-10 w-10 text-sm'
   return (
     <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-moss text-paper font-medium ${dimensions}`}>
-      {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(name)}
+      {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(name)}
     </span>
   )
 }

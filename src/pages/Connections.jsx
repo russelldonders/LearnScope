@@ -581,7 +581,7 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
 function ConnectionAvatar({ name, avatarUrl }) {
   if (avatarUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={avatarUrl}
         alt=""
         className="w-8 h-8 rounded-full object-cover border border-hairline shrink-0"

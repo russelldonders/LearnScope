@@ -1,6 +1,7 @@
 import { randomUUID, createHmac } from 'node:crypto'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
+import { completionFromStatements, launchedActivityId, shouldRecord } from '../_lib/xapiCompletion.js'
 
 // A minimal Learning Record Store for uploaded xAPI/Tin Can packages (see
 // 0079_xapi_resources.sql). This is NOT a spec-conformant LRS -- it
@@ -98,6 +99,34 @@ async function resolveSession(req, res) {
   return { admin, session }
 }
 
+// Records a completed/passed outcome for the launched package as that
+// learner's progress on the course item, never downgrading what is there
+// (same course_content_progress row SCORM packages write through their own
+// runtime API).
+async function recordPackageCompletion(admin, session, statements) {
+  const outcome = completionFromStatements(statements, launchedActivityId(session.resource_id))
+  if (!outcome) return
+  const { data: current, error: readError } = await admin
+    .from('course_content_progress')
+    .select('status')
+    .eq('content_item_id', session.resource_id)
+    .eq('user_id', session.user_id)
+    .maybeSingle()
+  if (readError) throw readError
+  if (!shouldRecord(outcome, current?.status)) return
+  const { error } = await admin.from('course_content_progress').upsert(
+    {
+      content_item_id: session.resource_id,
+      user_id: session.user_id,
+      status: outcome.status,
+      ...(outcome.score == null ? {} : { score: outcome.score }),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'content_item_id,user_id' }
+  )
+  if (error) throw error
+}
+
 async function handleStatements(req, res) {
   const resolved = await resolveSession(req, res)
   if (!resolved) return
@@ -192,6 +221,15 @@ async function handleStatements(req, res) {
 
     const { error } = await admin.from('xapi_statements').upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
     if (error) throw error
+
+    // A package's own completed/passed statement about the launched activity
+    // completes that course item (see api/_lib/xapiCompletion.js). The
+    // statements are already stored, so a failure here is only logged.
+    try {
+      await recordPackageCompletion(admin, session, incoming)
+    } catch (progressError) {
+      console.error('xapi completion progress error:', progressError)
+    }
 
     res.status(req.method === 'PUT' ? 204 : 200)
     if (req.method === 'POST') res.json(ids)

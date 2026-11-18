@@ -23,7 +23,7 @@ export default function CourseThumbnail({ name, provider, logoUrl, imageUrl, gra
       style={imageUrl ? undefined : { background: `linear-gradient(135deg, ${from}, ${to})` }}
     >
       {imageUrl ? (
-        <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+        <img loading="lazy" decoding="async" src={imageUrl} alt="" className="w-full h-full object-cover" />
       ) : (
         // Same theme-flip reasoning as ProviderProfile.jsx's ctaTextClass --
         // a custom gradient has no dark-mode variant of its own, so it's
@@ -32,7 +32,7 @@ export default function CourseThumbnail({ name, provider, logoUrl, imageUrl, gra
       )}
       {logoUrl && (
         <div className="absolute bottom-1.5 left-1.5 w-7 h-7 rounded-md bg-[var(--org-background,var(--color-paper))] border border-hairline/50 shadow-sm overflow-hidden flex items-center justify-center">
-          <img src={logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+          <img loading="lazy" decoding="async" src={logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
         </div>
       )}
     </div>

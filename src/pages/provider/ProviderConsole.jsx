@@ -1312,7 +1312,7 @@ function CourseParticipantsDialog({ course, onClose }) {
               <div className="flex items-start gap-3">
                 <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-paper border border-hairline flex items-center justify-center">
                   {participant.profile?.avatar_url ? (
-                    <img src={participant.profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                    <img loading="lazy" decoding="async" src={participant.profile.avatar_url} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-sm font-medium text-secondary">{participant.profile?.full_name?.[0]?.toUpperCase() ?? '?'}</span>
                   )}

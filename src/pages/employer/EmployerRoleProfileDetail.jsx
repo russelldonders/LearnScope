@@ -67,11 +67,8 @@ export default function EmployerRoleProfileDetail() {
         setNotFound(true)
         return
       }
-      const [employerData, membersData, assignments] = await Promise.all([
-        getOrganisation(rawProfile.employerId),
-        listEmployerMembers(rawProfile.employerId),
-        listEmployerRoleAssignments(roleProfileId),
-      ])
+      // Everything below needs only the profile's employer id (the
+      // organisation id itself), so it all loads in one parallel round.
       // Skills: scoped to the employer's attached provider org's own offered-
       // skills roster, not the platform's global skill library. Courses:
       // listEmployerCatalogueCourses now takes the employer id itself (not
@@ -82,10 +79,13 @@ export default function EmployerRoleProfileDetail() {
       // The global skill library is offered too, so an employer with no
       // offered-skills roster of its own can still define what a role needs;
       // the organisation's own skills are listed first and win on overlap.
-      const [organisationSkills, librarySkills, coursesData] = await Promise.all([
-        listEmployerCatalogueSkills(employerData.id),
+      const [employerData, membersData, assignments, organisationSkills, librarySkills, coursesData] = await Promise.all([
+        getOrganisation(rawProfile.employerId),
+        listEmployerMembers(rawProfile.employerId),
+        listEmployerRoleAssignments(roleProfileId),
+        listEmployerCatalogueSkills(rawProfile.employerId),
         listLibrarySkills(),
-        listEmployerCatalogueCourses(employerData.id),
+        listEmployerCatalogueCourses(rawProfile.employerId),
       ])
       const organisationSkillIds = new Set(organisationSkills.map((s) => s.id))
       const skillsData = [
@@ -103,14 +103,17 @@ export default function EmployerRoleProfileDetail() {
       const acceptedUserIds = nextProfile.linkedEmployees
         .filter((employee) => employee.status === 'accepted')
         .map((employee) => employee.userId)
-      setReadiness(await getEmployerRoleProfileReadiness(rawProfile.employerId, nextProfile, acceptedUserIds))
-      setConfirmations(
-        await listEmployerSkillConfirmations(
+      // Readiness and confirmations are independent of each other.
+      const [nextReadiness, nextConfirmations] = await Promise.all([
+        getEmployerRoleProfileReadiness(rawProfile.employerId, nextProfile, acceptedUserIds),
+        listEmployerSkillConfirmations(
           rawProfile.employerId,
           acceptedUserIds,
           nextProfile.requiredSkills.map((s) => s.skillId)
-        )
-      )
+        ),
+      ])
+      setReadiness(nextReadiness)
+      setConfirmations(nextConfirmations)
     } catch (err) {
       setError(err.message)
     } finally {

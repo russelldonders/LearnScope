@@ -487,13 +487,21 @@ export async function removeItem(itemId) {
   if (error) throw error
 }
 
-// Saves a new order: rows are { id, position } in the order wanted.
+// Saves a new order: rows are { id, position } in the order wanted. One call
+// per reorder (reorder_learner_plan_sections / _items, run 0312) -- all rows
+// move or none do, instead of one update request per row.
+const REORDER_FUNCTIONS = {
+  learner_plan_sections: ['reorder_learner_plan_sections', 'p_section_ids'],
+  learner_plan_items: ['reorder_learner_plan_items', 'p_item_ids'],
+}
+
 export async function savePositions(table, rows) {
-  const results = await Promise.all(
-    rows.map((row) => supabase.from(table).update({ position: row.position }).eq('id', row.id)),
-  )
-  const failed = results.find((result) => result.error)
-  if (failed) throw failed.error
+  const reorder = REORDER_FUNCTIONS[table]
+  if (!reorder) throw new Error(`Can't reorder ${table}.`)
+  const [fn, param] = reorder
+  const ordered = [...rows].sort((x, y) => x.position - y.position).map((row) => row.id)
+  const { error } = await supabase.rpc(fn, { [param]: ordered })
+  if (error) throw error
 }
 
 // The learner's name, for the activities their ticks record (xAPI actor).

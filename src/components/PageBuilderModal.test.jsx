@@ -12,6 +12,8 @@ vi.mock('../lib/courseContent', () => ({
   uploadPageMediaAsset: vi.fn(),
 }))
 
+vi.mock('../context/LanguageContext', () => import('../test/languageMock'))
+
 afterEach(cleanup)
 
 const commonProps = {
@@ -122,3 +124,25 @@ it('lets an author choose how scored questions are presented', async () => {
   expect(screen.getByRole('combobox', { name: 'Show questions' })).toHaveValue('one_at_a_time')
 })
 
+it('asks in an in-app dialog before discarding unsaved changes', () => {
+  const onClose = vi.fn()
+  const confirmSpy = vi.spyOn(window, 'confirm')
+  render(<PageBuilderModal organisationId="org-1" userId="me" initialTitle="Listening" onClose={onClose} onSaved={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Listening well' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  expect(confirmSpy).not.toHaveBeenCalled()
+  expect(onClose).not.toHaveBeenCalled()
+  expect(screen.getByText('Discard unsaved changes to this page?')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+  return waitFor(() => expect(onClose).toHaveBeenCalled()).finally(() => confirmSpy.mockRestore())
+})
+
+it('explains inline, not in a browser pop-up, that a link needs selected text', () => {
+  const alertSpy = vi.spyOn(window, 'alert')
+  render(<PageBuilderModal organisationId="org-1" userId="me" initialTitle="Listening" onClose={vi.fn()} onSaved={vi.fn()} />)
+  window.getSelection()?.removeAllRanges()
+  fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
+  expect(alertSpy).not.toHaveBeenCalled()
+  expect(screen.getByRole('alert')).toHaveTextContent('Select some text first, then add a link.')
+  alertSpy.mockRestore()
+})

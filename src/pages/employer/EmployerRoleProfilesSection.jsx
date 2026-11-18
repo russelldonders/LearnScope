@@ -5,7 +5,7 @@ import {
   createEmployerRoleProfile,
   deleteEmployerRoleProfiles,
   setEmployerRoleProfilesStatus,
-  listEmployerRoleAssignments,
+  listEmployerRoleAssignmentsByProfile,
   listEmployerRoleProfiles,
   toRoleProfileViewModel,
 } from '../../lib/employerRoleProfiles'
@@ -28,15 +28,15 @@ export default function EmployerRoleProfilesSection({ employer, user, searchPara
     setLoading(true)
     setError(null)
     try {
-      const [nextProfiles, nextMembers] = await Promise.all([
+      // Roles, members and every role's assignments in one parallel round
+      // (one assignments call for the whole employer, not one per role).
+      const [nextProfiles, nextMembers, nextAssignments] = await Promise.all([
         listEmployerRoleProfiles(employer.id),
         listEmployerMembers(employer.id),
+        listEmployerRoleAssignmentsByProfile(employer.id),
       ])
-      const assignmentEntries = await Promise.all(
-        nextProfiles.map(async (profile) => [profile.id, await listEmployerRoleAssignments(profile.id)])
-      )
       setProfiles(nextProfiles)
-      setAssignmentsByProfile(Object.fromEntries(assignmentEntries))
+      setAssignmentsByProfile(nextAssignments)
       setMembers(nextMembers)
     } catch (err) {
       setError(err.message)

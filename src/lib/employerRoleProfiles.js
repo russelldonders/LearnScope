@@ -199,12 +199,8 @@ export async function withdrawEmployerRoleAssignment(assignmentId) {
   if (error) throw error
 }
 
-export async function listEmployerRoleAssignments(profileId) {
-  const { data, error } = await supabase.rpc('list_employer_role_assignments', {
-    p_role_profile_id: profileId,
-  })
-  if (error) throw error
-  return (data ?? []).map((row) => ({
+function mapRoleAssignment(row) {
+  return {
     id: row.id,
     memberId: row.employer_member_id,
     userId: row.learner_user_id,
@@ -217,7 +213,30 @@ export async function listEmployerRoleAssignments(profileId) {
       title: row.current_role_title,
       organization: row.current_role_organization,
     } : null,
-  }))
+  }
+}
+
+export async function listEmployerRoleAssignments(profileId) {
+  const { data, error } = await supabase.rpc('list_employer_role_assignments', {
+    p_role_profile_id: profileId,
+  })
+  if (error) throw error
+  return (data ?? []).map(mapRoleAssignment)
+}
+
+// Every role profile's assignments for one employer in a single call
+// (list_employer_role_assignments_for_employer, run 0313), grouped by role
+// profile id -- the same rows listEmployerRoleAssignments returns per profile.
+export async function listEmployerRoleAssignmentsByProfile(employerId) {
+  const { data, error } = await supabase.rpc('list_employer_role_assignments_for_employer', {
+    p_employer_id: employerId,
+  })
+  if (error) throw error
+  const byProfile = {}
+  for (const row of data ?? []) {
+    ;(byProfile[row.role_profile_id] ??= []).push(mapRoleAssignment(row))
+  }
+  return byProfile
 }
 
 // One employee's own role profiles, whatever their status -- the inverse
