@@ -160,10 +160,12 @@ export function CourseItemPlayer({
             onClick={onMarkComplete}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
+            {/* A page is done once read, so moving on is just "Next page"
+                (it's still recorded as complete). */}
             {isPageCourse
-              ? isComplete
-                ? (hasNext ? t('courseLearn.nextPage') : t('courseLearn.done'))
-                : (hasNext ? t('courseLearn.completePageContinue') : t('courseLearn.completePage'))
+              ? hasNext
+                ? t('courseLearn.nextPage')
+                : (isComplete ? t('courseLearn.done') : t('courseLearn.completePage'))
               : isComplete
                 ? (hasNext ? t('courseLearn.next') : t('courseLearn.done'))
                 : hasNext ? t('courseLearn.markCompleteContinue') : t('courseLearn.markComplete')}
@@ -184,7 +186,10 @@ export function CourseItemPlayer({
 // inOverlay: shown inside a FullScreenOverlay (CourseOverlay) over another
 // page, which gives the course's title and the way back -- so no app header,
 // back link, title or course editing here (deleting would leave the page).
-export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false, inOverlay = false }) {
+// onProgressChange: told { done, total, percent } as the learner works
+// through the course (null when there's nothing to work through), for the
+// overlay to show in its own header instead of here.
+export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false, inOverlay = false, onProgressChange = null }) {
   const { id: routeCourseId } = useParams()
   const id = courseIdProp ?? routeCourseId
   const { user } = useAuth()
@@ -223,8 +228,10 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
   // highlighting, and must stay set for the page to render at all) so
   // collapsing the accordion on mobile can't blank the whole page.
   const [expandedItemId, setExpandedItemId] = useState(null)
-  // All sections start open, and any number can stay open at once -- not an
-  // accordion. Below md, an open item goes further into "focus mode":
+  // Only the current item's section is open; moving into another section
+  // closes the rest (the learner can still open others to look ahead), so
+  // the outline stays short. Below md, an open item goes further into
+  // "focus mode":
   // everything else in the nav (other sections, other items) hides so only
   // that item's row and its player are visible, scrolled to the top of the
   // screen; collapsing it brings the outline back.
@@ -282,7 +289,6 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       const firstItem = sortBySection(contentItems, sectionRows)[0]
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
-      setOpenSectionKeys((prev) => (prev.size > 0 ? prev : new Set([...sectionRows.map((s) => s.id), 'ungrouped'])))
     }
 
     setCohort(data.cohort_id ? await getCourseCohort(data.cohort_id) : null)
@@ -348,16 +354,10 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
   // highlighting), keeps the mobile accordion open on whatever item is now
   // current if it was already open (so "Mark complete & continue" and
   // Previous carry it along instead of leaving it open on the item you
-  // just left), and opens that item's section if a "continue" jumped into
-  // a different one.
+  // just left). Its section opens through currentSectionKey below.
   function selectItem(itemId) {
     setCurrentItemId(itemId)
     setExpandedItemId((current) => (current === null ? null : itemId))
-    const item = orderedItems.find((i) => i.id === itemId)
-    if (item) {
-      const key = item.sectionId ?? 'ungrouped'
-      setOpenSectionKeys((current) => (current.has(key) ? current : new Set(current).add(key)))
-    }
   }
 
   function handleNavClick(item) {
@@ -383,6 +383,36 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
   ).length
   const progress = orderedItems.length ? Math.round((completedCount / orderedItems.length) * 100) : 0
   const isFocused = !isDesktop && expandedItemId !== null
+
+  const hasContent = Boolean(currentItem)
+  useEffect(() => {
+    onProgressChange?.(hasContent ? { done: completedCount, total: orderedItems.length, percent: progress } : null)
+    // Reported when the numbers change, not when the callback's identity does.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasContent, completedCount, orderedItems.length, progress])
+
+  // Whenever the current item moves into another section, that section is
+  // the one open in the outline. Adjusted while rendering (not in an effect)
+  // so the outline never shows a frame with the wrong sections open.
+  const currentSectionKey = currentItem ? (currentItem.sectionId ?? 'ungrouped') : null
+  const [openedForSection, setOpenedForSection] = useState(null)
+  if (currentSectionKey !== openedForSection) {
+    setOpenedForSection(currentSectionKey)
+    if (currentSectionKey) setOpenSectionKeys(new Set([currentSectionKey]))
+  }
+
+  // Moving to another item (Next, Previous, or the outline) starts it from
+  // its top, rather than leaving the view where the last one ended. Inside
+  // an overlay this scrolls the overlay; on its own page, the page. Below md
+  // the accordion effect further down does the same for the open row.
+  const contentTopRef = useRef(null)
+  const previousItemIdRef = useRef(null)
+  useEffect(() => {
+    const previous = previousItemIdRef.current
+    previousItemIdRef.current = currentItemId
+    if (!isDesktop || !previous || !currentItemId || previous === currentItemId) return
+    contentTopRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [currentItemId, isDesktop])
 
   useEffect(() => {
     if (
@@ -525,9 +555,10 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
         {loading && <p className="text-secondary">{t('common.loading')}</p>}
         {notFound && <p className="text-secondary">{t('courseLearn.notFound')}</p>}
 
-        {course && (
-          <div className={`flex items-center gap-4 flex-wrap mb-2 ${inOverlay ? 'justify-end' : 'justify-between'}`}>
-            {!inOverlay && <h1 className="font-display text-2xl text-ink">{course.name}</h1>}
+        {/* In an overlay, its header carries the title and progress. */}
+        {course && !inOverlay && (
+          <div className="flex items-center gap-4 flex-wrap mb-2 justify-between">
+            <h1 className="font-display text-2xl text-ink">{course.name}</h1>
             <div className="flex items-center gap-3 shrink-0">
               {currentItem && (
                 <p className="font-mono text-xs text-secondary">
@@ -594,7 +625,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
 
         {course && currentItem && (
           <div>
-            <ProgressBar percent={progress} className="mb-4" />
+            {!inOverlay && <ProgressBar percent={progress} className="mb-4" />}
             <div className="mb-8 flex items-start justify-between gap-4 border-b border-hairline pb-4 max-sm:flex-col">
               <div>
                 <p className="text-sm font-medium text-ink">
@@ -625,7 +656,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
               )}
             </div>
 
-            <div className="grid md:grid-cols-[280px_1fr] gap-6">
+            <div ref={contentTopRef} className="grid md:grid-cols-[280px_1fr] gap-6">
               <nav>
                 {isFocused ? (
                   <ul className="space-y-1">{renderItemRow(currentItem)}</ul>

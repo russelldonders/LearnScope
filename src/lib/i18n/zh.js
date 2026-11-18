@@ -2761,7 +2761,6 @@ export default {
     next: '下一项',
     previousPage: '上一页',
     nextPage: '下一页',
-    completePageContinue: '完成本页并继续',
     completePage: '完成本页',
     pagePosition: '第 {current} 页，共 {total} 页',
     done: '完成',

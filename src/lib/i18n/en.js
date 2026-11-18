@@ -2780,7 +2780,6 @@ export default {
     next: 'Next',
     nextPage: 'Next page',
     done: 'Done',
-    completePageContinue: 'Complete page & continue',
     completePage: 'Complete page',
     pagePosition: 'Page {current} of {total}',
     markCompleteContinue: 'Mark complete & continue',

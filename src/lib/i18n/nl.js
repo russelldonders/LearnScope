@@ -2780,7 +2780,6 @@ export default {
     next: 'Volgende',
     previousPage: 'Vorige pagina',
     nextPage: 'Volgende pagina',
-    completePageContinue: 'Pagina afronden en doorgaan',
     completePage: 'Pagina afronden',
     pagePosition: 'Pagina {current} van {total}',
     done: 'Klaar',

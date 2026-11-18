@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -52,7 +52,30 @@ describe('CourseLearn', () => {
 
     expect(screen.getByText('Page 2 of 4')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Complete page & continue' })).toBeInTheDocument()
+    // Moving on is simply the next page, whether or not it's been read yet.
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Complete page/ })).not.toBeInTheDocument()
+  })
+
+  it('finishes a page course with Complete page on its last page', () => {
+    const onMarkComplete = vi.fn()
+    render(
+      <CourseItemPlayer
+        item={{ id: 'page-4', type: 'page', page_content: { version: '1', blocks: [] } }}
+        courseId="course-1"
+        hasPrevious
+        hasNext={false}
+        isComplete={false}
+        progress={75}
+        onMarkComplete={onMarkComplete}
+        onPrevious={vi.fn()}
+        onProgress={vi.fn()}
+        pageNumber={4}
+        pageCount={4}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Complete page' }))
+    expect(onMarkComplete).toHaveBeenCalled()
   })
 
   it('shows a personal course with a translated back link and empty state', async () => {

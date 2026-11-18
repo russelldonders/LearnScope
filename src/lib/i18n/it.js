@@ -2782,7 +2782,6 @@ export default {
     next: 'Avanti',
     previousPage: 'Pagina precedente',
     nextPage: 'Pagina successiva',
-    completePageContinue: 'Completa la pagina e continua',
     completePage: 'Completa la pagina',
     pagePosition: 'Pagina {current} di {total}',
     done: 'Fatto',
