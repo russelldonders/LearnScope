@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import AccessibleDialog from './AccessibleDialog'
+import FullScreenOverlay from './FullScreenOverlay'
 import { useLanguage } from '../context/LanguageContext'
 import { buildAdlLaunchUrl } from '../lib/adlLaunch'
 import { fetchShimmedLaunchDoc, xapiActivityId } from '../lib/courseContent'
@@ -21,7 +21,6 @@ export default function SkillPackageOverlay({ resource, userId, onClose }) {
   const [frame, setFrame] = useState(null)
   const [error, setError] = useState(null)
   const baseUrl = packageLaunchUrl(resource)
-  const headingId = `skill-package-${resource.id}-title`
 
   useEffect(() => {
     if (!baseUrl) return undefined
@@ -41,45 +40,26 @@ export default function SkillPackageOverlay({ resource, userId, onClose }) {
   }, [resource.id, userId, baseUrl])
 
   return (
-    <AccessibleDialog
-      labelledBy={headingId}
+    <FullScreenOverlay
+      title={resource.title}
+      subtitle={resource.kind === 'xapi' ? t('skillDetail.resources.packageRecordsActivity') : null}
+      closeLabel={t('skillDetail.resources.closePackage')}
       onClose={onClose}
-      // A click outside shouldn't lose the learner's place in a course.
-      closeOnBackdrop={false}
-      overlayClassName="p-2! sm:p-4!"
-      panelClassName="flex h-full w-full flex-col overflow-hidden rounded-md bg-paper shadow-xl focus:outline-none"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-2">
-        <div className="min-w-0">
-          <h2 id={headingId} className="truncate font-display text-lg text-ink">{resource.title}</h2>
-          {resource.kind === 'xapi' && (
-            <p className="text-xs text-secondary">{t('skillDetail.resources.packageRecordsActivity')}</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:border-moss"
-        >
-          {t('skillDetail.resources.closePackage')}
-        </button>
-      </div>
-      <div className="relative min-h-0 flex-1 bg-card">
-        {!baseUrl ? (
-          <p role="alert" className="p-4 text-sm text-red-700">{t('skillDetail.resources.packageNoLaunch')}</p>
-        ) : error ? (
-          <p role="alert" className="p-4 text-sm text-red-700">{error}</p>
-        ) : !frame ? (
-          <p className="p-4 text-sm text-secondary">{t('skillDetail.resources.packageLoading')}</p>
-        ) : (
-          <iframe
-            title={resource.title}
-            {...frame}
-            className="absolute inset-0 h-full w-full border-0 bg-paper"
-            sandbox="allow-scripts allow-forms"
-          />
-        )}
-      </div>
-    </AccessibleDialog>
+      {!baseUrl ? (
+        <p role="alert" className="p-4 text-sm text-red-700">{t('skillDetail.resources.packageNoLaunch')}</p>
+      ) : error ? (
+        <p role="alert" className="p-4 text-sm text-red-700">{error}</p>
+      ) : !frame ? (
+        <p className="p-4 text-sm text-secondary">{t('skillDetail.resources.packageLoading')}</p>
+      ) : (
+        <iframe
+          title={resource.title}
+          {...frame}
+          className="absolute inset-0 h-full w-full border-0 bg-paper"
+          sandbox="allow-scripts allow-forms"
+        />
+      )}
+    </FullScreenOverlay>
   )
 }

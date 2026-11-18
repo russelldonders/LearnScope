@@ -18,6 +18,8 @@ import ProgressBar from './ProgressBar'
 // A recommended course can be enrolled in straight away (onEnrol) or added
 // to the plan first (onPlan); a planned one enrolled in from the plan
 // (onEnrolPlanned). enrollingId: the course being enrolled in just now.
+// onOpenCourse: opens an enrolled course's lessons over the page (on the
+// learner's own skill); without it, the course's own page is linked.
 export default function SkillLearningSection({
   courseLinks,
   availableCourses = null,
@@ -26,6 +28,7 @@ export default function SkillLearningSection({
   onOpenAvailable,
   onEnrol = null,
   enrollingId = null,
+  onOpenCourse = null,
   onPlan = null,
   onEnrolPlanned = null,
   onRemovePlanned = null,
@@ -47,6 +50,10 @@ export default function SkillLearningSection({
     const progress = progressOf(course)
     return progress?.total ? Math.round((progress.completed / progress.total) * 100) : null
   }
+  // An enrolled course opens over the page where it can, else on its own page.
+  const openProps = (course) => (onOpenCourse
+    ? { onClick: () => onOpenCourse(course), opensDialog: true }
+    : { to: `/courses/${course.id}/learn` })
   const enrolAction = (course, handler) => handler && {
     label: enrollingId === course.id ? t('skillDetail.learning.enrolling') : t('skillDetail.learning.enrol'),
     onClick: () => handler(course),
@@ -115,7 +122,7 @@ export default function SkillLearningSection({
               key={course.id}
               name={course.name}
               detail={[course.provider]}
-              to={`/courses/${course.id}/learn`}
+              {...openProps(course)}
               cta={t('skillDetail.learning.startCourse')}
               actions={onCancel && [{ label: t('skillDetail.learning.cancel'), onClick: () => onCancel(course) }]}
             />
@@ -128,7 +135,7 @@ export default function SkillLearningSection({
               key={course.id}
               name={course.name}
               detail={[course.provider]}
-              to={`/courses/${course.id}/learn`}
+              {...openProps(course)}
               cta={t('skillDetail.learning.continueCourse')}
               percent={percentOf(course)}
               actions={onCancel && [{ label: t('skillDetail.learning.cancel'), onClick: () => onCancel(course) }]}
@@ -177,7 +184,7 @@ function Group({ title, children }) {
 // A course row. One that opens somewhere reads as a link: its name in the
 // link colour, a "Continue →"-style prompt, and the whole row highlighting on
 // hover. percent: how far through it the learner is, as a progress bar.
-function Course({ name, detail, to = null, onClick = null, cta = null, percent = null, actions = null }) {
+function Course({ name, detail, to = null, onClick = null, opensDialog = false, cta = null, percent = null, actions = null }) {
   const { t } = useLanguage()
   const shownActions = (actions ?? []).filter(Boolean)
   const opens = Boolean(to || onClick)
@@ -216,7 +223,7 @@ function Course({ name, detail, to = null, onClick = null, cta = null, percent =
         {to ? (
           <Link to={to} className={linkClass}>{text}</Link>
         ) : onClick ? (
-          <button type="button" onClick={onClick} className={`${linkClass} w-full`}>{text}</button>
+          <button type="button" onClick={onClick} aria-haspopup={opensDialog ? 'dialog' : undefined} className={`${linkClass} w-full`}>{text}</button>
         ) : (
           <div className="py-1">{text}</div>
         )}

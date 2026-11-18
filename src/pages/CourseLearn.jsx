@@ -181,7 +181,10 @@ export function CourseItemPlayer({
   )
 }
 
-export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false }) {
+// inOverlay: shown inside a FullScreenOverlay (CourseOverlay) over another
+// page, which gives the course's title and the way back -- so no app header,
+// back link, title or course editing here (deleting would leave the page).
+export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false, inOverlay = false }) {
   const { id: routeCourseId } = useParams()
   const id = courseIdProp ?? routeCourseId
   const { user } = useAuth()
@@ -496,13 +499,20 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
     )
   }
 
+  // The overlay's own page has the main landmark already.
+  const Main = inOverlay ? 'div' : 'main'
+  const bare = embeddedScorm || inOverlay
+
   return (
-    <div className="min-h-screen bg-paper">
-      {!embeddedScorm && <AppHeader />}
-      <main id="main-content" tabIndex={-1} className={`max-w-5xl mx-auto px-4 ${embeddedScorm ? 'py-5' : 'py-8'}`}>
+    <div className={inOverlay ? 'bg-paper min-h-full' : 'min-h-screen bg-paper'}>
+      {!bare && <AppHeader />}
+      <Main
+        {...(inOverlay ? {} : { id: 'main-content', tabIndex: -1 })}
+        className={`max-w-5xl mx-auto px-4 ${bare ? 'py-5' : 'py-8'}`}
+      >
         {/* Back to whatever opened this course: a page that said so, else
             the previous page in the app, else Learning. */}
-        {!embeddedScorm && (
+        {!bare && (
           <BackLink
             to={location.state?.backTo ?? null}
             label={backLabel}
@@ -516,15 +526,15 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
         {notFound && <p className="text-secondary">{t('courseLearn.notFound')}</p>}
 
         {course && (
-          <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
-            <h1 className="font-display text-2xl text-ink">{course.name}</h1>
+          <div className={`flex items-center gap-4 flex-wrap mb-2 ${inOverlay ? 'justify-end' : 'justify-between'}`}>
+            {!inOverlay && <h1 className="font-display text-2xl text-ink">{course.name}</h1>}
             <div className="flex items-center gap-3 shrink-0">
               {currentItem && (
                 <p className="font-mono text-xs text-secondary">
                   {t('courseLearn.completeCount', { done: completedCount, total: orderedItems.length })}
                 </p>
               )}
-              {canEditBasics && !embeddedScorm && (
+              {canEditBasics && !bare && (
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
@@ -693,7 +703,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
             onClose={() => setEditOpen(false)}
           />
         )}
-      </main>
+      </Main>
     </div>
   )
 }

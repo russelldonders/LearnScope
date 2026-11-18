@@ -24,6 +24,7 @@ import {
   removePlannedCourse,
 } from '../lib/courseCatalogue'
 import CohortPickerModal from '../components/CohortPickerModal'
+import CourseOverlay from '../components/CourseOverlay'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
@@ -162,6 +163,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [cohortPicker, setCohortPicker] = useState(null)
   const [cohortEnrolling, setCohortEnrolling] = useState(false)
   const [cohortError, setCohortError] = useState(null)
+  // An enrolled course opened over the page.
+  const [openCourse, setOpenCourse] = useState(null)
   const [learningError, setLearningError] = useState(null)
   const [quickLogOpen, setQuickLogOpen] = useState(false)
   const [quickLogGoals, setQuickLogGoals] = useState([])
@@ -668,6 +671,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               availableCourses={availableCourses}
               progressByCatalogueId={progressByCatalogueId}
               enrollingId={enrollingCourseId}
+              onOpenCourse={skill.user_id === user.id ? setOpenCourse : null}
               onEnrol={skill.user_id === user.id ? (course) => handleEnrol(course, course.id) : null}
               onPlan={skill.user_id === user.id ? (course) => runLearningAction(() => planCatalogueCourse(user.id, course, skill.id)) : null}
               onRemovePlanned={skill.user_id === user.id ? (course) => runLearningAction(() => removePlannedCourse(course.id)) : null}
@@ -863,6 +867,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
             )}
             </div>
+
+            {openCourse && (
+              <CourseOverlay
+                course={openCourse}
+                onClose={() => {
+                  setOpenCourse(null)
+                  // Lessons studied or the course completed show straight away.
+                  loadHistory()
+                  refreshAvailableCourses()
+                }}
+              />
+            )}
 
             {cohortPicker && (
               <CohortPickerModal

@@ -87,4 +87,23 @@ describe('CourseLearn', () => {
       }), '*')
     })
   })
+
+  it('opens inside an overlay without the page\'s header, back link, title or editing', async () => {
+    const postMessage = vi.spyOn(window.parent, 'postMessage')
+    postMessage.mockClear()
+    render(
+      <MemoryRouter>
+        <CourseLearn courseId="c1" inOverlay />
+      </MemoryRouter>
+    )
+    expect(await screen.findByText(/This is a personal record/)).toBeInTheDocument()
+    expect(screen.queryByText('Header')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Back to/ })).not.toBeInTheDocument()
+    // The overlay names the course; the page under it already has the main landmark.
+    expect(screen.queryByRole('heading', { name: 'First aid' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit course' })).not.toBeInTheDocument()
+    // Not a SCORM export: nothing is reported to a parent window.
+    expect(postMessage).not.toHaveBeenCalled()
+  })
 })

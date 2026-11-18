@@ -43,6 +43,9 @@ vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'learne
 vi.mock('../components/AppHeader', () => ({ default: () => null }))
 vi.mock('../components/SkillResourcesSection', () => ({ default: () => null }))
 vi.mock('../components/SkillGoalsSection', () => ({ default: () => null }))
+vi.mock('./CourseLearn', () => ({
+  default: ({ courseId, inOverlay }) => <p>{`Lessons for ${courseId}${inOverlay ? ' in overlay' : ''}`}</p>,
+}))
 vi.mock('../lib/activitySkillLinks', () => ({
   fetchStatementsForSkill: () => Promise.resolve(fixtures.statements ?? []),
   saveActivity: vi.fn(),
@@ -258,5 +261,18 @@ describe('SkillDetail', () => {
     await waitFor(() => expect(catalogue.enrolInCourseCohort).toHaveBeenCalledWith('cohort-1', 'skill-1'))
     await waitFor(() => expect(catalogue.removePlannedCourse).toHaveBeenCalledWith('c-planned'))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a cohort' })).not.toBeInTheDocument())
+  })
+
+  it('opens an enrolled course over the skill page, and back again', async () => {
+    const enrolled = { ...plannedCourse, id: 'c-enrolled', name: 'Closing Deals', status: null }
+    fixtures.tables.skill_course_links = [{ id: 'link-2', relationship: 'developed', created_at: '2026-11-01T10:00:00Z', courses: enrolled }]
+    renderPage()
+    const group = (await screen.findByRole('heading', { name: 'Enrolled' })).parentElement
+    fireEvent.click(within(group).getByRole('button', { name: /Closing Deals/ }))
+    const overlay = await screen.findByRole('dialog', { name: 'Closing Deals' })
+    expect(await within(overlay).findByText('Lessons for c-enrolled in overlay')).toBeInTheDocument()
+    fireEvent.click(within(overlay).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Closing Deals' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Negotiation', level: 1 })).toBeInTheDocument()
   })
 })

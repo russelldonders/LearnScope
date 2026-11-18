@@ -152,4 +152,22 @@ describe('SkillLearningSection', () => {
     expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0)
     expect(screen.queryByRole('button', { name: english.skillDetail.findACourse })).not.toBeInTheDocument()
   })
+
+  it('opens an enrolled or in-progress course over the page when it can', () => {
+    const onOpenCourse = vi.fn()
+    const enrolled = { id: 'c3', name: 'Driving Range', provider: null, completed_date: null, catalogue_course_id: 'cat-3' }
+    const underway = { id: 'c2', name: 'Putting Clinic', provider: null, completed_date: null, catalogue_course_id: 'cat-2' }
+    renderSection({
+      courseLinks: [{ id: 'l2', courses: underway }, { id: 'l3', courses: enrolled }],
+      progressByCatalogueId: { 'cat-2': { completed: 1, total: 2 } },
+      onOpenCourse,
+    })
+    const continueButton = within(group(l.inProgress)).getByRole('button', { name: /Putting Clinic/ })
+    expect(continueButton).toHaveAttribute('aria-haspopup', 'dialog')
+    fireEvent.click(continueButton)
+    expect(onOpenCourse).toHaveBeenCalledWith(underway)
+    fireEvent.click(within(group(l.enrolled)).getByRole('button', { name: /Driving Range/ }))
+    expect(onOpenCourse).toHaveBeenCalledWith(enrolled)
+    expect(screen.queryByRole('link', { name: /Putting Clinic|Driving Range/ })).not.toBeInTheDocument()
+  })
 })

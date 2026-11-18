@@ -224,8 +224,8 @@ export function useSkillRelatedData(skill, courseLinks) {
   // catalogue course id -> { completed, total } lessons, for enrolled
   // catalogue courses on the learner's own skill.
   const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
-  // Bumped after planning, removing or cancelling a course, so Recommended
-  // reloads along with the page's course links.
+  // Bumped after planning, removing, cancelling or studying a course, so
+  // Recommended and course progress reload along with the page's course links.
   const [learningVersion, setLearningVersion] = useState(0)
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
@@ -270,8 +270,8 @@ export function useSkillRelatedData(skill, courseLinks) {
     return () => {
       live = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the set of underway courses changes
-  }, [underwayCatalogueKey, skill?.user_id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the set of underway courses changes, or after studying one
+  }, [underwayCatalogueKey, skill?.user_id, learningVersion])
 
   // Catalogue courses that teach this skill and the learner has no record of
   // (not planned, taken or cancelled), for the Learning section's
