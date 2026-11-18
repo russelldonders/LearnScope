@@ -11,6 +11,10 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.js'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.claude/worktrees/**'],
     pool: 'threads',
+    // Node 24's experimental global Web Storage shadows jsdom's per-window
+    // implementation when no --localstorage-file is configured (as on CI).
+    // Browser-facing tests must use jsdom's isolated storage instead.
+    execArgv: ['--no-experimental-webstorage'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],

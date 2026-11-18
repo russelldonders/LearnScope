@@ -31,7 +31,7 @@ export function LanguageProvider({ children }) {
   const userId = user?.id ?? null
   const savedPreference = profileSettings?.languagePreference
   const [language, setLanguageState] = useState(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = window.localStorage.getItem(STORAGE_KEY)
     return LANGUAGE_VALUES.includes(stored) ? stored : DEFAULT_LANGUAGE
   })
   // The dictionary actually in use. Switching language keeps showing the
@@ -51,13 +51,13 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     if (!LANGUAGE_VALUES.includes(savedPreference)) return
     setLanguageState(savedPreference)
-    localStorage.setItem(STORAGE_KEY, savedPreference)
+    window.localStorage.setItem(STORAGE_KEY, savedPreference)
   }, [savedPreference])
 
   const setLanguage = useCallback(
     async (next) => {
       setLanguageState(next)
-      localStorage.setItem(STORAGE_KEY, next)
+      window.localStorage.setItem(STORAGE_KEY, next)
       if (userId) {
         await supabase.from('profiles').update({ language_preference: next }).eq('id', userId)
       }

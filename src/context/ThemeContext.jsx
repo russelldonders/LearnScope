@@ -24,7 +24,7 @@ export function ThemeProvider({ children }) {
   const userId = user?.id ?? null
   const savedPreference = profileSettings?.themePreference
   const [preference, setPreferenceState] = useState(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = window.localStorage.getItem(STORAGE_KEY)
     return THEME_VALUES.includes(stored) ? stored : 'system'
   })
 
@@ -46,13 +46,13 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     if (!THEME_VALUES.includes(savedPreference)) return
     setPreferenceState(savedPreference)
-    localStorage.setItem(STORAGE_KEY, savedPreference)
+    window.localStorage.setItem(STORAGE_KEY, savedPreference)
   }, [savedPreference])
 
   const setPreference = useCallback(
     async (next) => {
       setPreferenceState(next)
-      localStorage.setItem(STORAGE_KEY, next)
+      window.localStorage.setItem(STORAGE_KEY, next)
       if (userId) {
         await supabase.from('profiles').update({ theme_preference: next }).eq('id', userId)
       }
