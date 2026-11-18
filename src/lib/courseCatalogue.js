@@ -412,11 +412,11 @@ export async function listMyAssignedCourseEmployers(userId) {
 // lib/admin/catalogue.js -- RLS already scopes what each caller can see or
 // manage, the same as every other function in this file.
 function formatCohortDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function formatCohortTime(dateStr) {
-  return new Date(dateStr).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return new Date(dateStr).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' })
 }
 
 export function formatCohortDateTime(dateStr) {
