@@ -1199,6 +1199,7 @@ export default {
       reportedNotice: 'Danke. „{title}“ wurde gemeldet und in deiner Liste ausgeblendet.',
       removedByModerators: 'Von den LearnScope-Moderatoren aus der Freigabe entfernt – nur du siehst es',
       removedCantShare: 'Die LearnScope-Moderatoren haben diese Ressource aus der Freigabe entfernt; du kannst sie nur noch für dich behalten.',
+      packageRemovedByModerators: "Von den LearnScope-Moderatoren entfernt – die Paketdateien wurden gelöscht, daher lässt es sich nicht mehr öffnen",
       reportTitle: 'Was stimmt mit dieser Ressource nicht?',
       reportHint: 'Die LearnScope-Moderatoren prüfen sie. Sie wird außerdem in deiner Liste ausgeblendet.',
       reportReasons: {

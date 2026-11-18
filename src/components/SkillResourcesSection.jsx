@@ -352,6 +352,10 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
 function ResourceTitle({ resource, onOpenFile, onOpenPackage }) {
   const titleClass = 'text-sm font-medium text-moss hover:underline underline-offset-2 break-words text-left'
   if (isPackageKind(resource.kind)) {
+    // Moderators removing a package deletes its files (0315).
+    if (resource.moderation_removed_at) {
+      return <span className="text-sm font-medium text-secondary break-words">{resource.title}</span>
+    }
     return (
       <button type="button" onClick={() => onOpenPackage(resource)} aria-haspopup="dialog" className={titleClass}>
         {resource.title}
@@ -463,7 +467,9 @@ function ResourceSummary({ resource, onOpenFile, onOpenPackage, fit = null }) {
 
 function AudienceText({ resource, connections }) {
   const { t } = useLanguage()
-  if (resource.moderation_removed_at) return t('skillDetail.resources.removedByModerators')
+  if (resource.moderation_removed_at) {
+    return t(isPackageKind(resource.kind) ? 'skillDetail.resources.packageRemovedByModerators' : 'skillDetail.resources.removedByModerators')
+  }
   if (resource.audience !== 'selected') return t(`skillDetail.resources.audienceShort.${resource.audience}`)
   const names = connections
     ? resource.recipientIds.map((id) => connections.find((c) => c.id === id)?.name).filter(Boolean)

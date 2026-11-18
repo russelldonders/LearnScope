@@ -1199,6 +1199,7 @@ export default {
       reportedNotice: 'Thanks. “{title}” has been reported and hidden from your list.',
       removedByModerators: 'Removed from sharing by LearnScope moderators — only you can see it',
       removedCantShare: 'LearnScope moderators removed this resource from sharing, so it can only be kept for yourself.',
+      packageRemovedByModerators: "Removed by LearnScope moderators — its package files were deleted, so it can no longer be opened",
       reportTitle: 'What’s wrong with this resource?',
       reportHint: 'LearnScope moderators will review it. It will also be hidden from your list.',
       reportReasons: {

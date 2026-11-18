@@ -331,3 +331,14 @@ export async function adminResolveResourceReports(resourceId, action) {
   })
   if (error) throw error
 }
+
+// Deletes the files of a package moderators removed (0315): they're in a
+// public bucket, so otherwise its address would still open it. Storage
+// reports success even when nothing could be deleted, so the folder is
+// checked afterwards.
+export async function adminDeleteRemovedPackageFiles(packagePath) {
+  await removeStorageFolder(packagePath)
+  const { data, error } = await supabase.storage.from('course-content').list(packagePath, { limit: 1 })
+  if (error) throw error
+  if ((data ?? []).length > 0) throw new Error('Some of the package’s files could not be deleted.')
+}

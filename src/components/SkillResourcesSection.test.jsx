@@ -307,4 +307,16 @@ describe('SkillResourcesSection', () => {
     // The package learns the launch, not who the learner is.
     expect(JSON.parse(src.searchParams.get('actor')).account.name).toBe('reg-1')
   })
+
+  it('shows a package moderators removed as no longer openable', async () => {
+    lib.listMyResources.mockResolvedValue([{
+      id: 'p2', kind: 'scorm', title: 'Gone course', file_name: 'gone.zip', audience: 'private', recipientIds: [],
+      package_path: 'learners/me/p2', launch_path: 'index.html', moderation_removed_at: '2026-11-18T10:00:00Z',
+      created_at: '2026-11-18T09:00:00Z',
+    }])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    expect(await screen.findByText('Gone course')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Gone course' })).not.toBeInTheDocument()
+    expect(screen.getByText(/its package files were deleted/)).toBeInTheDocument()
+  })
 })

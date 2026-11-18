@@ -1199,6 +1199,7 @@ export default {
       reportedNotice: '谢谢。“{title}”已被举报，并已从你的列表中隐藏。',
       removedByModerators: '已被 LearnScope 管理员取消共享——只有你能看到',
       removedCantShare: 'LearnScope 管理员已取消这个资源的共享，你只能自己保留它。',
+      packageRemovedByModerators: "已被 LearnScope 管理员移除——课件包文件已删除，因此无法再打开",
       reportTitle: '这个资源有什么问题？',
       reportHint: 'LearnScope 管理员会审核它，它也会从你的列表中隐藏。',
       reportReasons: {

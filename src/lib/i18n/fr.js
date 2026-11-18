@@ -1199,6 +1199,7 @@ export default {
       reportedNotice: 'Merci. « {title} » a été signalée et masquée dans votre liste.',
       removedByModerators: 'Retirée du partage par les modérateurs de LearnScope — vous seul la voyez',
       removedCantShare: 'Les modérateurs de LearnScope ont retiré cette ressource du partage : vous pouvez seulement la garder pour vous.',
+      packageRemovedByModerators: "Retiré par les modérateurs de LearnScope — les fichiers du paquet ont été supprimés, il ne peut donc plus être ouvert",
       reportTitle: 'Quel est le problème avec cette ressource ?',
       reportHint: 'Les modérateurs de LearnScope l’examineront. Elle sera aussi masquée dans votre liste.',
       reportReasons: {

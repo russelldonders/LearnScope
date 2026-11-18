@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { formatFullDate } from '../../lib/dates'
-import { adminListResourceReports, adminResolveResourceReports, getResourceFileUrl, isPackageKind, packageLaunchUrl } from '../../lib/skillResources'
+import {
+  adminDeleteRemovedPackageFiles,
+  adminListResourceReports,
+  adminResolveResourceReports,
+  getResourceFileUrl,
+  isPackageKind,
+  packageLaunchUrl,
+} from '../../lib/skillResources'
 
 const REASON_LABELS = {
   spam: 'Spam or advertising',
@@ -28,6 +35,8 @@ export default function AdminResourceReports() {
   const [notice, setNotice] = useState(null)
   const [confirming, setConfirming] = useState(null)
   const [acting, setActing] = useState(false)
+  // A removed package whose files couldn't all be deleted, to try again.
+  const [filesLeft, setFilesLeft] = useState(null)
 
   const load = useCallback(async () => {
     setReports(await adminListResourceReports())
@@ -46,12 +55,27 @@ export default function AdminResourceReports() {
     try {
       await adminResolveResourceReports(report.resource_id, action)
       setNotice(action === 'remove' ? `“${report.title}” was removed from sharing.` : `Reports on “${report.title}” were dismissed.`)
+      // A removed package's files go too.
+      if (action === 'remove' && isPackageKind(report.kind) && report.package_path) {
+        await deletePackageFiles(report)
+      }
       await load()
     } catch (err) {
       setError(err.message)
     } finally {
       setActing(false)
       setConfirming(null)
+    }
+  }
+
+  async function deletePackageFiles(report) {
+    setFilesLeft(null)
+    try {
+      await adminDeleteRemovedPackageFiles(report.package_path)
+      setNotice(`“${report.title}” was removed from sharing and its package files were deleted.`)
+    } catch (err) {
+      // Removed from sharing either way; offer to try the files again.
+      setFilesLeft({ report, message: err.message })
     }
   }
 
@@ -72,11 +96,29 @@ export default function AdminResourceReports() {
       <h2 className="font-display text-lg text-ink">Reported resources</h2>
       <p className="text-sm text-secondary mb-4">
         Resources learners shared that someone reported. Removing one stops it being shared with anyone; its owner keeps
-        it privately and is told it was removed. Dismissing leaves it as it is.
+        it privately and is told it was removed. A removed SCORM or xAPI package also has its files deleted, since
+        anyone with its address could otherwise still open it. Dismissing leaves it as it is.
       </p>
 
       {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
       {notice && <p role="status" className="text-sm text-moss mb-3">{notice}</p>}
+      {filesLeft && (
+        <div role="alert" className="mb-3 text-sm text-red-700">
+          “{filesLeft.report.title}” was removed from sharing, but its package files couldn’t all be deleted ({filesLeft.message}).{' '}
+          <button
+            type="button"
+            disabled={acting}
+            onClick={async () => {
+              setActing(true)
+              await deletePackageFiles(filesLeft.report)
+              setActing(false)
+            }}
+            className="font-medium underline disabled:opacity-60"
+          >
+            Try deleting the files again
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
@@ -148,7 +190,9 @@ export default function AdminResourceReports() {
       {confirming && (
         <ConfirmDialog
           message={confirming.action === 'remove'
-            ? `Remove “${confirming.report.title}” from sharing? No one else will see it again, and its owner can't share it again. They keep it privately.`
+            ? (isPackageKind(confirming.report.kind)
+              ? `Remove “${confirming.report.title}” from sharing and delete its package files? No one, including its owner, will be able to open it again. This can't be undone.`
+              : `Remove “${confirming.report.title}” from sharing? No one else will see it again, and its owner can't share it again. They keep it privately.`)
             : `Dismiss the reports on “${confirming.report.title}”? It stays shared as it is.`}
           confirmLabel={confirming.action === 'remove' ? 'Remove from sharing' : 'Dismiss reports'}
           confirming={acting}

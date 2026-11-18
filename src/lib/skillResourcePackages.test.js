@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const db = vi.hoisted(() => ({ calls: [], insert: vi.fn(), update: vi.fn(), remove: vi.fn() }))
+const db = vi.hoisted(() => ({ calls: [], insert: vi.fn(), update: vi.fn(), remove: vi.fn(), list: vi.fn() }))
 const content = vi.hoisted(() => ({
   readPackage: vi.fn(),
   uploadZipEntries: vi.fn(),
@@ -15,11 +15,12 @@ vi.mock('./supabaseClient', () => ({
       update: (row) => ({ eq: (_, id) => { db.calls.push('update'); return db.update(row, id) } }),
       delete: () => ({ eq: (_, id) => { db.calls.push('delete'); return db.remove(id) } }),
     }),
+    storage: { from: () => ({ list: db.list }) },
   },
 }))
 vi.mock('./courseContent', () => content)
 
-const { addResource, deleteResource, packageLaunchUrl, audiencesFor } = await import('./skillResources')
+const { addResource, adminDeleteRemovedPackageFiles, deleteResource, packageLaunchUrl, audiencesFor } = await import('./skillResources')
 
 const zip = { name: 'course.zip', size: 1000 }
 const base = { userId: 'u1', skillId: 's1', title: ' Course ', audience: 'private' }
@@ -87,5 +88,19 @@ describe('SCORM and xAPI packages on a skill', () => {
   it('won\'t open a launch page that leads outside the package', () => {
     expect(packageLaunchUrl({ package_path: 'learners/u1/r1', launch_path: '%2e%2e/%2e%2e/r2/index.html' })).toBeNull()
     expect(packageLaunchUrl({ package_path: 'learners/u1/r1', launch_path: '../r2/index.html' })).toBeNull()
+  })
+})
+
+describe('deleting a package moderators removed', () => {
+  it('removes its folder and checks nothing is left', async () => {
+    db.list.mockResolvedValue({ data: [], error: null })
+    await adminDeleteRemovedPackageFiles('learners/u1/r1')
+    expect(content.removeStorageFolder).toHaveBeenCalledWith('learners/u1/r1')
+    expect(db.list).toHaveBeenCalledWith('learners/u1/r1', { limit: 1 })
+  })
+
+  it('says so when storage quietly kept some files', async () => {
+    db.list.mockResolvedValue({ data: [{ name: 'index.html', id: 'f1' }], error: null })
+    await expect(adminDeleteRemovedPackageFiles('learners/u1/r1')).rejects.toThrow(/could not be deleted/)
   })
 })

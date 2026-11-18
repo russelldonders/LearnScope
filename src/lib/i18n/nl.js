@@ -1199,6 +1199,7 @@ export default {
       reportedNotice: 'Bedankt. “{title}” is gemeld en verborgen in je lijst.',
       removedByModerators: 'Door LearnScope-moderators uit delen gehaald — alleen jij ziet het',
       removedCantShare: 'LearnScope-moderators hebben deze bron uit delen gehaald, dus je kunt hem alleen voor jezelf houden.',
+      packageRemovedByModerators: "Verwijderd door LearnScope-moderators — de pakketbestanden zijn gewist, dus het kan niet meer worden geopend",
       reportTitle: 'Wat is er mis met deze bron?',
       reportHint: 'LearnScope-moderators bekijken hem. Hij wordt ook verborgen in je lijst.',
       reportReasons: {
