@@ -2273,6 +2273,7 @@ export default {
       addTarget: 'Voeg er een toe',
       sameAsLast: 'Zelfde als vorige keer',
       lastPeriod: { day: 'Gisteren', week: 'Vorige week', month: 'Vorige maand', year: 'Vorig jaar' },
+      streakShort: { day: '{count} dagen op rij', week: '{count} weken op rij', month: '{count} maanden op rij', year: '{count} jaar op rij' },
       previousValueOfTarget: '{value} van {target}',
       completed: 'Voltooid',
       notCompleted: 'Niet voltooid',

@@ -2275,6 +2275,7 @@ export default {
       addTarget: 'En ajouter un',
       sameAsLast: 'Comme la dernière fois',
       lastPeriod: { day: 'Hier', week: 'La semaine dernière', month: 'Le mois dernier', year: 'L’année dernière' },
+      streakShort: { day: '{count} jours d’affilée', week: '{count} semaines d’affilée', month: '{count} mois d’affilée', year: '{count} ans d’affilée' },
       previousValueOfTarget: '{value} sur {target}',
       completed: 'Atteint',
       notCompleted: 'Non atteint',

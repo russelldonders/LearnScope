@@ -2272,6 +2272,7 @@ export default {
       addTarget: 'Add one',
       sameAsLast: 'Same as last time',
       lastPeriod: { day: 'Yesterday', week: 'Last week', month: 'Last month', year: 'Last year' },
+      streakShort: { day: '{count}-day streak', week: '{count}-week streak', month: '{count}-month streak', year: '{count}-year streak' },
       previousValueOfTarget: '{value} of {target}',
       completed: 'Completed',
       notCompleted: 'Not completed',

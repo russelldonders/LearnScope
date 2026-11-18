@@ -142,6 +142,8 @@ const BAR_TONES = {
   // piece open at the bottom and closed off by the green or the piece below.
   inProgress: '',
   none: 'bg-hairline/60',
+  // A day of this week still to come: only a faint baseline under its label.
+  upcoming: 'bg-hairline/30',
 }
 
 function EntryParts({ parts, divider }) {
@@ -280,8 +282,10 @@ function MiniHistory({ goal, history }) {
     return `${when} ${amount}${outcome}`
   }
   const label = bars.length
-    ? `${t('skillGoals.dashboard.history')}: ${bars.map(describe).join(', ')}`
+    ? `${t('skillGoals.dashboard.history')}: ${bars.filter((bar) => bar.status !== 'upcoming').map(describe).join(', ')}`
     : t('skillGoals.dashboard.history')
+  // A day still to come has nothing to say yet.
+  const pointable = (bar) => Boolean(bar) && bar.status !== 'upcoming'
   const activeBar = active != null ? slots[active] : null
   // Kept inside the tile: anchored to the edge on the bar's side, and
   // centred only on the middle bar.
@@ -291,28 +295,12 @@ function MiniHistory({ goal, history }) {
     : active > middle
       ? { right: 0 }
       : { left: '50%', transform: 'translateX(-50%)' }
-  // A weekly goal charted by day (one done in sets): the days of this week,
-  // Monday on, are shaded together, so it's clear where the week began.
-  const weekFrom = isRepeating && barPeriod === 'day' && goal.period === 'week'
-    ? slots.findIndex((bar) => bar && bar.start >= startOfWeek(new Date()))
-    : -1
-  // Slots are flex-1 with a 4px gap between each of the seven.
-  const slotLeft = (index) => `calc(${index} * (100% - ${(MINI_HISTORY_LENGTH - 1) * 4}px) / ${MINI_HISTORY_LENGTH} + ${index * 4 - 2}px)`
-
   return (
     <div role="img" aria-label={label}>
       <div
         className={`relative flex items-end gap-1 ${isRepeating ? 'h-10' : 'h-8'}`}
         onMouseLeave={() => setActive(null)}
       >
-        {weekFrom >= 0 && (
-          <div
-            aria-hidden="true"
-            data-this-week=""
-            className={`absolute -top-1 bottom-0 -right-0.5 rounded-t-md bg-moss/10 ${weekFrom > 0 ? 'border-l border-dashed border-moss/70' : ''}`}
-            style={{ left: slotLeft(weekFrom) }}
-          />
-        )}
         {target != null && max > 0 && (
           <div
             aria-hidden="true"
@@ -323,8 +311,8 @@ function MiniHistory({ goal, history }) {
         {slots.map((bar, index) => (
           <span
             key={bar ? bar.start.getTime() : `empty-${index}`}
-            onMouseEnter={bar ? () => setActive(index) : undefined}
-            onClick={bar ? () => setActive((value) => (value === index ? null : index)) : undefined}
+            onMouseEnter={pointable(bar) ? () => setActive(index) : undefined}
+            onClick={pointable(bar) ? () => setActive((value) => (value === index ? null : index)) : undefined}
             className={`relative flex-1 flex flex-col-reverse overflow-hidden rounded-t-sm ${
               !bar
                 ? ''
@@ -372,8 +360,8 @@ function MiniHistory({ goal, history }) {
           {slots.map((bar, index) => (
             <span
               key={bar ? bar.start.getTime() : `empty-${index}`}
-              className={`flex-1 text-center truncate ${weekFrom > 0 && index < weekFrom ? 'opacity-60' : ''} ${
-                index === weekFrom ? 'text-moss font-medium' : ''
+              className={`flex-1 text-center truncate ${bar?.status === 'upcoming' ? 'opacity-60' : ''} ${
+                bar?.current && barPeriod === 'day' && goal.period !== 'day' ? 'text-moss font-medium' : ''
               }`}
             >
               {bar ? periodLabel(bar, barPeriod, locale, t) : ''}
@@ -508,13 +496,64 @@ function BuildUpProgress({ goal, progress }) {
   )
 }
 
-function PreviousPeriodSummary({ goal, result }) {
+// The last day of the period now under way, for "40 to go by Sun 22 Nov".
+function currentPeriodEnd(period, now = new Date()) {
+  if (period === 'week') return weekEnd(startOfWeek(now))
+  if (period === 'month') return new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  if (period === 'year') return new Date(now.getFullYear(), 11, 31)
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+// A repeating total's tile shows only the period under way: one bar filling
+// towards this period's target, with what's left and when the period ends.
+function CurrentPeriodProgress({ goal, progress }) {
+  const { t, language } = useLanguage()
+  const locale = displayLocale(language)
+  const target = Number(goal.target_value)
+  const value = progress.current ?? 0
+  const percent = target > 0 ? Math.min(100, (value / target) * 100) : value > 0 ? 100 : 0
+  const left = Math.max(0, target - value)
+  const percentText = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 })
+    .format(percent / 100)
+  const end = currentPeriodEnd(goal.period)
+  const endText = goal.period === 'week'
+    ? weekEndText(startOfWeek(new Date()), locale)
+    : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(end)
+  const remainingText = left === 0
+    ? t('skillGoals.targetReached')
+    : goal.period === 'day'
+      ? t('skillGoals.dashboard.toGo', { value: formatGoalValue(goal, left) })
+      : t('skillGoals.dashboard.toGoBy', { value: formatGoalValue(goal, left), date: endText })
+  return (
+    <div>
+      <div
+        role="progressbar"
+        aria-label={t(`skillGoals.thisPeriod.${goal.period}`)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+        className="h-2.5 rounded-full bg-hairline/60 overflow-hidden"
+      >
+        <div className="h-full rounded-full bg-moss" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="mt-1.5 flex justify-between gap-2 text-xs text-secondary">
+        <span>{percentText}</span>
+        <span className={`truncate ${left === 0 ? 'text-moss font-medium' : ''}`}>{remainingText}</span>
+      </p>
+    </div>
+  )
+}
+
+// Under a repeating goal's chart: how the last period went, at a glance, and
+// the run of periods met so far (this one included once it's met).
+function LastPeriodLine({ goal, result, streak }) {
   const { t } = useLanguage()
   const resultText = result.sessions != null
     ? t('skillGoals.shape.sessionsDone', { done: result.sessions, needed: result.sessionsTarget })
     : result.target != null
       ? t('skillGoals.dashboard.previousValueOfTarget', {
-          value: formatGoalValue(goal, result.value),
+          // "20 of 20 push-ups": the unit once, except on times ("12:30 of 15:00").
+          value: goal.measure_kind === 'duration' ? formatGoalValue(goal, result.value) : formatNumber(result.value),
           target: formatGoalValue(goal, result.target),
         })
       : formatGoalValue(goal, result.value)
@@ -523,17 +562,25 @@ function PreviousPeriodSummary({ goal, result }) {
     ? t('skillGoals.dashboard.completed')
     : result.status === 'missed' ? t('skillGoals.dashboard.notCompleted') : null
 
+  const lastLabel = t(`skillGoals.dashboard.lastPeriod.${result.period}`)
+  const streakText = streak > 0 ? t(`skillGoals.dashboard.streakShort.${goal.period}`, { count: streak }) : null
+
   return (
-    <div
-      role="group"
-      aria-label={`${t(`skillGoals.dashboard.lastPeriod.${result.period}`)}: ${resultText}${outcome ? `. ${outcome}` : ''}`}
-      className="border-y border-hairline py-2"
-    >
-      <p className="text-xs text-secondary">{t(`skillGoals.dashboard.lastPeriod.${result.period}`)}</p>
-      <p className="mt-0.5 truncate text-sm font-medium text-ink" title={resultText}>
-        {resultText}
-        {outcome && <span className={met ? 'text-moss' : 'text-secondary'}>{' · '}{outcome}</span>}
+    <div data-last-period="" className="mt-2 flex min-h-5 items-center gap-2 text-xs">
+      <p
+        className="min-w-0 flex-1 truncate text-secondary"
+        title={`${lastLabel}: ${resultText}${outcome ? ` · ${outcome}` : ''}`}
+      >
+        {lastLabel}
+        {' · '}
+        <span className="text-ink">{resultText}</span>
+        {outcome && <span className={met ? 'text-moss font-medium' : ''}>{' · '}{outcome}</span>}
       </p>
+      {streakText && (
+        <span data-streak="" className="shrink-0 rounded-full bg-moss/15 px-2 py-0.5 text-[11px] font-medium text-moss">
+          {streakText}
+        </span>
+      )}
     </div>
   )
 }
@@ -573,18 +620,10 @@ export function SkillGoalTile({
     : goal.period
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
-  const status = previousResult && !note
-    ? previousResult.streak >= 2
-      ? { text: t(`skillGoals.streak.${goal.period}`, { count: previousResult.streak }), tone: 'text-moss font-medium' }
-      : previousResult.completedPeriods > 0
-        ? {
-            text: previousResult.completedPeriods === 1
-              ? t('skillGoals.dashboard.completedOnce')
-              : t('skillGoals.dashboard.completedPeriods', { count: previousResult.completedPeriods }),
-            tone: 'text-secondary',
-          }
-        : { text: '', tone: 'text-secondary' }
-    : statusFor({ note, progress, streak, goal, t })
+  // A repeating goal past its first period sums up the last one, and its
+  // streak, under the chart; anything just saved still takes that place.
+  const status = statusFor({ note, progress, streak, goal, t })
+  const showLastPeriod = previousResult && !note
   const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
   // Sessions lead for a goal done in sets across a week or month; a daily one
   // has a single session, so today's total says more.
@@ -741,10 +780,10 @@ export function SkillGoalTile({
           a goal heading for one value shows its trend; a repeating goal,
           its recent periods as bars. */}
       <div className="mt-3 h-16 flex flex-col justify-end">
-        {previousResult ? (
-          <PreviousPeriodSummary goal={goal} result={previousResult} />
-        ) : history.kind === 'progress' ? (
+        {history.kind === 'progress' ? (
           <BuildUpProgress goal={goal} progress={progress} />
+        ) : history.kind === 'currentPeriod' ? (
+          <CurrentPeriodProgress goal={goal} progress={progress} />
         ) : history.kind === 'entries' ? (
           <MiniTrend
             goal={goal}
@@ -756,7 +795,11 @@ export function SkillGoalTile({
         )}
       </div>
 
-      <p role={status.role} className={`mt-2 min-h-4 text-xs truncate ${status.tone}`}>{status.text}</p>
+      {showLastPeriod ? (
+        <LastPeriodLine goal={goal} result={previousResult} streak={streak} />
+      ) : (
+        <p role={status.role} className={`mt-2 min-h-5 text-xs truncate ${status.tone}`}>{status.text}</p>
+      )}
 
       {open ? (
         <div id={formId} className="mt-3 pt-3 border-t border-hairline">

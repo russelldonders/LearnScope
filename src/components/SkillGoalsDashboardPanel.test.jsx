@@ -78,7 +78,9 @@ describe('goal tiles', () => {
     expect(tiles).toHaveLength(4)
     for (const tile of tiles) {
       const parts = [...tile.children].map((child) => child.tagName)
-      expect(parts).toEqual(['DIV', 'DL', 'DIV', 'DIV', 'P', 'DIV'])
+      // The status line is a paragraph, or the last-period line with its
+      // streak on a repeating goal past its first period.
+      expect(parts).toEqual(['DIV', 'DL', 'DIV', 'DIV', expect.stringMatching(/^(P|DIV)$/), 'DIV'])
       // The lines under the value and the chart keep a fixed height, so tiles
       // side by side are the same size whatever they show.
       expect(tile.children[2]).toHaveClass('h-8')
@@ -107,14 +109,14 @@ describe('goal tiles', () => {
     const earlier = (hours) => new Date(now.getTime() - hours * 60 * 60 * 1000)
     renderPanel([item(goal, [pushUps('a', 100, earlier(2)), pushUps('b', 50, earlier(1))])])
     const tile = screen.getByRole('article', { name: 'Sit-ups' })
-    expect(within(tile).getByText('0 of 4 sessions')).toHaveClass('text-2xl')
+    expect(within(tile).getByText('0 of 4 sessions', { selector: 'dd' })).toHaveClass('text-2xl')
     expect(within(tile).getByText('Target 3 × 100 push-ups · 4 days a week')).toBeInTheDocument()
     expect(within(tile).getByText('Today 150 of 300 push-ups · 2 of 3 sets')).toBeInTheDocument()
     const chart = within(tile).getByRole('img')
-    expect(chart.lastChild.lastChild).toHaveTextContent('Today')
+    expect(within(chart).getByText('Today')).toHaveClass('text-moss')
   })
 
-  it('replaces previous-week detail with one result at the start of a fresh week', () => {
+  it('charts only this week, with last week and the streak summed up beneath', () => {
     const goal = {
       title: 'Fresh-week sit-ups', aggregation: 'total', period: 'week', target_value: 1200,
       per_set: 100, sets_per_session: 3, sessions_per_period: 4, started_on: localDateString(daysAgo(60)),
@@ -133,10 +135,11 @@ describe('goal tiles', () => {
     renderPanel([item(goal, statements)])
 
     const tile = screen.getByRole('article')
-    expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
-    expect(within(tile).getByRole('group', { name: 'Last week: 4 of 4 sessions. Completed' })).toBeInTheDocument()
-    expect(within(tile).queryByText('Met 1 week in a row')).not.toBeInTheDocument()
-    expect(within(tile).getByText('Completed once so far')).toBeInTheDocument()
+    // Last week's sessions aren't drawn as bars of this week.
+    const chart = within(tile).getByRole('img')
+    expect(chart.getAttribute('aria-label')).not.toMatch(/300 push-ups/)
+    expect(tile.querySelector('[data-last-period]')).toHaveTextContent(/^Last week · 4 of 4 sessions · Completed/)
+    expect(tile.querySelector('[data-streak]')).toHaveTextContent('1-week streak')
     expect(within(tile).queryByText(/^Last logged/)).not.toBeInTheDocument()
   })
 
@@ -192,7 +195,8 @@ describe('goal tiles', () => {
     expect(chart.getAttribute('aria-label')).toMatch(/5 push-ups \(missed\)/)
     expect(chart.getAttribute('aria-label')).toMatch(/21 push-ups \(beat the target\)/)
     expect(chart.lastChild.lastChild).toHaveTextContent('Today')
-    expect(within(tile).getByText('Met 2 days in a row')).toBeInTheDocument()
+    expect(tile.querySelector('[data-last-period]')).toHaveTextContent(/^Yesterday · 20 of 20 push-ups · Completed/)
+    expect(tile.querySelector('[data-streak]')).toHaveTextContent('2-day streak')
     // The bars stand in for the progress bar on a repeating goal.
     expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
   })
@@ -251,7 +255,7 @@ describe('goal tiles', () => {
     expect(within(short).getByText('Time to log')).toBeInTheDocument()
   })
 
-  it('says which days make up this week on a weekly goal, and shades them on the chart', () => {
+  it('says when this week ends on a weekly goal, and charts its days Monday to Sunday', () => {
     const goal = {
       title: 'Sit-ups', aggregation: 'total', period: 'week', target_value: 1200,
       per_set: 100, sets_per_session: 3, sessions_per_period: 4, started_on: localDateString(daysAgo(30)),
@@ -259,7 +263,20 @@ describe('goal tiles', () => {
     renderPanel([item(goal, [pushUps('a', 100, daysAgo(0))])])
     const tile = screen.getByRole('article', { name: 'Sit-ups' })
     expect(tile.querySelector('[data-week-range]')).toHaveTextContent(/^· By Sun .+$/)
-    expect(within(tile).getByRole('img').querySelector('[data-this-week]')).not.toBeNull()
+    const labels = [...within(tile).getByRole('img').lastChild.children].map((label) => label.textContent)
+    expect(labels).toHaveLength(7)
+    expect(labels).toContain('Today')
+    expect(labels[0]).toMatch(/^(Mon|Today)$/)
+    expect(labels[6]).toMatch(/^(Sun|Today)$/)
+  })
+
+  it('fills a bar towards this week’s target for a weekly total, with what is left by Sunday', () => {
+    const goal = { title: 'Distance', aggregation: 'total', period: 'week', target_value: 100, started_on: localDateString(daysAgo(30)) }
+    renderPanel([item(goal, [pushUps('a', 30, new Date())])])
+    const tile = screen.getByRole('article', { name: 'Distance' })
+    expect(within(tile).getByRole('progressbar', { name: 'This week' })).toHaveAttribute('aria-valuenow', '30')
+    expect(within(tile).getByText(/^70 push-ups to go by Sun /)).toBeInTheDocument()
+    expect(tile.querySelector('[data-last-period]')).toHaveTextContent(/^Last week · 0 of 100 push-ups · Not completed/)
   })
 
   it('shows any other goal its recent entries as a line with a dot on each, latest on the right', () => {

@@ -310,17 +310,17 @@ export function goalStreak(goal, statements, now = new Date()) {
   return streak
 }
 
-// At the start of a fresh repeating period, the dashboard should not carry
-// the previous period's detailed bars forward as though they belong to the
-// new one. Return one compact result instead, until the first current-period
-// entry is logged. `completedPeriods` counts the whole goal history rather
-// than only the periods shown in the mini chart.
+// The last finished period of a repeating goal, in one line's worth: the
+// dashboard charts only the current period, and sums up the one before
+// beside the streak. Null while the goal is still in its first period.
+// `completedPeriods` counts the whole goal history rather than only the
+// periods a chart would show.
 export function previousPeriodResult(goal, statements, now = new Date()) {
   if (goal.aggregation !== 'total' || !goal.period || isBuildUpGoal(goal, now)) return null
   const bars = allPeriodBars(goal, statements, now)
   const current = bars.at(-1)
   const previous = bars.at(-2)
-  if (!current || !previous || current.parts.length > 0) return null
+  if (!current || !previous) return null
   return {
     period: goal.period,
     status: previous.status,
@@ -348,8 +348,8 @@ export function isBuildUpGoal(goal, now = new Date()) {
   return goal.target_date < localDateString(nextPeriodStart(startOfPeriod(now, goal.period), goal.period))
 }
 
-// The small chart on a dashboard goal tile. A repeating total shows its last
-// few days, weeks, months or years, each marked met or missed; any other goal
+// The small chart on a dashboard goal tile. A daily total, or a repeating
+// total without a target, shows its last few periods; any other goal
 // shows its last few entries, the latest marked as current. Entries aren't
 // judged against the target one by one: a single plank time short of a
 // stretch target isn't a miss the way a missed week is.
@@ -358,11 +358,19 @@ export function isBuildUpGoal(goal, now = new Date()) {
 // current period ends ("10 mandarins by the end of the year") -- has no run
 // of periods worth charting, so it gets { kind: 'progress' } and the tile
 // shows how far along it is instead.
+//
+// A weekly, monthly or yearly total with a target is about the period under
+// way, so its tile charts only that: a goal done in sets across a week shows this
+// week's days ("2 of 4 sessions" and which days they were), any other gets
+// { kind: 'currentPeriod' } and the tile fills a bar towards this period's
+// target. How the last period went and the streak are summed up beside it
+// (previousPeriodResult, goalStreak) rather than drawn as past bars.
 export function goalMiniHistory(goal, statements, now = new Date()) {
   const target = goal.target_value == null ? null : Number(goal.target_value)
   if (isBuildUpGoal(goal, now)) return { kind: 'progress' }
   const shape = goal.period && goal.period !== 'day' ? goalSessionShape(goal) : null
   if (shape) return { kind: 'periods', period: 'day', target: shape.perSession, bars: sessionDayBars(goal, statements, shape, now) }
+  if (goal.aggregation === 'total' && goal.period && goal.period !== 'day' && target != null) return { kind: 'currentPeriod' }
   if (goal.aggregation === 'total' && goal.period) {
     return { kind: 'periods', target, bars: allPeriodBars(goal, statements, now).slice(-MINI_HISTORY_LENGTH) }
   }
@@ -379,23 +387,34 @@ export function goalMiniHistory(goal, statements, now = new Date()) {
   }
 }
 
-// The last week of days for a goal with a shape, each against a session's
-// total (300 for 3 x 100). A day short of it before today isn't a miss: rest
-// days are part of "4 times a week", so it's simply not a session.
+// The days of the current period for a goal with a shape, each against a
+// session's total (300 for 3 x 100). A day short of it before today isn't a
+// miss: rest days are part of "4 times a week", so it's simply not a session.
+// A weekly goal gets its whole week, Monday to Sunday, the days still to come
+// marked "upcoming"; a monthly one its last seven days, none from before the
+// month began.
 function sessionDayBars(goal, statements, shape, now) {
   const startedAt = startOfDayFromString(goal.started_on)
   const readings = goalReadings(goal, statements).filter((r) => r.date >= startedAt)
   const today = startOfPeriod(now, 'day')
+  const periodStart = startOfPeriod(now, goal.period)
+  const first = new Date(today)
+  first.setDate(first.getDate() - (MINI_HISTORY_LENGTH - 1))
+  const from = goal.period === 'week' ? periodStart : first > periodStart ? first : periodStart
   const bars = []
-  for (let back = MINI_HISTORY_LENGTH - 1; back >= 0; back -= 1) {
-    const start = new Date(today)
-    start.setDate(start.getDate() - back)
-    if (start < startOfPeriod(startedAt, 'day')) continue
+  for (let index = 0; index < MINI_HISTORY_LENGTH; index += 1) {
+    const start = new Date(from)
+    start.setDate(start.getDate() + index)
+    if (start > today && goal.period !== 'week') break
     const end = nextPeriodStart(start, 'day')
-    const parts = readings.filter((r) => r.date >= start && r.date < end).map((r) => r.value)
+    const parts = start < startOfPeriod(startedAt, 'day')
+      ? []
+      : readings.filter((r) => r.date >= start && r.date < end).map((r) => r.value)
     const value = parts.reduce((sum, part) => sum + part, 0)
-    const isToday = back === 0
-    const status = value >= shape.perSession ? 'met' : isToday ? 'inProgress' : 'none'
+    const isToday = start.getTime() === today.getTime()
+    const status = start > today
+      ? 'upcoming'
+      : value >= shape.perSession ? 'met' : isToday ? 'inProgress' : 'none'
     bars.push({ start, value, parts, status, exceeded: value > shape.perSession, current: isToday, target: shape.perSession })
   }
   return bars

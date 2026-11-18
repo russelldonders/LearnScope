@@ -607,7 +607,7 @@ describe('changed targets', () => {
 describe('goalMiniHistory', () => {
   const now = new Date('2026-10-29T15:00:00')
 
-  it('gives a repeating goal its last seven periods, each met or missed', () => {
+  it('gives a daily goal its last seven days, each met or missed', () => {
     const daily = { ...pushUpGoal, aggregation: 'total', period: 'day', target_value: 20, started_on: '2026-10-01' }
     const history = goalMiniHistory(daily, [entry('a', '2026-10-27', 25), entry('b', '2026-10-28', 5), entry('c', '2026-10-29', 3)], now)
     expect(history.kind).toBe('periods')
@@ -617,8 +617,13 @@ describe('goalMiniHistory', () => {
     expect(history.bars.at(-1).current).toBe(true)
   })
 
-  it('has fewer bars for a goal begun recently', () => {
-    const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-19' }
+  it('charts only the period under way for a weekly, monthly or yearly total with a target', () => {
+    const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-01' }
+    expect(goalMiniHistory(weekly, [entry('a', '2026-10-27', 25)], now)).toEqual({ kind: 'currentPeriod' })
+  })
+
+  it('still gives a repeating total without a target its last periods, fewer for a goal begun recently', () => {
+    const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: null, started_on: '2026-10-19' }
     expect(goalMiniHistory(weekly, [], now).bars).toHaveLength(2)
   })
 
@@ -639,9 +644,9 @@ describe('goalMiniHistory', () => {
     expect(goalMiniHistory(byYearEnd, [], now).kind).toBe('progress')
   })
 
-  it('keeps the chart for a repeating total whose deadline is periods away', () => {
+  it('treats a repeating total whose deadline is periods away as repeating', () => {
     const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, target_date: '2026-12-31', started_on: '2026-10-01' }
-    expect(goalMiniHistory(weekly, [], now).kind).toBe('periods')
+    expect(goalMiniHistory(weekly, [], now).kind).toBe('currentPeriod')
   })
 
   it('leaves the target line off a running total without a target, which has no progress to show', () => {
@@ -654,7 +659,7 @@ describe('previousPeriodResult', () => {
   const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-01' }
   const now = new Date('2026-11-16T09:00:00') // Monday, a fresh week
 
-  it('summarises the last period while the new period has no entries', () => {
+  it('summarises the last period', () => {
     const result = previousPeriodResult(weekly, [
       entry('old', '2026-11-03', 100),
       entry('last', '2026-11-10', 120),
@@ -665,8 +670,11 @@ describe('previousPeriodResult', () => {
     })
   })
 
-  it('stops carrying the previous result once the learner logs this period', () => {
-    expect(previousPeriodResult(weekly, [entry('current', '2026-11-16', 10)], now)).toBeNull()
+  it('keeps the last period in view once the learner logs this period, and has none in the first period', () => {
+    expect(previousPeriodResult(weekly, [entry('last', '2026-11-10', 40), entry('current', '2026-11-16', 10)], now))
+      .toMatchObject({ status: 'missed', value: 40 })
+    const fresh = { ...weekly, started_on: '2026-11-16' }
+    expect(previousPeriodResult(fresh, [entry('current', '2026-11-16', 10)], now)).toBeNull()
   })
 
   it('reports sessions for a shaped goal and handles a missed month', () => {
@@ -742,12 +750,30 @@ describe('a goal done in sets: 3 x 100, 4 times a week', () => {
     expect(goalStreak(situps, [...weekBefore, ...lastWeek], now)).toBe(1)
   })
 
-  it('charts the last seven days against a session, rest days not marked as missed', () => {
-    const history = goalMiniHistory(situps, [...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 100), ...sets('2026-11-11', 50)], now)
+  it('charts this week, Monday to Sunday, against a session; rest days not missed, days to come upcoming', () => {
+    const lastWeek = sets('2026-11-08', 100, 100, 100)
+    const history = goalMiniHistory(situps, [...lastWeek, ...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 100), ...sets('2026-11-11', 50)], now)
     expect(history).toMatchObject({ kind: 'periods', period: 'day', target: 300 })
-    expect(history.bars).toHaveLength(7)
-    expect(history.bars.slice(-3).map((bar) => bar.status)).toEqual(['met', 'none', 'inProgress'])
-    expect(history.bars.at(-3).parts).toEqual([100, 100, 100])
+    expect(history.bars.map((bar) => bar.start.getDate())).toEqual([9, 10, 11, 12, 13, 14, 15])
+    expect(history.bars.map((bar) => bar.status)).toEqual(['met', 'none', 'inProgress', 'upcoming', 'upcoming', 'upcoming', 'upcoming'])
+    expect(history.bars[0].parts).toEqual([100, 100, 100])
+    expect(history.bars[2].current).toBe(true)
+  })
+
+  it('charts a monthly goal by its last days, none from before the month began', () => {
+    const monthly = { ...situps, period: 'month' }
+    const history = goalMiniHistory(monthly, [], new Date(2026, 10, 3, 9))
+    expect(history.bars.map((bar) => bar.start.getDate())).toEqual([1, 2, 3])
+    expect(history.bars.at(-1).current).toBe(true)
+  })
+
+  it('marks a day as exceeded once it goes past a session', () => {
+    const history = goalMiniHistory(situps, [...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 150, 150, 100)], now)
+    expect(history.bars.slice(0, 3).map((bar) => [bar.status, bar.exceeded])).toEqual([
+      ['met', false],
+      ['met', true],
+      ['inProgress', false],
+    ])
   })
 
   it('marks a day of a daily sets goal as exceeded once it goes past the total', () => {

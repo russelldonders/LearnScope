@@ -2254,6 +2254,7 @@ export default {
       addTarget: '添加目标',
       sameAsLast: '与上次相同',
       lastPeriod: { day: '昨天', week: '上周', month: '上个月', year: '去年' },
+      streakShort: { day: '连续 {count} 天', week: '连续 {count} 周', month: '连续 {count} 个月', year: '连续 {count} 年' },
       previousValueOfTarget: '{value} / {target}',
       completed: '已完成',
       notCompleted: '未完成',
