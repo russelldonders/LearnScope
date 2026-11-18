@@ -5,6 +5,8 @@ const lib = vi.hoisted(() => ({
   adminListResourceReports: vi.fn(),
   adminResolveResourceReports: vi.fn(),
   getResourceFileUrl: vi.fn(),
+  isPackageKind: (kind) => kind === 'scorm' || kind === 'xapi',
+  packageLaunchUrl: (r) => `/course-content/${r.package_path}/${r.launch_path}`,
 }))
 
 vi.mock('../../lib/skillResources', () => lib)
@@ -50,6 +52,20 @@ describe('AdminResourceReports', () => {
     expect(screen.getByText('Everyone tracking the skill')).toBeInTheDocument()
     expect(screen.getByText('Spam or advertising · Wrong or misleading')).toBeInTheDocument()
     expect(screen.getByText('“An advert”')).toBeInTheDocument()
+  })
+
+  it('opens a reported package at its launch page', async () => {
+    lib.adminListResourceReports.mockReset().mockResolvedValue([{
+      ...report,
+      kind: 'scorm',
+      url: null,
+      file_name: 'course.zip',
+      package_path: 'learners/u1/r1',
+      launch_path: 'index.html',
+    }])
+    render(<AdminResourceReports />)
+    expect(await screen.findByRole('link', { name: 'Cheap courses!!' })).toHaveAttribute('href', '/course-content/learners/u1/r1/index.html')
+    expect(screen.getByText('SCORM package · course.zip')).toBeInTheDocument()
   })
 
   it('removes a resource from sharing only after confirming', async () => {

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { readPackage, removeStorageFolder, scormLaunchUrl, uploadZipEntries } from './courseContent'
 
 // A learner's own resources on a skill -- documents, videos and links they
 // keep for learning it -- and the ones others have shared with them. See
@@ -16,7 +17,41 @@ export const RESOURCE_FILE_ACCEPT = [
   'audio/*', 'video/mp4', 'video/webm', 'video/quicktime',
 ].join(',')
 
-export const RESOURCE_KINDS = ['link', 'video', 'file']
+export const RESOURCE_KINDS = ['link', 'video', 'file', 'scorm', 'xapi']
+// SCORM and xAPI packages: a zip, unpacked and opened right on the skill page
+// (see 20261118100000_0314_skill_resource_packages.sql).
+export const PACKAGE_KINDS = ['scorm', 'xapi']
+export const MAX_PACKAGE_BYTES = 200 * 1024 * 1024
+
+export function isPackageKind(kind) {
+  return PACKAGE_KINDS.includes(kind)
+}
+
+// Where a package's launch page is served from (the /course-content/* proxy).
+// Null unless the launch page stays inside the package's own folder (the
+// database checks this too, 0314).
+export function packageLaunchUrl(resource) {
+  if (!resource.package_path || !resource.launch_path) return null
+  const url = scormLaunchUrl({ storage_path: resource.package_path, launch_path: resource.launch_path })
+  const folder = `/course-content/${resource.package_path}/`
+  try {
+    return new URL(url, 'https://learnscope.invalid').pathname.startsWith(folder) ? url : null
+  } catch {
+    return null
+  }
+}
+
+// One launch of an xAPI package on a skill: the package records its
+// statements to the learner's own xAPI record with this session's token.
+export async function createSkillPackageLaunchSession(resourceId, userId) {
+  const { data, error } = await supabase
+    .from('xapi_launch_sessions')
+    .insert({ skill_resource_id: resourceId, user_id: userId })
+    .select('id, token')
+    .single()
+  if (error) throw error
+  return data
+}
 export const RESOURCE_AUDIENCES = ['private', 'selected', 'connections', 'skill_public']
 
 // Who a resource can go to. An uploaded file is never shared with everyone
@@ -92,7 +127,8 @@ function fileExtension(name) {
   return match ? `.${match[1].toLowerCase()}` : ''
 }
 
-// kind 'link' or 'video' takes url; 'file' takes file (a File).
+// kind 'link' or 'video' takes url; 'file' takes file (a File); 'scorm' or
+// 'xapi' takes file (the package's zip).
 export async function addResource({ userId, skillId, kind, title, url, file, note, audience, recipientIds = [], knowledgeLevel = null, practicalLevel = null }) {
   const base = {
     user_id: userId,
@@ -105,6 +141,39 @@ export async function addResource({ userId, skillId, kind, title, url, file, not
     practical_level: practicalLevel || null,
   }
   let row
+  if (isPackageKind(kind)) {
+    if (!file) throw new Error('Choose a package (.zip) to upload.')
+    if (file.size > MAX_PACKAGE_BYTES) throw new Error(`"${file.name}" is too large (max 200MB).`)
+    const { zip, launchPath } = await readPackage(file, kind)
+    const id = crypto.randomUUID()
+    const packagePath = `learners/${userId}/${id}`
+    // The resource comes first, kept private: storage only takes a package
+    // into the folder of one that exists (0314). It's shared once uploaded.
+    const { error: insertError } = await supabase.from('skill_resources').insert({
+      ...base,
+      audience: 'private',
+      id,
+      package_path: packagePath,
+      launch_path: launchPath,
+      file_name: file.name,
+      file_size: file.size,
+    })
+    if (insertError) throw insertError
+    try {
+      await uploadZipEntries(zip, packagePath)
+    } catch (err) {
+      // Don't leave a half-uploaded package, or a resource without one.
+      await removeStorageFolder(packagePath).catch(() => {})
+      await supabase.from('skill_resources').delete().eq('id', id)
+      throw err
+    }
+    if (audience !== 'private') {
+      const { error } = await supabase.from('skill_resources').update({ audience }).eq('id', id)
+      if (error) throw error
+    }
+    await setRecipients(id, audience, recipientIds)
+    return id
+  }
   if (kind === 'file') {
     if (!file) throw new Error('Choose a file to upload.')
     if (file.size > MAX_RESOURCE_FILE_BYTES) throw new Error(`"${file.name}" is too large (max 50MB).`)
@@ -153,6 +222,9 @@ export async function deleteResource(resource) {
   if (resource.file_path) {
     // The record is gone either way; a file left behind is only unreachable.
     await supabase.storage.from(BUCKET).remove([resource.file_path])
+  }
+  if (resource.package_path) {
+    await removeStorageFolder(resource.package_path).catch(() => {})
   }
 }
 

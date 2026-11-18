@@ -11,11 +11,14 @@ const lib = vi.hoisted(() => ({
   hideSharedResource: vi.fn(),
   unhideSharedResource: vi.fn(),
   reportSharedResource: vi.fn(),
+  createSkillPackageLaunchSession: vi.fn(),
 }))
+const content = vi.hoisted(() => ({ fetchShimmedLaunchDoc: vi.fn() }))
 const connections = vi.hoisted(() => ({ listConnections: vi.fn() }))
 
 vi.mock('../lib/skillResources', async (importOriginal) => ({ ...(await importOriginal()), ...lib }))
 vi.mock('../lib/connections', () => connections)
+vi.mock('../lib/courseContent', async (importOriginal) => ({ ...(await importOriginal()), ...content }))
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
   const t = (key, params) => {
@@ -253,5 +256,55 @@ describe('SkillResourcesSection', () => {
     expect(lib.deleteResource).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
     await waitFor(() => expect(lib.deleteResource).toHaveBeenCalledWith(resource))
+  })
+
+  it('adds a SCORM package, which can be shared with everyone tracking the skill', async () => {
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add resource' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'SCORM' }))
+    expect(audienceOptions().some((text) => text.includes('Everyone tracking'))).toBe(true)
+    const zip = new File(['zip'], 'Safety basics.zip', { type: 'application/zip' })
+    const input = screen.getByLabelText('Package (.zip)')
+    expect(input).toHaveAttribute('accept', '.zip,application/zip')
+    fireEvent.change(input, { target: { files: [zip] } })
+    expect(screen.getByLabelText('Title')).toHaveValue('Safety basics')
+    fireEvent.click(screen.getByRole('radio', { name: /Everyone tracking/ }))
+    fireEvent.submit(input.closest('form'))
+    await waitFor(() => expect(lib.addResource).toHaveBeenCalled())
+    expect(lib.addResource.mock.calls[0][0]).toMatchObject({ kind: 'scorm', file: zip, audience: 'skill_public' })
+  })
+
+  it('opens a SCORM package over the page, and closes it again', async () => {
+    content.fetchShimmedLaunchDoc.mockResolvedValue('<p>Lesson</p>')
+    lib.listMyResources.mockResolvedValue([{
+      id: 'p1', kind: 'scorm', title: 'Safety basics', file_name: 'safety.zip', audience: 'private', recipientIds: [],
+      package_path: 'learners/me/p1', launch_path: 'index.html', created_at: '2026-11-18T09:00:00Z',
+    }])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Safety basics' }))
+    const dialog = screen.getByRole('dialog', { name: 'Safety basics' })
+    const frame = await within(dialog).findByTitle('Safety basics')
+    expect(content.fetchShimmedLaunchDoc).toHaveBeenCalledWith('/course-content/learners/me/p1/index.html')
+    expect(frame).toHaveAttribute('srcdoc', '<p>Lesson</p>')
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('launches a shared xAPI package with its own session, recording to the viewer', async () => {
+    lib.createSkillPackageLaunchSession.mockResolvedValue({ id: 'reg-1', token: 'tok' })
+    lib.listSharedResources.mockResolvedValue([{
+      id: 'x1', kind: 'xapi', title: 'Fire drill', file_name: 'drill.zip', audience: 'connections', sharer_name: 'Sam',
+      package_path: 'learners/sam/x1', launch_path: 'story.html', created_at: '2026-11-18T09:00:00Z',
+    }])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Fire drill' }))
+    const frame = await within(screen.getByRole('dialog')).findByTitle('Fire drill')
+    expect(lib.createSkillPackageLaunchSession).toHaveBeenCalledWith('x1', 'me')
+    const src = new URL(frame.getAttribute('src'), 'http://localhost')
+    expect(src.pathname).toBe('/course-content/learners/sam/x1/story.html')
+    expect(src.searchParams.get('registration')).toBe('reg-1')
+    // The package learns the launch, not who the learner is.
+    expect(JSON.parse(src.searchParams.get('actor')).account.name).toBe('reg-1')
   })
 })

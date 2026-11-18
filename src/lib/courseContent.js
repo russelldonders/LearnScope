@@ -608,7 +608,9 @@ async function uploadSingleFileResource(organisationId, userId, file, title, typ
 // interlinked files (html/js/css/images) referencing each other by
 // relative path, so there's no single "the file" to upload; every entry is
 // extracted client-side (JSZip) and uploaded individually under one folder.
-async function uploadZipEntries(zip, folderPrefix) {
+// Also used for packages a learner adds to a skill (skillResources.js),
+// unpacked under learners/<their id>/ in the same bucket.
+export async function uploadZipEntries(zip, folderPrefix) {
   const entries = Object.values(zip.files).filter((entry) => !entry.dir)
   for (const entry of entries) {
     if (!isSafeRelativePath(entry.name)) {
@@ -622,20 +624,29 @@ async function uploadZipEntries(zip, folderPrefix) {
   }
 }
 
+// Opens a SCORM ('scorm') or xAPI ('xapi') package zip and finds its launch
+// page from the manifest, throwing a readable error if it isn't one.
+export async function readPackage(zipFile, type) {
+  const zip = await JSZip.loadAsync(zipFile)
+  const scorm = type === 'scorm'
+  const manifestEntry = zip.file(scorm ? /^imsmanifest\.xml$/i : /^tincan\.xml$/i)[0]
+  if (!manifestEntry) {
+    throw new Error(scorm
+      ? 'This doesn\'t look like a SCORM package — no imsmanifest.xml found in the zip.'
+      : 'This doesn\'t look like an xAPI package — no tincan.xml found in the zip.')
+  }
+  const manifestXml = await manifestEntry.async('string')
+  const launchPath = scorm ? parseScormLaunchPath(manifestXml) : parseTincanLaunchPath(manifestXml)
+  if (!launchPath) {
+    throw new Error(`Could not determine a launch page from ${scorm ? 'imsmanifest.xml' : 'tincan.xml'}.`)
+  }
+  return { zip, launchPath }
+}
+
 // SCORM 1.2/2004 packages -- the manifest tells us which extracted file is
 // the actual launch page.
 export async function uploadScormResource(organisationId, userId, zipFile, title) {
-  const zip = await JSZip.loadAsync(zipFile)
-
-  const manifestEntry = zip.file(/^imsmanifest\.xml$/i)[0]
-  if (!manifestEntry) {
-    throw new Error('This doesn\'t look like a SCORM package — no imsmanifest.xml found in the zip.')
-  }
-  const manifestXml = await manifestEntry.async('string')
-  const launchPath = parseScormLaunchPath(manifestXml)
-  if (!launchPath) {
-    throw new Error('Could not determine a launch page from imsmanifest.xml.')
-  }
+  const { zip, launchPath } = await readPackage(zipFile, 'scorm')
 
   const itemId = crypto.randomUUID()
   const folderPrefix = `${organisationId}/${itemId}`
@@ -666,17 +677,7 @@ export async function uploadScormResource(organisationId, userId, zipFile, title
 // thing). Played back via XapiPlayer.jsx, which speaks the launch URL +
 // LRS convention rather than SCORM's window.API.
 export async function uploadXapiResource(organisationId, userId, zipFile, title) {
-  const zip = await JSZip.loadAsync(zipFile)
-
-  const manifestEntry = zip.file(/^tincan\.xml$/i)[0]
-  if (!manifestEntry) {
-    throw new Error('This doesn\'t look like an xAPI package — no tincan.xml found in the zip.')
-  }
-  const manifestXml = await manifestEntry.async('string')
-  const launchPath = parseTincanLaunchPath(manifestXml)
-  if (!launchPath) {
-    throw new Error('Could not determine a launch page from tincan.xml.')
-  }
+  const { zip, launchPath } = await readPackage(zipFile, 'xapi')
 
   const itemId = crypto.randomUUID()
   const folderPrefix = `${organisationId}/${itemId}`
@@ -856,7 +857,7 @@ async function listAllEntries(prefix) {
   return entries
 }
 
-async function removeStorageFolder(prefix) {
+export async function removeStorageFolder(prefix) {
   const entries = await listAllEntries(prefix)
   if (entries.length === 0) {
     await supabase.storage.from(BUCKET).remove([prefix])

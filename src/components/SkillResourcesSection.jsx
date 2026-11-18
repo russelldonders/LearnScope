@@ -3,8 +3,12 @@ import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { listConnections } from '../lib/connections'
 import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS } from '../lib/levels'
+import SkillPackageOverlay from './SkillPackageOverlay'
 import {
+  MAX_PACKAGE_BYTES,
   MAX_RESOURCE_FILE_BYTES,
+  RESOURCE_KINDS,
+  isPackageKind,
   RESOURCE_FILE_ACCEPT,
   addResource,
   audiencesFor,
@@ -43,6 +47,8 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
   const [confirmingId, setConfirmingId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [reportingId, setReportingId] = useState(null)
+  // A SCORM/xAPI package open over the page.
+  const [openPackage, setOpenPackage] = useState(null)
   // The shared resource just hidden or reported, for "Hidden. Undo".
   const [hiddenNotice, setHiddenNotice] = useState(null)
   const hasLibrarySkill = Boolean(skill.library_skill_id)
@@ -145,6 +151,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
       {adding && (
         <div className="mt-3 rounded-md border border-hairline bg-card p-3">
           <ResourceForm
+            kinds={RESOURCE_KINDS}
             hasLibrarySkill={hasLibrarySkill}
             connections={connections}
             onNeedConnections={ensureConnections}
@@ -181,7 +188,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
               <ul className="mt-2 space-y-2">
                 {suggestions.map(({ resource, fit }) => (
                   <li key={resource.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <ResourceTitle resource={resource} onOpenFile={openFile} />
+                    <ResourceTitle resource={resource} onOpenFile={openFile} onOpenPackage={setOpenPackage} />
                     <span className="text-xs text-secondary">
                       <FitBadge fit={fit.fit} />
                       {resource.sharer_name ? ` · ${resource.sharer_name}` : ` · ${t('skillDetail.resources.yours')}`}
@@ -216,7 +223,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
                     />
                   ) : (
                     <>
-                      <ResourceSummary resource={resource} onOpenFile={openFile} fit={resourceLevelFit(resource, levels)?.fit} />
+                      <ResourceSummary resource={resource} onOpenFile={openFile} onOpenPackage={setOpenPackage} fit={resourceLevelFit(resource, levels)?.fit} />
                       <p className="mt-1 text-xs text-secondary">
                         <AudienceText resource={resource} connections={connections} />
                       </p>
@@ -291,7 +298,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
               <ul className="mt-2 space-y-2">
                 {shownShared.map((resource) => (
                   <li key={resource.id} className="rounded-md border border-hairline bg-card p-3">
-                    <ResourceSummary resource={resource} onOpenFile={openFile} fit={resourceLevelFit(resource, levels)?.fit} />
+                    <ResourceSummary resource={resource} onOpenFile={openFile} onOpenPackage={setOpenPackage} fit={resourceLevelFit(resource, levels)?.fit} />
                     <p className="mt-1 text-xs text-secondary">
                       {t('skillDetail.resources.sharedBy', { name: resource.sharer_name, date: formatFullDate(resource.created_at) })}
                     </p>
@@ -332,13 +339,25 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
           )}
         </>
       )}
+
+      {openPackage && (
+        <SkillPackageOverlay resource={openPackage} userId={user.id} onClose={() => setOpenPackage(null)} />
+      )}
     </section>
   )
 }
 
-// Opens a link in a new tab, or a stored file through a short-lived URL.
-function ResourceTitle({ resource, onOpenFile }) {
+// Opens a link in a new tab, a stored file through a short-lived URL, or a
+// SCORM/xAPI package over the page.
+function ResourceTitle({ resource, onOpenFile, onOpenPackage }) {
   const titleClass = 'text-sm font-medium text-moss hover:underline underline-offset-2 break-words text-left'
+  if (isPackageKind(resource.kind)) {
+    return (
+      <button type="button" onClick={() => onOpenPackage(resource)} aria-haspopup="dialog" className={titleClass}>
+        {resource.title}
+      </button>
+    )
+  }
   return resource.kind === 'file' ? (
     <button type="button" onClick={() => onOpenFile(resource.file_path)} className={titleClass}>
       {resource.title}
@@ -410,16 +429,16 @@ function LevelToolbar({ filter, onFilter, sortMode, onSort }) {
   )
 }
 
-function ResourceSummary({ resource, onOpenFile, fit = null }) {
+function ResourceSummary({ resource, onOpenFile, onOpenPackage, fit = null }) {
   const { t } = useLanguage()
   const kindLabel = t(`skillDetail.resources.kinds.${resource.kind}`)
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <ResourceTitle resource={resource} onOpenFile={onOpenFile} />
+        <ResourceTitle resource={resource} onOpenFile={onOpenFile} onOpenPackage={onOpenPackage} />
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
           {kindLabel}
-          {resource.kind === 'file' && resource.file_name ? ` · ${resource.file_name}` : ''}
+          {(resource.kind === 'file' || isPackageKind(resource.kind)) && resource.file_name ? ` · ${resource.file_name}` : ''}
         </span>
         <FitBadge fit={fit} />
       </div>
@@ -456,8 +475,9 @@ function AudienceText({ resource, connections }) {
 
 // audienceSlot: shown instead of the skill-resource audience choices, for a
 // resource made somewhere that decides its own audience (a plan). The
-// resource itself is then kept private to its owner.
-export function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit, audienceSlot = null }) {
+// resource itself is then kept private to its owner. kinds: which kinds can
+// be added (SCORM/xAPI packages only where they can be opened).
+export function ResourceForm({ kinds = ['link', 'video', 'file'], resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit, audienceSlot = null }) {
   const { t } = useLanguage()
   const editing = Boolean(resource)
   const [kind, setKind] = useState(resource?.kind ?? 'link')
@@ -473,12 +493,16 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
   const [formError, setFormError] = useState(null)
   const idPrefix = `skill-resource-${resource?.id ?? 'new'}`
   const audiences = audiencesFor(kind, { hasLibrarySkill })
+  const isPackage = isPackageKind(kind)
+  const takesUrl = kind === 'link' || kind === 'video'
 
   useEffect(() => {
     if (audience === 'selected') onNeedConnections()
   }, [audience, onNeedConnections])
 
   function chooseKind(next) {
+    // A document and a package take different files.
+    if (isPackageKind(next) !== isPackageKind(kind)) setFile(null)
     setKind(next)
     // An uploaded file can't stay shared with everyone tracking the skill.
     if (!audiencesFor(next, { hasLibrarySkill }).includes(audience)) setAudience('private')
@@ -488,10 +512,11 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
     event.preventDefault()
     setFormError(null)
     if (!title.trim()) return setFormError(t('skillDetail.resources.errorTitle'))
-    if (!editing && kind !== 'file' && !isHttpUrl(url)) return setFormError(t('skillDetail.resources.errorUrl'))
-    if (!editing && kind === 'file') {
+    if (!editing && takesUrl && !isHttpUrl(url)) return setFormError(t('skillDetail.resources.errorUrl'))
+    if (!editing && !takesUrl) {
       if (!file) return setFormError(t('skillDetail.resources.errorFile'))
-      if (file.size > MAX_RESOURCE_FILE_BYTES) return setFormError(t('skillDetail.resources.errorFileSize'))
+      if (isPackage && file.size > MAX_PACKAGE_BYTES) return setFormError(t('skillDetail.resources.errorPackageSize'))
+      if (!isPackage && file.size > MAX_RESOURCE_FILE_BYTES) return setFormError(t('skillDetail.resources.errorFileSize'))
     }
     if (!audienceSlot && audience === 'selected' && recipientIds.length === 0) return setFormError(t('skillDetail.resources.errorRecipients'))
     onSubmit({
@@ -511,7 +536,7 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
         <fieldset>
           <legend className="text-xs text-secondary">{t('skillDetail.resources.kindLabel')}</legend>
           <div className="mt-1 flex flex-wrap gap-2">
-            {['link', 'video', 'file'].map((option) => (
+            {kinds.map((option) => (
               <label
                 key={option}
                 className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium ${
@@ -531,7 +556,7 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
         <input id={`${idPrefix}-title`} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} className={inputClass} />
       </div>
 
-      {!editing && kind !== 'file' && (
+      {!editing && takesUrl && (
         <div>
           <label htmlFor={`${idPrefix}-url`} className="text-xs text-secondary">
             {kind === 'video' ? t('skillDetail.resources.videoUrlLabel') : t('skillDetail.resources.urlLabel')}
@@ -562,13 +587,16 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
         </div>
       )}
 
-      {!editing && kind === 'file' && (
+      {!editing && !takesUrl && (
         <div>
-          <label htmlFor={`${idPrefix}-file`} className="text-xs text-secondary">{t('skillDetail.resources.fileLabel')}</label>
+          <label htmlFor={`${idPrefix}-file`} className="text-xs text-secondary">
+            {isPackage ? t('skillDetail.resources.packageLabel') : t('skillDetail.resources.fileLabel')}
+          </label>
           <input
+            key={isPackage ? 'package' : 'file'}
             id={`${idPrefix}-file`}
             type="file"
-            accept={RESOURCE_FILE_ACCEPT}
+            accept={isPackage ? '.zip,application/zip' : RESOURCE_FILE_ACCEPT}
             onChange={(e) => {
               const chosen = e.target.files?.[0] ?? null
               setFile(chosen)
@@ -576,7 +604,9 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
             }}
             className="mt-1 block w-full text-sm text-ink file:mr-3 file:rounded-md file:border file:border-hairline file:bg-paper file:px-3 file:py-1.5 file:text-xs file:text-ink"
           />
-          <p className="mt-1 text-xs text-secondary">{t('skillDetail.resources.fileHint')}</p>
+          <p className="mt-1 text-xs text-secondary">
+            {isPackage ? t('skillDetail.resources.packageHint') : t('skillDetail.resources.fileHint')}
+          </p>
         </div>
       )}
 

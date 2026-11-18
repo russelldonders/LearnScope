@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { formatFullDate } from '../../lib/dates'
-import { adminListResourceReports, adminResolveResourceReports, getResourceFileUrl } from '../../lib/skillResources'
+import { adminListResourceReports, adminResolveResourceReports, getResourceFileUrl, isPackageKind, packageLaunchUrl } from '../../lib/skillResources'
 
 const REASON_LABELS = {
   spam: 'Spam or advertising',
@@ -92,7 +92,9 @@ export default function AdminResourceReports() {
                     {report.title}
                   </button>
                 ) : (
-                  <a href={report.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-all">
+                  // A package opens at its own launch page, sandboxed by the
+                  // /course-content/* proxy's headers.
+                  <a href={isPackageKind(report.kind) ? packageLaunchUrl(report) : report.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-all">
                     {report.title}
                   </a>
                 )}
@@ -101,7 +103,7 @@ export default function AdminResourceReports() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-secondary">
-                {report.kind === 'file' ? `Document · ${report.file_name ?? ''}` : report.kind === 'video' ? `Video · ${report.url}` : `Link · ${report.url}`}
+                {report.kind === 'file' ? `Document · ${report.file_name ?? ''}` : isPackageKind(report.kind) ? `${report.kind === 'scorm' ? 'SCORM' : 'xAPI'} package · ${report.file_name ?? ''}` : report.kind === 'video' ? `Video · ${report.url}` : `Link · ${report.url}`}
               </p>
               {report.note && <p className="mt-1 text-sm text-secondary whitespace-pre-wrap break-words">{report.note}</p>}
               <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">

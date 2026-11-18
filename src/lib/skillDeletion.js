@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { removeStorageFolder } from './courseContent'
 
 // Deletes one of the learner's own skills and then the uploaded files that
 // went with it. Deleting the skill removes its resources and assessments
@@ -8,13 +9,17 @@ import { supabase } from './supabaseClient'
 // file still listed on a kept activity stays as well.
 export async function deleteSkillWithFiles(skill, userId) {
   const ownFolder = `${userId}/`
-  const [resources, assessments] = await Promise.all([
+  const [resources, packages, assessments] = await Promise.all([
     supabase.from('skill_resources').select('file_path').eq('skill_id', skill.id).not('file_path', 'is', null),
+    supabase.from('skill_resources').select('package_path').eq('skill_id', skill.id).not('package_path', 'is', null),
     supabase.from('skill_assessments').select('evidence_paths').eq('skill_id', skill.id).eq('user_id', userId),
   ])
   if (resources.error) throw resources.error
+  if (packages.error) throw packages.error
   if (assessments.error) throw assessments.error
   const resourceFiles = (resources.data ?? []).map((r) => r.file_path).filter((p) => p?.startsWith(ownFolder))
+  // Each package has its own folder, never shared with another resource.
+  const packageFolders = (packages.data ?? []).map((r) => r.package_path).filter((p) => p?.startsWith(`learners/${userId}/`))
   const evidenceFiles = [...new Set((assessments.data ?? []).flatMap((a) => a.evidence_paths ?? []))]
     .filter((p) => p?.startsWith(ownFolder))
 
@@ -48,6 +53,7 @@ export async function deleteSkillWithFiles(skill, userId) {
     await Promise.all([
       removableResources.length ? supabase.storage.from('skill-resources').remove(removableResources) : null,
       removableEvidence.length ? supabase.storage.from('skill-evidence').remove(removableEvidence) : null,
+      ...packageFolders.map((folder) => removeStorageFolder(folder)),
     ])
   } catch (cleanupError) {
     console.error('Skill deleted, but some of its files could not be removed:', cleanupError)

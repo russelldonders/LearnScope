@@ -30,22 +30,7 @@ export function useAdlLaunchUrl(contentItem, userId, courseId = null) {
     createXapiLaunchSession(contentItem.id, userId, courseId)
       .then((session) => {
         if (cancelled) return
-        const params = new URLSearchParams({
-          endpoint: `${window.location.origin}/api/xapi/`,
-          // Basic auth, per the ADL Launch spec -- username is the session
-          // token, password left empty (the LRS endpoint only checks the
-          // token half, see resolveSession() there).
-          auth: `Basic ${btoa(`${session.token}:`)}`,
-          actor: JSON.stringify({
-            objectType: 'Agent',
-            // account.name, not mbox -- avoids handing the learner's email
-            // to arbitrary uploaded package code just to identify them.
-            account: { homePage: 'https://learnscope.app', name: userId },
-          }),
-          registration: session.id,
-          activity_id: xapiActivityId(contentItem),
-        })
-        setLaunchUrl(`${baseUrl}?${params.toString()}`)
+        setLaunchUrl(buildAdlLaunchUrl(baseUrl, session, userId, xapiActivityId(contentItem)))
       })
       .catch((err) => !cancelled && setError(err.message))
 
@@ -56,4 +41,26 @@ export function useAdlLaunchUrl(contentItem, userId, courseId = null) {
   }, [contentItem.id, userId, courseId])
 
   return { launchUrl, error }
+}
+
+// The package's launch page with the ADL Launch parameters it reads from its
+// own address. Also used for xAPI packages on a skill (SkillPackageOverlay).
+// actorName identifies the learner to the package.
+export function buildAdlLaunchUrl(baseUrl, session, actorName, activityId) {
+  const params = new URLSearchParams({
+    endpoint: `${window.location.origin}/api/xapi/`,
+    // Basic auth, per the ADL Launch spec -- username is the session
+    // token, password left empty (the LRS endpoint only checks the
+    // token half, see resolveSession() there).
+    auth: `Basic ${btoa(`${session.token}:`)}`,
+    actor: JSON.stringify({
+      objectType: 'Agent',
+      // account.name, not mbox -- avoids handing the learner's email
+      // to arbitrary uploaded package code just to identify them.
+      account: { homePage: 'https://learnscope.app', name: actorName },
+    }),
+    registration: session.id,
+    activity_id: activityId,
+  })
+  return `${baseUrl}?${params.toString()}`
 }

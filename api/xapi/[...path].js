@@ -86,7 +86,7 @@ async function resolveSession(req, res) {
   const admin = supabaseAdmin()
   const { data: session, error } = await admin
     .from('xapi_launch_sessions')
-    .select('id, resource_id, user_id, course_id, expires_at')
+    .select('id, resource_id, skill_resource_id, user_id, course_id, expires_at')
     .eq('token', token)
     .maybeSingle()
   if (error) throw error
@@ -99,11 +99,22 @@ async function resolveSession(req, res) {
   return { admin, session }
 }
 
+// A launch session names either an organisation's content resource or a
+// learner's skill resource (0314); statements are scoped to whichever it is.
+function forSessionResource(query, session) {
+  return session.skill_resource_id
+    ? query.eq('skill_resource_id', session.skill_resource_id)
+    : query.eq('resource_id', session.resource_id)
+}
+
 // Records a completed/passed outcome for the launched package as that
 // learner's progress on the course item, never downgrading what is there
 // (same course_content_progress row SCORM packages write through their own
 // runtime API).
 async function recordPackageCompletion(admin, session, statements) {
+  // Course progress is for an organisation's content; a skill resource has
+  // none, its statements are the record.
+  if (!session.resource_id) return
   const outcome = completionFromStatements(statements, launchedActivityId(session.resource_id))
   if (!outcome) return
   const { data: current, error: readError } = await admin
@@ -134,10 +145,9 @@ async function handleStatements(req, res) {
 
   if (req.method === 'GET') {
     const registration = req.query.registration ?? session.id
-    const { data, error } = await admin
+    const { data, error } = await forSessionResource(admin
       .from('xapi_statements')
-      .select('statement')
-      .eq('resource_id', session.resource_id)
+      .select('statement'), session)
       .eq('user_id', session.user_id)
       .order('recorded_at', { ascending: false })
       .limit(200)
@@ -170,10 +180,9 @@ async function handleStatements(req, res) {
     // bounded check constraint), but relaunching the same resource creates
     // a fresh session, so capping per-session alone wouldn't actually bound
     // total writes for one user against one resource.
-    const { count, error: countError } = await admin
+    const { count, error: countError } = await forSessionResource(admin
       .from('xapi_statements')
-      .select('id', { count: 'exact', head: true })
-      .eq('resource_id', session.resource_id)
+      .select('id', { count: 'exact', head: true }), session)
       .eq('user_id', session.user_id)
     if (countError) throw countError
     if ((count ?? 0) + incoming.length > MAX_STATEMENTS_PER_SESSION) {
@@ -197,6 +206,7 @@ async function handleStatements(req, res) {
         id,
         user_id: session.user_id,
         resource_id: session.resource_id,
+        ...(session.skill_resource_id ? { skill_resource_id: session.skill_resource_id } : {}),
         course_id: session.course_id,
         statement: stamped,
         recorded_at: stamped.timestamp ? new Date(stamped.timestamp) : new Date(),
@@ -211,10 +221,12 @@ async function handleStatements(req, res) {
     // are immutable in xAPI, so a same-owner retry is simply a no-op.
     const { data: existing, error: existingError } = await admin
       .from('xapi_statements')
-      .select('id, user_id, resource_id')
+      .select('id, user_id, resource_id, skill_resource_id')
       .in('id', ids)
     if (existingError) throw existingError
-    if ((existing ?? []).some((row) => row.user_id !== session.user_id || row.resource_id !== session.resource_id)) {
+    if ((existing ?? []).some((row) => row.user_id !== session.user_id
+      || row.resource_id !== session.resource_id
+      || (row.skill_resource_id ?? null) !== (session.skill_resource_id ?? null))) {
       res.status(409).json({ error: 'A statement with this id already exists.' })
       return
     }

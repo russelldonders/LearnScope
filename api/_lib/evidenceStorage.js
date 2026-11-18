@@ -1,4 +1,12 @@
-const EVIDENCE_BUCKETS = ['skill-evidence', 'avatars', 'skill-resources']
+// Bucket and the folder each keeps a user's own files under.
+const EVIDENCE_FOLDERS = [
+  ['skill-evidence', (userId) => userId],
+  ['avatars', (userId) => userId],
+  ['skill-resources', (userId) => userId],
+  // SCORM/xAPI packages on their skills (0314), in the public course-content
+  // bucket -- left behind, they'd stay reachable at their address.
+  ['course-content', (userId) => `learners/${userId}`],
+]
 const LIST_PAGE_SIZE = 100
 
 // Storage .list() only returns one level at a time (paginated, 100 per page
@@ -30,8 +38,8 @@ async function listAllFiles(admin, bucket, prefix) {
 // hard-delete action -- both need every evidence file under a user's own
 // storage prefix removed before (or as part of) deleting the account.
 export async function deleteUserEvidenceFiles(admin, userId) {
-  for (const bucket of EVIDENCE_BUCKETS) {
-    const paths = await listAllFiles(admin, bucket, userId)
+  for (const [bucket, folderOf] of EVIDENCE_FOLDERS) {
+    const paths = await listAllFiles(admin, bucket, folderOf(userId))
     if (paths.length > 0) {
       const { error } = await admin.storage.from(bucket).remove(paths)
       if (error) throw error
