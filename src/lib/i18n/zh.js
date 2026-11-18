@@ -2800,6 +2800,7 @@ export default {
     completedOn: '完成于 {date}',
     notFound: '未找到课程。',
     completeCount: '已完成 {done} / {total}',
+    sectionNumber: "第 {number} 部分",
     editCourse: '编辑课程',
     startedOn: '开始于 {date}',
     startTbc: '开始日期待定',

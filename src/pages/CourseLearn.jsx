@@ -498,7 +498,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
           >
             {isDone ? '✓' : ''}
           </span>
-          <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          <span className="min-w-0 flex-1 line-clamp-2 leading-snug" title={item.title}>{item.title}</span>
           <Chevron open={isExpanded} className="md:hidden" />
         </button>
         {isExpanded && (
@@ -661,30 +661,55 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
                 {isFocused ? (
                   <ul className="space-y-1">{renderItemRow(currentItem)}</ul>
                 ) : (
-                  groupedNav.map((group) => {
+                  // Three levels, each clearly its own: the section (numbered,
+                  // its title in the body font with its own progress), a short,
+                  // quieter description, then its items indented beneath.
+                  groupedNav.map((group, index) => {
                     const isOpen = openSectionKeys.has(group.key)
+                    const done = group.items.filter((item) => isContentComplete(progressByItemId[item.id]?.status)).length
+                    const allDone = done === group.items.length
+                    const progressText = t('courseLearn.completeCount', { done, total: group.items.length })
                     return (
-                      <div key={group.key} className="mb-4 last:mb-0">
+                      <div key={group.key} className="border-t border-hairline/60 pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0">
                         {group.title && (
                           <>
                             <button
                               type="button"
                               onClick={() => toggleSection(group.key)}
                               aria-expanded={isOpen}
-                              className="w-full flex items-center justify-between gap-2 rounded-md px-2.5 py-1 mb-1 font-mono text-[10px] uppercase tracking-wide text-secondary hover:text-ink"
+                              className="group w-full flex items-start justify-between gap-3 rounded-md px-2.5 py-1.5 text-left hover:bg-card"
                             >
-                              <span className="truncate">{group.title}</span>
-                              <Chevron open={isOpen} />
+                              <span className="min-w-0">
+                                <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary">
+                                  {t('courseLearn.sectionNumber', { number: index + 1 })}
+                                </span>
+                                <span className={`block text-sm font-semibold leading-snug line-clamp-2 ${isOpen ? 'text-ink' : 'text-ink/80 group-hover:text-ink'}`}>
+                                  {group.title}
+                                </span>
+                              </span>
+                              <span className="shrink-0 flex items-center gap-2 pt-3.5">
+                                {allDone ? (
+                                  <span role="img" aria-label={progressText} title={progressText} className="flex items-center justify-center w-4 h-4 rounded-full bg-moss text-paper text-[9px] font-bold">✓</span>
+                                ) : (
+                                  <span aria-label={progressText} title={progressText} className="font-mono text-[11px] tabular-nums text-secondary">
+                                    {done}/{group.items.length}
+                                  </span>
+                                )}
+                                <Chevron open={isOpen} />
+                              </span>
                             </button>
                             {isOpen && group.instructions && (
-                              <p className="px-2.5 pb-2 whitespace-pre-wrap text-xs leading-relaxed text-secondary">
+                              // Shown in full above the item itself; here, just enough to place it.
+                              <p className="px-2.5 mt-1 mb-2 whitespace-pre-wrap text-xs leading-relaxed text-secondary/80 line-clamp-3">
                                 {group.instructions}
                               </p>
                             )}
                           </>
                         )}
                         {(isOpen || !group.title) && (
-                          <ul className="space-y-1">{group.items.map((item) => renderItemRow(item))}</ul>
+                          <ul className={`space-y-1 ${group.title ? 'mt-1 ml-2.5 pl-2 border-l border-hairline/60' : ''}`}>
+                            {group.items.map((item) => renderItemRow(item))}
+                          </ul>
                         )}
                       </div>
                     )

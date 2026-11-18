@@ -2821,6 +2821,7 @@ export default {
     completedOn: 'Terminée le {date}',
     notFound: 'Formation introuvable.',
     completeCount: '{done} / {total} terminés',
+    sectionNumber: "Section {number}",
     editCourse: 'Modifier la formation',
     startedOn: 'Commencée le {date}',
     startTbc: 'Date de début à confirmer',

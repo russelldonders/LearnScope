@@ -2818,6 +2818,7 @@ export default {
     completedOn: 'Completed {date}',
     notFound: 'Course not found.',
     completeCount: '{done} / {total} complete',
+    sectionNumber: "Section {number}",
     editCourse: 'Edit course',
     startedOn: 'Started {date}',
     startTbc: 'Start date to be confirmed',

@@ -2819,6 +2819,7 @@ export default {
     completedOn: 'Afgerond op {date}',
     notFound: 'Cursus niet gevonden.',
     completeCount: '{done} / {total} afgerond',
+    sectionNumber: "Onderdeel {number}",
     editCourse: 'Cursus bewerken',
     startedOn: 'Gestart op {date}',
     startTbc: 'Startdatum volgt nog',

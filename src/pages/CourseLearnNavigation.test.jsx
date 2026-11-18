@@ -94,4 +94,17 @@ describe('moving through a course', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(onProgressChange).toHaveBeenLastCalledWith({ done: 1, total: 3, percent: 33 }))
   })
+
+  it('numbers each section and shows how far through it the learner is', async () => {
+    progress.byItem = { p1: { status: 'completed' }, p2: { status: 'completed' } }
+    render(<MemoryRouter><CourseLearn courseId="c1" /></MemoryRouter>)
+    await screen.findByRole('heading', { name: 'Welcome' })
+    const first = sectionToggle('Getting started')
+    expect(first).toHaveTextContent('Section 1')
+    // A finished section shows a check, read out as its count.
+    expect(within(first).getByRole('img', { name: '2 / 2 complete' })).toBeInTheDocument()
+    const second = sectionToggle('Going further')
+    expect(second).toHaveTextContent('Section 2')
+    expect(second).toHaveTextContent('0/1')
+  })
 })
