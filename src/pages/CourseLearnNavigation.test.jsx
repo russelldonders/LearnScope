@@ -70,14 +70,14 @@ describe('moving through a course', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await screen.findByRole('heading', { name: 'Preparing' })
     // Back to the top of the new page, not left where the last one ended.
-    expect(scrolled).toHaveLength(1)
+    await waitFor(() => expect(scrolled).toHaveLength(1))
 
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await screen.findByRole('heading', { name: 'Closing' })
     // Into the next section: it opens, and the one left behind closes.
     await waitFor(() => expect(sectionToggle('Going further')).toHaveAttribute('aria-expanded', 'true'))
     expect(sectionToggle('Getting started')).toHaveAttribute('aria-expanded', 'false')
-    expect(scrolled).toHaveLength(2)
+    await waitFor(() => expect(scrolled).toHaveLength(2))
 
     // Another section can still be opened to look back.
     fireEvent.click(sectionToggle('Getting started'))

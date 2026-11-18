@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activitySource, checkInLevel, combinedSetRow, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, timelineRows } from './activityTimeline'
+import { activitySource, checkInLevel, combinedSetRow, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, packageGroupSummary, timelineRows } from './activityTimeline'
 import { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI, measurementsFromStatement } from './xapiStatement'
 
 // Sunday 8 November 2026, midday local time.
@@ -158,5 +158,41 @@ describe('sets on the timeline', () => {
     expect(combined.statement.result.duration).toBeUndefined()
     expect(combined.statement.object.definition.description).toBeUndefined()
     expect(combined.id).toBe('sets-c')
+  })
+})
+
+// A course package session as the LRS writes it (0316).
+function session(id, day, { resourceId = 'pkg-1', verb = 'http://adlnet.gov/expapi/verbs/experienced', minutes, earned = [], score, hour = 9 } = {}) {
+  const r = row(id, day, { minutes, statement: {
+    verb: { id: verb },
+    object: { definition: { name: { 'en-US': 'Fire drill' } } },
+    context: { extensions: { ['https://learnscope.app/xapi/extensions/package-session']: { resourceId, sessionId: id, statementCount: 3, earned } } },
+  } })
+  r.recorded_at = new Date(2026, 10, day, hour).toISOString()
+  if (minutes || score != null) r.statement.result = { ...(minutes ? { duration: `PT${minutes}M` } : {}), ...(score != null ? { score: { scaled: score } } : {}) }
+  return r
+}
+
+describe('course package sessions on the timeline', () => {
+  it('folds a day\'s sessions in the same package into one item, where the newest was', () => {
+    const rows = [session('s3', 8, { hour: 15 }), row('walk', 8), session('s2', 8, { hour: 11 }), session('other', 8, { resourceId: 'pkg-2', hour: 10 }), session('s1', 8, { hour: 9 })]
+    const items = foldTimeline(rows)
+    expect(items.map((item) => item.type)).toEqual(['package', 'activity', 'package'])
+    expect(items[0].rows.map((r) => r.id)).toEqual(['s3', 's2', 's1'])
+    expect(items[2].rows.map((r) => r.id)).toEqual(['other'])
+  })
+
+  it('leads with what was achieved: everything earned once each in the order earned, and the best outcome and score', () => {
+    const summary = packageGroupSummary([
+      session('s3', 8, { hour: 15, verb: 'http://adlnet.gov/expapi/verbs/failed', minutes: 5, score: 0.4 }),
+      session('s2', 8, { hour: 11, verb: 'http://adlnet.gov/expapi/verbs/passed', minutes: 12, earned: ['Gold stamp', 'Spurter'], score: 0.85 }),
+      session('s1', 8, { hour: 9, minutes: 8, earned: ['Spurter'] }),
+    ])
+    expect(summary.title).toBe('Fire drill')
+    expect(summary.earned).toEqual(['Spurter', 'Gold stamp'])
+    expect(summary.outcome).toBe('passed')
+    expect(summary.bestScore).toBe(85)
+    expect(summary.minutes).toBe(25)
+    expect(summary.sessions.map((s) => [s.row.id, s.outcome, s.score])).toEqual([['s3', 'failed', 40], ['s2', 'passed', 85], ['s1', null, null]])
   })
 })

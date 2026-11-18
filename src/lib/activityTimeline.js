@@ -10,6 +10,7 @@ import {
   isDiagnosticStatement,
   isPeerRatingStatement,
   measurementsFromStatement,
+  packageSessionFromStatement,
   provenanceFromStatement,
   relatedSkillsFromStatement,
 } from './xapiStatement'
@@ -130,10 +131,23 @@ export function setKey(row) {
   return [activityName(row.statement).trim().toLowerCase(), measurement.metric, measurement.unit, skills].join('|')
 }
 
-// One day's rows for the timeline, newest first. Two or more sets of the same
-// thing that day fold into one item where the newest of them was, wherever
-// the others fell; two or more check-ins in a row fold into one line.
+// What makes sessions in the same course package (0316): the package. Null
+// for anything that isn't a package session.
+export function packageKey(row) {
+  const session = packageSessionFromStatement(row.statement)
+  return session?.resourceId ? `package|${session.resourceId}` : null
+}
+
+// One day's rows for the timeline, newest first. A day's sessions in the same
+// course package fold into one item, and two or more sets of the same thing
+// into another, each where the newest of them was, wherever the others fell;
+// two or more check-ins in a row fold into one line.
 export function foldTimeline(rows) {
+  const packages = new Map()
+  for (const row of rows) {
+    const key = packageKey(row)
+    if (key) packages.set(key, [...(packages.get(key) ?? []), row])
+  }
   const sets = new Map()
   for (const row of rows) {
     const key = setKey(row)
@@ -142,6 +156,12 @@ export function foldTimeline(rows) {
   const items = []
   const placed = new Set()
   for (const row of rows) {
+    const pkg = packageKey(row)
+    if (pkg) {
+      if (!placed.has(pkg)) items.push({ type: 'package', rows: packages.get(pkg) })
+      placed.add(pkg)
+      continue
+    }
     const key = setKey(row)
     if (key && sets.get(key).length > 1) {
       if (!placed.has(key)) items.push({ type: 'sets', rows: sets.get(key) })
@@ -175,6 +195,46 @@ export function combinedSetRow(rows) {
     },
   }
   return { row: { ...newest, id: `sets-${newest.id}`, evidence_paths: [], evidence_url: null, statement }, parts, ordered }
+}
+
+const OUTCOME_RANK = { failed: 1, completed: 2, passed: 3 }
+const OUTCOME_BY_VERB = {
+  'http://adlnet.gov/expapi/verbs/passed': 'passed',
+  'http://adlnet.gov/expapi/verbs/failed': 'failed',
+  'http://adlnet.gov/expapi/verbs/completed': 'completed',
+}
+
+// A day's sessions in one course package, as the timeline shows them: what
+// was achieved first -- everything earned (once each, in the order it was
+// earned), the best outcome and score -- then how much was done.
+// sessions: newest first, each { row, minutes, outcome, score, earned }.
+export function packageGroupSummary(rows) {
+  const newestFirst = [...rows].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
+  const sessions = newestFirst.map((row) => {
+    const scaled = row.statement?.result?.score?.scaled
+    return {
+      row,
+      minutes: durationMinutes(row.statement),
+      outcome: OUTCOME_BY_VERB[row.statement?.verb?.id] ?? null,
+      score: typeof scaled === 'number' && Number.isFinite(scaled) ? Math.round(scaled * 100) : null,
+      earned: packageSessionFromStatement(row.statement)?.earned ?? [],
+    }
+  })
+  const earned = []
+  for (const session of [...sessions].reverse()) {
+    for (const name of session.earned) if (!earned.includes(name)) earned.push(name)
+  }
+  const outcome = sessions.reduce((best, s) => (s.outcome && (OUTCOME_RANK[s.outcome] > (OUTCOME_RANK[best] ?? 0)) ? s.outcome : best), null)
+  const scores = sessions.map((s) => s.score).filter((score) => score != null)
+  return {
+    title: activityName(newestFirst[0].statement),
+    skills: relatedSkillsFromStatement(newestFirst[0].statement),
+    sessions,
+    minutes: sessions.reduce((sum, s) => sum + s.minutes, 0),
+    earned,
+    outcome,
+    bestScore: scores.length ? Math.max(...scores) : null,
+  }
 }
 
 // "today", "yesterday", the weekday within the last week, otherwise the date.

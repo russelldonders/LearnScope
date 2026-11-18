@@ -163,3 +163,53 @@ describe('editing from the timeline', () => {
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'Stretching' }))
   })
 })
+
+describe('course package sessions', () => {
+  const pkgSession = (id, hour, { verb = 'http://adlnet.gov/expapi/verbs/experienced', earned = [], score } = {}) => ({
+    id,
+    recorded_at: new Date(2026, 10, 8, hour).toISOString(),
+    created_at: new Date(2026, 10, 8, hour).toISOString(),
+    resource_id: null,
+    statement: {
+      verb: { id: verb },
+      object: { definition: { name: { 'en-US': 'Cycle around and learn Dutch' } } },
+      ...(score != null ? { result: { score: { scaled: score } } } : {}),
+      context: { extensions: {
+        [SKILL_EXTENSION_IRI]: [{ id: 'skill-dutch', name: 'Dutch' }],
+        [PROVENANCE_EXTENSION_IRI]: { source: 'package', externalId: id },
+        ['https://learnscope.app/xapi/extensions/package-session']: { resourceId: 'pkg-1', sessionId: id, statementCount: 2, earned },
+      } },
+    },
+  })
+
+  it('shows a day\'s sessions as one entry leading with what was earned and how it went', () => {
+    const onOpen = vi.fn()
+    const rows = [
+      pkgSession('s3', 15, { verb: 'http://adlnet.gov/expapi/verbs/passed', score: 0.85 }),
+      pkgSession('s2', 11, { earned: ['Gold stamp', 'Spurter'] }),
+      pkgSession('s1', 9, { earned: ['Spurter'] }),
+    ]
+    render(<MemoryRouter><ActivityTimeline rows={rows} now={NOW} onOpen={onOpen} /></MemoryRouter>)
+    // One entry, not three.
+    expect(screen.getAllByRole('button', { name: 'Cycle around and learn Dutch' })).toHaveLength(1)
+    const earned = screen.getByRole('list', { name: 'Earned' })
+    expect(within(earned).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['★Spurter', '★Gold stamp'])
+    expect(screen.getByText('Passed · 85%')).toBeInTheDocument()
+    expect(screen.getByText('3 sessions')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dutch' })).toHaveAttribute('href', '/skills/skill-dutch')
+
+    // Each session, newest first, on request.
+    fireEvent.click(screen.getByRole('button', { name: /Show sessions/ }))
+    expect(screen.getByText(/· Passed 85%/)).toBeInTheDocument()
+    expect(screen.getByText(/· ★ Gold stamp, Spurter/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cycle around and learn Dutch' }))
+    expect(onOpen).toHaveBeenCalledWith(rows[0])
+  })
+
+  it('says it was worked through when nothing was earned or finished', () => {
+    render(<MemoryRouter><ActivityTimeline rows={[pkgSession('s1', 9)]} now={NOW} /></MemoryRouter>)
+    expect(screen.getByText('Worked through it')).toBeInTheDocument()
+    expect(screen.getByText('1 session')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Earned' })).not.toBeInTheDocument()
+  })
+})

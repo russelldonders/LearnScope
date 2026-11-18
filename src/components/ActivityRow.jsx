@@ -36,7 +36,7 @@ function plainVerb(statement, t) {
 }
 
 // Each skill keeps the same colour everywhere it appears.
-function SkillChip({ skill }) {
+export function SkillChip({ skill }) {
   const [colour] = gradientPairFor(skill.name ?? '')
   return (
     <Link
