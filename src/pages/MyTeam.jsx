@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
+import PersonAvatar from '../components/PersonAvatar'
 import { useAuth } from '../context/AuthContext'
 import {
   assignCourseToManagedEmployerMember,
@@ -45,15 +46,6 @@ const SCOPE_LABELS = {
   shared_skill_evidence: 'Shared evidence',
 }
 
-function initials(name) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || 'TM'
-}
-
 function formatDate(value) {
   if (!value) return null
   return new Date(value).toLocaleDateString()
@@ -72,21 +64,12 @@ function StatusPill({ children, tone = 'neutral' }) {
   )
 }
 
-function PersonAvatar({ name, avatarUrl, size = 'md' }) {
-  const dimensions = size === 'lg' ? 'h-14 w-14 text-base' : 'h-10 w-10 text-sm'
-  return (
-    <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-moss text-paper font-medium ${dimensions}`}>
-      {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(name)}
-    </span>
-  )
-}
-
 function LoadingRows() {
   return (
-    <div className="divide-y divide-hairline border-y border-hairline" aria-label="Loading team">
+    <div className="bg-card border border-hairline rounded-lg divide-y divide-hairline" role="status" aria-label="Loading team">
       {[0, 1, 2].map((row) => (
-        <div key={row} className="flex items-center gap-4 py-5 animate-pulse">
-          <span className="h-10 w-10 rounded-full bg-hairline/30" />
+        <div key={row} className="flex items-center gap-3 px-4 py-3 animate-pulse">
+          <span className="h-9 w-9 rounded-full bg-hairline/30" />
           <div className="flex-1 space-y-2">
             <span className="block h-4 w-36 rounded bg-hairline/30" />
             <span className="block h-3 w-52 rounded bg-hairline/20" />
@@ -97,9 +80,11 @@ function LoadingRows() {
   )
 }
 
-export default function MyTeam({ services = DEFAULT_SERVICES }) {
-  const { employeeMemberId } = useParams()
-  const navigate = useNavigate()
+// The people this learner manages for an employer -- one of the tabs of the
+// People page (Connections.jsx), alongside their own connections and teams.
+// The list used to be a page of its own at /team; that route now redirects
+// here, while a team member's snapshot still opens at /team/:employeeMemberId.
+export function EmployerTeamPanel({ services = DEFAULT_SERVICES }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const { managerContexts, managerContextsError, refreshManagerContexts } = useAuth()
   const contexts = managerContexts ?? []
@@ -129,12 +114,11 @@ export default function MyTeam({ services = DEFAULT_SERVICES }) {
     loadTeam()
   }, [loadTeam])
 
-  useEffect(() => {
-    if (!activeContext || requestedEmployerId === activeContext.employerId) return
-    const next = new URLSearchParams(searchParams)
-    next.set('employer', activeContext.employerId)
-    setSearchParams(next, { replace: true })
-  }, [activeContext, requestedEmployerId, searchParams, setSearchParams])
+  const counts = useMemo(() => ({
+    all: team.length,
+    direct: team.filter((member) => member.reportDepth === 1).length,
+    indirect: team.filter((member) => member.reportDepth > 1).length,
+  }), [team])
 
   const filteredTeam = useMemo(() => {
     const query = search.trim().toLocaleLowerCase()
@@ -148,14 +132,154 @@ export default function MyTeam({ services = DEFAULT_SERVICES }) {
   function selectEmployer(employerId) {
     setSearch('')
     setReportFilter('all')
-    navigate(`/team?employer=${encodeURIComponent(employerId)}`)
+    const next = new URLSearchParams(searchParams)
+    next.set('employer', employerId)
+    setSearchParams(next)
+  }
+
+  if (!activeContext) {
+    return (
+      <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+        <p role="alert" className="text-secondary">
+          {managerContextsError ? 'We couldn’t verify your team access.' : 'You do not currently have an active team.'}
+        </p>
+        {managerContextsError && (
+          <button type="button" onClick={refreshManagerContexts} className="mt-4 rounded-md border border-hairline px-3 py-2 text-sm text-ink hover:bg-card">
+            Try again
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const employerQuery = `?employer=${encodeURIComponent(activeContext.employerId)}`
+
+  return (
+    <div>
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-end sm:justify-between">
+        <p className="text-sm text-secondary max-w-xl text-pretty">
+          People you manage at {activeContext.employerName}. You see employer-owned development activity, and only what each person has chosen to share with {activeContext.employerName}.
+        </p>
+        {contexts.length > 1 && (
+          <label className="text-sm text-secondary shrink-0">
+            Employer
+            <select
+              value={activeContext.employerId}
+              onChange={(event) => selectEmployer(event.target.value)}
+              className="mt-1 block min-w-52 rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink"
+            >
+              {contexts.map((context) => (
+                <option key={context.employerId} value={context.employerId}>{context.employerName}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div role="group" aria-label="Report type filter" className="flex flex-wrap gap-1.5">
+          {[
+            ['all', 'All'],
+            ['direct', 'Direct'],
+            ['indirect', 'Indirect'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={reportFilter === value}
+              onClick={() => setReportFilter(value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${reportFilter === value
+                ? 'border-moss bg-moss/10 text-ink'
+                : 'border-hairline text-secondary hover:text-ink'}`}
+            >
+              {label}
+              {!loading && !error && <span aria-hidden="true" className="ml-1.5 tabular-nums text-secondary">{counts[value]}</span>}
+            </button>
+          ))}
+        </div>
+        <label className="sr-only" htmlFor="team-search">Search team</label>
+        <input
+          id="team-search"
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search by name…"
+          className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-base sm:text-sm text-ink placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss sm:w-64"
+        />
+      </div>
+
+      {loading && <LoadingRows />}
+      {error && (
+        <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
+          <p role="alert" className="text-sm text-red-700">{error}</p>
+          <button type="button" onClick={loadTeam} className="shrink-0 text-sm text-moss font-medium hover:opacity-90">Try again</button>
+        </div>
+      )}
+      {!loading && !error && filteredTeam.length === 0 && (
+        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+          <p className="text-ink">No team members match this view.</p>
+          <p className="mt-1 text-sm text-secondary">Try another report filter or clear the search.</p>
+        </div>
+      )}
+      {!loading && !error && filteredTeam.length > 0 && (
+        <ul className="bg-card border border-hairline rounded-lg divide-y divide-hairline">
+          {filteredTeam.map((member) => (
+            <li key={member.employeeMemberId}>
+              <Link
+                to={`/team/${member.employeeMemberId}${employerQuery}`}
+                className="group flex items-center gap-3 px-4 py-3 hover:bg-paper/60"
+              >
+                <PersonAvatar name={member.fullName} avatarUrl={member.avatarUrl} size={9} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate font-medium text-ink group-hover:text-moss">{member.fullName}</h3>
+                    {member.isPrimary && <StatusPill tone="active">Primary</StatusPill>}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-secondary">
+                      {member.reportDepth === 1 ? 'Direct report' : `Indirect report · level ${member.reportDepth}`}
+                    </span>
+                    {member.relationshipTypes.filter((type) => type !== 'primary' || !member.isPrimary).map((type) => (
+                      <StatusPill key={type} tone={type === 'indirect' ? 'info' : 'neutral'}>
+                        {RELATIONSHIP_LABELS[type] ?? type}
+                      </StatusPill>
+                    ))}
+                  </div>
+                </div>
+                <span aria-hidden="true" className="text-lg text-secondary group-hover:text-ink">›</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-6 text-xs text-secondary max-w-xl text-pretty">
+        My team never opens a person’s full LearnScope profile. Private learner information is absent unless the learner has actively shared it with this employer.
+      </p>
+    </div>
+  )
+}
+
+// /team keeps working for bookmarks and old links: the list now lives on
+// the People page, and /team/:employeeMemberId still opens one person.
+export default function MyTeam({ services = DEFAULT_SERVICES }) {
+  const { employeeMemberId } = useParams()
+  const [searchParams] = useSearchParams()
+  const { managerContexts, managerContextsError, refreshManagerContexts } = useAuth()
+  const contexts = managerContexts ?? []
+  const requestedEmployerId = searchParams.get('employer')
+  const activeContext = contexts.find((context) => context.employerId === requestedEmployerId) ?? contexts[0]
+
+  if (!employeeMemberId) {
+    const employer = activeContext ? `&employer=${encodeURIComponent(activeContext.employerId)}` : ''
+    return <Navigate to={`/connections?section=team${employer}`} replace />
   }
 
   if (!activeContext) {
     return (
       <div className="min-h-screen bg-paper">
         <AppHeader />
-        <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-10">
+        <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-8">
           <p role="alert" className="text-sm text-red-700">
             {managerContextsError ? 'We couldn’t verify your team access.' : 'You do not currently have an active team.'}
           </p>
@@ -169,134 +293,12 @@ export default function MyTeam({ services = DEFAULT_SERVICES }) {
     )
   }
 
-  if (employeeMemberId) {
-    return (
-      <TeamMemberDetail
-        context={activeContext}
-        employeeMemberId={employeeMemberId}
-        services={services}
-      />
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-paper">
-      <AppHeader />
-      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-8 sm:py-10">
-        <div className="flex flex-col gap-5 border-b border-hairline pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="font-display text-3xl text-ink sm:text-4xl">My team</h1>
-            <p className="mt-2 max-w-[65ch] text-secondary">
-              Employer-owned development activity and information people have explicitly shared with this employer.
-            </p>
-          </div>
-          {contexts.length > 1 && (
-            <label className="text-sm font-medium text-ink">
-              Employer
-              <select
-                value={activeContext.employerId}
-                onChange={(event) => selectEmployer(event.target.value)}
-                className="mt-1 block min-w-52 rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink"
-              >
-                {contexts.map((context) => (
-                  <option key={context.employerId} value={context.employerId}>{context.employerName}</option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-
-        <section aria-label="Team summary" className="grid grid-cols-3 divide-x divide-hairline border-b border-hairline py-5 text-center sm:text-left">
-          <div className="pr-3 sm:pr-6">
-            <p className="text-2xl font-semibold tabular-nums text-ink">{team.length}</p>
-            <p className="mt-1 text-xs text-secondary">Manageable people</p>
-          </div>
-          <div className="px-3 sm:px-6">
-            <p className="text-2xl font-semibold tabular-nums text-ink">{activeContext.directReportCount}</p>
-            <p className="mt-1 text-xs text-secondary">Direct reports</p>
-          </div>
-          <div className="pl-3 sm:pl-6">
-            <p className="text-2xl font-semibold tabular-nums text-ink">{activeContext.indirectReportCount}</p>
-            <p className="mt-1 text-xs text-secondary">Indirect reports</p>
-          </div>
-        </section>
-
-        <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2" aria-label="Report type filter">
-            {[
-              ['all', 'All'],
-              ['direct', 'Direct'],
-              ['indirect', 'Indirect'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={reportFilter === value}
-                onClick={() => setReportFilter(value)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${reportFilter === value ? 'border-moss bg-moss text-paper' : 'border-hairline text-secondary hover:text-ink'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="sr-only" htmlFor="team-search">Search team</label>
-          <input
-            id="team-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search team"
-            className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink placeholder:text-secondary sm:w-64"
-          />
-        </div>
-
-        {loading && <LoadingRows />}
-        {error && (
-          <div className="border-y border-hairline py-8">
-            <p role="alert" className="text-sm text-red-700">{error}</p>
-            <button type="button" onClick={loadTeam} className="mt-3 rounded-md border border-hairline px-3 py-2 text-sm text-ink hover:bg-card">Try again</button>
-          </div>
-        )}
-        {!loading && !error && filteredTeam.length === 0 && (
-          <div className="border-y border-dashed border-hairline py-12 text-center">
-            <p className="font-medium text-ink">No team members match this view.</p>
-            <p className="mt-1 text-sm text-secondary">Try another report filter or clear the search.</p>
-          </div>
-        )}
-        {!loading && !error && filteredTeam.length > 0 && (
-          <div className="divide-y divide-hairline border-y border-hairline">
-            {filteredTeam.map((member) => (
-              <Link
-                key={member.employeeMemberId}
-                to={`/team/${member.employeeMemberId}?employer=${encodeURIComponent(activeContext.employerId)}`}
-                className="group flex items-center gap-4 py-4 focus-visible:rounded-md hover:bg-card/60 sm:px-2"
-              >
-                <PersonAvatar name={member.fullName} avatarUrl={member.avatarUrl} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate font-medium text-ink group-hover:text-moss">{member.fullName}</h2>
-                    {member.isPrimary && <StatusPill tone="active">Primary</StatusPill>}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {member.relationshipTypes.filter((type) => type !== 'primary' || !member.isPrimary).map((type) => (
-                      <StatusPill key={type} tone={type === 'indirect' ? 'info' : 'neutral'}>
-                        {RELATIONSHIP_LABELS[type] ?? type}
-                      </StatusPill>
-                    ))}
-                    {member.reportDepth > 1 && <span className="text-xs text-secondary">Level {member.reportDepth}</span>}
-                  </div>
-                </div>
-                <span aria-hidden="true" className="text-lg text-secondary group-hover:text-ink">›</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        <aside className="mt-6 border-t border-hairline pt-5 text-sm text-secondary">
-          My Team never opens a person’s full LearnScope profile. Private learner information is absent unless the learner has actively shared it with this employer.
-        </aside>
-      </main>
-    </div>
+    <TeamMemberDetail
+      context={activeContext}
+      employeeMemberId={employeeMemberId}
+      services={services}
+    />
   )
 }
 
@@ -392,7 +394,7 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
       <div className="min-h-screen bg-paper">
         <AppHeader />
         <main id="main-content" className="mx-auto max-w-4xl px-4 py-10">
-          <Link to={`/team?employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
+          <Link to={`/connections?section=team&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
           <p role="alert" className="mt-8 text-sm text-red-700">{error || 'This team member is not available.'}</p>
         </main>
       </div>
@@ -418,10 +420,10 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-8 sm:py-10">
-        <Link to={`/team?employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
+        <Link to={`/connections?section=team&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
 
         <header className="mt-6 flex flex-col gap-4 border-b border-hairline pb-6 sm:flex-row sm:items-center">
-          <PersonAvatar name={snapshot.fullName} avatarUrl={snapshot.avatarUrl} size="lg" />
+          <PersonAvatar name={snapshot.fullName} avatarUrl={snapshot.avatarUrl} size={14} />
           <div className="min-w-0 flex-1">
             <h1 className="font-display text-3xl text-ink">{snapshot.fullName}</h1>
             <p className="mt-1 text-sm text-secondary">{context.employerName} · {snapshot.reportDepth === 1 ? 'Direct report' : `Indirect report · level ${snapshot.reportDepth}`}</p>

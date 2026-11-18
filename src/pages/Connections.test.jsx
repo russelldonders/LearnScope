@@ -5,11 +5,15 @@ import Connections from './Connections'
 import * as connectionApi from '../lib/connections'
 import * as managerApi from '../lib/managerTeams'
 
+const authState = { managerContexts: [] }
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'me', email: 'me@example.com' }, refreshWorkspaces: vi.fn().mockResolvedValue() }),
+  useAuth: () => ({
+    user: { id: 'me', email: 'me@example.com' }, refreshWorkspaces: vi.fn().mockResolvedValue(),
+    managerContexts: authState.managerContexts,
+  }),
 }))
 // Resolves against the real English dictionary (rather than a key-passthrough
-// stub) so assertions on rendered text (e.g. 'People', 'No connections yet')
+// stub) so assertions on rendered text (e.g. 'Connections', 'No connections yet')
 // stay meaningful -- translations.js has no side effects/imports of its own,
 // so this doesn't pull in the real supabaseClient the way useLanguage's own
 // module does.
@@ -23,6 +27,7 @@ vi.mock('../context/LanguageContext', async () => {
 })
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
+vi.mock('./MyTeam', () => ({ EmployerTeamPanel: () => <section>Employer team list</section> }))
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
   getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
@@ -40,6 +45,7 @@ function renderPage(path = '/connections') {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  authState.managerContexts = []
   connectionApi.listMyPeerRatings.mockResolvedValue([])
   connectionApi.listConnections.mockResolvedValue([])
   connectionApi.listConnectionsActivity.mockResolvedValue([])
@@ -57,7 +63,7 @@ afterEach(cleanup)
 describe('Connections sections', () => {
   it('shows people by default and keeps team controls in their own tab', async () => {
     renderPage()
-    expect(screen.getByRole('tab', { name: 'People' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
     expect(screen.queryByText('Team controls')).not.toBeInTheDocument()
 
@@ -108,12 +114,27 @@ describe('Connections sections', () => {
     renderPage('/connections?section=teams')
     const teamsTab = screen.getByRole('tab', { name: 'Teams' })
     expect(teamsTab).toHaveAttribute('aria-selected', 'true')
-    fireEvent.keyDown(teamsTab, { key: 'ArrowLeft' })
-    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveFocus()
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Pending invites' }), { key: 'ArrowLeft' })
-    expect(screen.getByRole('tab', { name: 'People' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'People' })).toHaveFocus()
+    fireEvent.keyDown(teamsTab, { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('tab', { name: /^Pending invites/ }), { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveFocus()
+  })
+
+  it('offers a My team tab only to someone who manages people at an employer', async () => {
+    renderPage('/connections?section=team')
+    expect(screen.queryByRole('tab', { name: 'My team' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('Employer team list')).not.toBeInTheDocument()
+    cleanup()
+
+    authState.managerContexts = [{ employerId: 'employer-1', employerName: 'Acme' }]
+    renderPage('/connections?section=team')
+    expect(screen.getByRole('tab', { name: 'My team' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Employer team list')).toBeInTheDocument()
+    expect(screen.queryByText(/No connections yet/)).not.toBeInTheDocument()
+    await screen.findByRole('tab', { name: /^Connections/ })
   })
 
   it('shows pending invites in their own tab, separate from People', async () => {
@@ -125,7 +146,7 @@ describe('Connections sections', () => {
     ])
     renderPage()
 
-    const invitesTab = await screen.findByRole('tab', { name: 'Pending invites (1)' })
+    const invitesTab = await screen.findByRole('tab', { name: /^Pending invites\s*1$/ })
     expect(screen.queryByText('friend@example.com', { exact: false })).not.toBeInTheDocument()
 
     fireEvent.click(invitesTab)
@@ -163,7 +184,7 @@ describe('Connections sections', () => {
 
   it('shows an empty state on the invites tab when there are none', async () => {
     renderPage('/connections?section=invites')
-    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByText('No pending invites.')).toBeInTheDocument()
   })
 })

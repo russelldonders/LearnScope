@@ -242,3 +242,21 @@ describe('AppHeader notifications', () => {
     expect(bell).toHaveFocus()
   })
 })
+
+describe('AppHeader People link', () => {
+  it('is hidden for a learner with no connections and no one to manage', () => {
+    render(<MemoryRouter initialEntries={['/dashboard']}><AppHeader /></MemoryRouter>)
+    expect(screen.queryByRole('link', { name: 'nav.people' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    expect(screen.queryByRole('link', { name: 'menu.connections' })).not.toBeInTheDocument()
+  })
+
+  it('leads a manager to the People page and stays current on a team member', () => {
+    authMock.value = { ...authMock.value, managerContexts: [{ employerId: 'employer-1', employerName: 'Acme' }] }
+    render(<MemoryRouter initialEntries={['/team/member-1']}><AppHeader /></MemoryRouter>)
+    const link = screen.getByRole('link', { name: 'nav.people' })
+    expect(link).toHaveAttribute('href', '/connections')
+    expect(link.className).toContain('font-medium')
+    expect(screen.queryByRole('link', { name: 'nav.team' })).not.toBeInTheDocument()
+  })
+})

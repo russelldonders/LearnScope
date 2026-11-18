@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import MyTeam from './MyTeam'
+import MyTeam, { EmployerTeamPanel } from './MyTeam'
 
 vi.mock('../lib/employerManagement', () => ({
   assignCourseToManagedEmployerMember: vi.fn(),
@@ -73,6 +73,7 @@ function renderRoute(path, services) {
       <Routes>
         <Route path="/team" element={<MyTeam services={services} />} />
         <Route path="/team/:employeeMemberId" element={<MyTeam services={services} />} />
+        <Route path="/connections" element={<EmployerTeamPanel services={services} />} />
       </Routes>
     </MemoryRouter>
   )
@@ -91,10 +92,10 @@ afterEach(cleanup)
 describe('My Team', () => {
   it('shows direct and indirect reports without presenting a learner profile', async () => {
     const services = buildServices()
-    renderRoute('/team?employer=employer-1', services)
+    renderRoute('/connections?section=team&employer=employer-1', services)
 
-    expect(await screen.findByRole('heading', { name: 'My team' })).toBeInTheDocument()
-    expect(screen.getByText('Alex Morgan')).toBeInTheDocument()
+    expect(await screen.findByText('Alex Morgan')).toBeInTheDocument()
+    expect(screen.getByText(/People you manage at Acme/)).toBeInTheDocument()
     expect(screen.getByText('Sam Lee')).toBeInTheDocument()
     expect(screen.getAllByText('Primary')).toHaveLength(1)
     expect(screen.getAllByText('Indirect')).not.toHaveLength(0)
@@ -102,11 +103,27 @@ describe('My Team', () => {
     expect(services.listMyEmployerTeam).toHaveBeenCalledWith('employer-1')
   })
 
+  it('sends the old /team page to the My team tab of the People page', async () => {
+    const services = buildServices()
+    renderRoute('/team', services)
+    expect(await screen.findByText('Alex Morgan')).toBeInTheDocument()
+    expect(services.listMyEmployerTeam).toHaveBeenCalledWith('employer-1')
+  })
+
+  it('links each person to their snapshot and back to the My team tab', async () => {
+    renderRoute('/connections?section=team&employer=employer-1', buildServices())
+    expect(await screen.findByRole('link', { name: /Alex Morgan/ }))
+      .toHaveAttribute('href', '/team/member-1?employer=employer-1')
+    fireEvent.click(screen.getByRole('link', { name: /Alex Morgan/ }))
+    expect(await screen.findByRole('link', { name: '← Back to My team' }))
+      .toHaveAttribute('href', '/connections?section=team&employer=employer-1')
+  })
+
   it('filters the team between direct and indirect reports', async () => {
-    renderRoute('/team?employer=employer-1', buildServices())
+    renderRoute('/connections?section=team&employer=employer-1', buildServices())
     await screen.findByText('Alex Morgan')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Indirect' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Indirect/ }))
     expect(screen.queryByText('Alex Morgan')).not.toBeInTheDocument()
     expect(screen.getByText('Sam Lee')).toBeInTheDocument()
   })

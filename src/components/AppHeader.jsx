@@ -17,12 +17,13 @@ const NAV_LINKS = [
   { to: '/experience', label: 'nav.experience' },
   { to: '/learning', label: 'nav.learning', requires: 'hasCourses' },
   { to: '/plans', label: 'nav.plans' },
-  { to: '/team', label: 'nav.team', requires: 'managerContexts' },
+  // Connections, teams and (for managers) the people they manage at an
+  // employer all live on this one page; /team redirects to its My team tab.
+  { to: '/connections', label: 'nav.people', requires: 'people', activePrefixes: ['/connections', '/team'] },
 ]
 
 const PERSONAL_MENU_ITEMS = [
   { to: '/profile', label: 'menu.profile' },
-  { to: '/connections', label: 'menu.connections', requires: 'hasConnectionsActivity' },
   { to: '/profile/connected-accounts', label: 'menu.connectedApps' },
   { to: '/profile/privacy', label: 'menu.privacySettings' },
   { to: '/profile/import', label: 'menu.importSkills' },
@@ -117,7 +118,7 @@ export default function AppHeader({
   }, [portalIdsKey, portalsCacheKey])
 
   const visibleNavLinks = NAV_LINKS.filter((link) => {
-    if (link.requires === 'managerContexts') return managerContexts?.length > 0
+    if (link.requires === 'people') return managerContexts?.length > 0 || navVisibility.hasConnectionsActivity
     return !link.requires || navVisibility[link.requires]
   })
   const visiblePersonalMenuItems = PERSONAL_MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
@@ -209,7 +210,7 @@ export default function AppHeader({
               >
                 <span
                   className={`flex items-center justify-center w-9 h-9 rounded-full border shrink-0 overflow-hidden ${
-                    location.pathname.startsWith('/profile') || location.pathname.startsWith('/connections')
+                    location.pathname.startsWith('/profile')
                       ? 'border-[var(--org-primary,var(--color-moss))] text-[var(--org-text,var(--color-ink))]'
                       : 'border-hairline text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]'
                   }`}
@@ -367,7 +368,7 @@ export default function AppHeader({
                 key={link.to}
                 to={link.to}
                 className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
-                  location.pathname === link.to || (link.to === '/team' && location.pathname.startsWith('/team/'))
+                  location.pathname === link.to || link.activePrefixes?.some((prefix) => location.pathname.startsWith(`${prefix}/`))
                     ? 'text-ink font-medium bg-paper'
                     : 'text-secondary hover:text-ink'
                 }`}

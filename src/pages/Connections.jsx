@@ -5,6 +5,8 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PersonAvatar from '../components/PersonAvatar'
+import { EmployerTeamPanel } from './MyTeam'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import ConnectionTeamInviteControl from '../components/ConnectionTeamInviteControl'
 import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
@@ -51,11 +53,15 @@ function writeActivitySeen(userId) {
 }
 
 export default function Connections() {
-  const { user, refreshWorkspaces } = useAuth()
+  const { user, refreshWorkspaces, managerContexts } = useAuth()
   const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
+  // People this learner manages at an employer get their own tab -- only
+  // offered to someone who actually manages anyone there.
+  const managesEmployerTeam = (managerContexts?.length ?? 0) > 0
+  const sectionKeys = managesEmployerTeam ? ['people', 'teams', 'team', 'invites'] : ['people', 'teams', 'invites']
   const sectionParam = searchParams.get('section')
-  const activeSection = sectionParam === 'teams' || sectionParam === 'invites' ? sectionParam : 'people'
+  const activeSection = sectionKeys.includes(sectionParam) ? sectionParam : 'people'
   const tabRefs = useRef({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -254,26 +260,33 @@ export default function Connections() {
   }
 
   function selectSection(section) {
-    const next = new URLSearchParams(searchParams)
-    if (section === 'people') next.delete('section')
-    else next.set('section', section)
+    // Each tab starts from its own defaults rather than inheriting another
+    // tab's selection (a team id, an employer) from the URL.
+    const next = new URLSearchParams()
+    if (section !== 'people') next.set('section', section)
+    if (section === 'team' && searchParams.get('employer')) next.set('employer', searchParams.get('employer'))
     setSearchParams(next)
   }
+
+  const sections = [
+    { key: 'people', label: t('connections.tabs.connections'), count: loading ? null : connections.length || null },
+    { key: 'teams', label: t('connections.tabs.teams') },
+    managesEmployerTeam && { key: 'team', label: t('connections.tabs.myTeam') },
+    { key: 'invites', label: t('connections.pendingInvites'), count: pendingInvites.length || null },
+  ].filter(Boolean)
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-1">{t('connections.heading')}</h1>
-        <p className="text-sm text-secondary mb-6">{t('connections.subheading')}</p>
+        <div className="max-w-2xl mb-6">
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">{t('connections.heading')}</h1>
+          <p className="text-secondary mt-2 text-pretty">{t('connections.subheading')}</p>
+        </div>
 
-        <div role="tablist" aria-label="Connections sections" className="flex items-center gap-1 mb-8 border-b border-hairline">
-          {[
-            { key: 'people', label: t('connections.tabs.people') },
-            { key: 'invites', label: t('connections.pendingInvites') + (pendingInvites.length > 0 ? ` (${pendingInvites.length})` : '') },
-            { key: 'teams', label: t('connections.tabs.teams') },
-          ].map((section) => (
+        <div role="tablist" aria-label={t('connections.heading')} className="flex items-center gap-1 mb-8 border-b border-hairline overflow-x-auto">
+          {sections.map((section) => (
             <button key={section.key} type="button" role="tab"
               ref={(element) => { tabRefs.current[section.key] = element }}
               id={`connections-tab-${section.key}`}
@@ -282,18 +295,22 @@ export default function Connections() {
               tabIndex={activeSection === section.key ? 0 : -1}
               onClick={() => selectSection(section.key)}
               onKeyDown={(event) => handleTabListKeyDown(event, {
-                keys: ['people', 'invites', 'teams'], activeKey: activeSection, refs: tabRefs, onChange: selectSection,
+                keys: sectionKeys, activeKey: activeSection, refs: tabRefs, onChange: selectSection,
               })}
               className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${activeSection === section.key
                 ? 'border-moss text-ink font-medium'
                 : 'border-transparent text-secondary hover:text-ink'}`}>
               {section.label}
+              {section.count != null && (
+                <span className="ml-1.5 tabular-nums text-xs text-secondary">{section.count}</span>
+              )}
             </button>
           ))}
         </div>
 
         <div id={`connections-panel-${activeSection}`} role="tabpanel"
           aria-labelledby={`connections-tab-${activeSection}`} tabIndex={0}>
+        {activeSection === 'team' && <EmployerTeamPanel />}
         {activeSection === 'teams' && (
           <ConnectionsTeams
             connections={connections.filter((connection) => allConnectionIds.includes(connection.id))}
@@ -322,36 +339,39 @@ export default function Connections() {
             </section>
           )}
 
-          <h2 className="font-display text-xl text-ink mb-6">{t('connections.yourConnections')}</h2>
+          <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="font-display text-xl text-ink">{t('connections.yourConnections')}</h2>
+            {!loading && connections.length > 0 && (
+              <input
+                type="search"
+                aria-label="Search connections"
+                value={connectionQuery}
+                onChange={(e) => setConnectionQuery(e.target.value)}
+                placeholder="Search by name…"
+                className="w-full sm:w-64 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            )}
+          </div>
 
           {loading && <p className="text-secondary">Loading…</p>}
           {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
           {disconnectNotice && <p role="status" className="text-sm text-moss mb-4">{disconnectNotice}</p>}
 
           {!loading && connections.length === 0 && (
-            <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-              <p className="text-secondary">
+            <div className="text-center py-16 px-4 border border-dashed border-hairline rounded-lg">
+              <p className="text-secondary max-w-md mx-auto text-pretty">
                 {t('connections.emptyState')}
               </p>
             </div>
           )}
 
-          {!loading && connections.length > 0 && (
-            <input
-              type="text"
-              aria-label="Search connections"
-              value={connectionQuery}
-              onChange={(e) => setConnectionQuery(e.target.value)}
-              placeholder="Search by name…"
-              className="w-full max-w-sm mb-4 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          )}
-
           {!loading && connections.length > 0 && filteredConnections.length === 0 && (
-            <p className="text-sm text-secondary">No connections match "{connectionQuery}".</p>
+            <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+              <p className="text-sm text-secondary">No connections match "{connectionQuery}".</p>
+            </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredConnections.map((c) => (
               <ConnectionCard
                 key={c.id}
@@ -388,8 +408,8 @@ export default function Connections() {
                       {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
                       <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
                     </p>
-                    <p className="font-mono text-xs text-secondary">
-                      {new Date(invite.created_at).toLocaleDateString()}
+                    <p className="font-mono text-xs text-secondary mt-0.5">
+                      Sent {formatFullDate(invite.created_at)}
                     </p>
                     {resendError?.id === invite.id && (
                       <p className="text-xs text-red-700 mt-1">{resendError.message}</p>
@@ -474,7 +494,7 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
     <div className="bg-card border border-hairline rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
-          <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
+          <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
           <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
             {c.name}
           </span>
@@ -575,22 +595,5 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
         </div>
       )}
     </div>
-  )
-}
-
-function ConnectionAvatar({ name, avatarUrl }) {
-  if (avatarUrl) {
-    return (
-      <img loading="lazy" decoding="async"
-        src={avatarUrl}
-        alt=""
-        className="w-8 h-8 rounded-full object-cover border border-hairline shrink-0"
-      />
-    )
-  }
-  return (
-    <span className="w-8 h-8 rounded-full border border-hairline bg-paper text-secondary font-mono text-xs flex items-center justify-center shrink-0 uppercase">
-      {name?.[0] || '?'}
-    </span>
   )
 }
