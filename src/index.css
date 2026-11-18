@@ -106,7 +106,7 @@ body {
   color: var(--org-text, var(--color-ink));
 }
 
-.org-brand-scope :where(.text-secondary, .hover\:text-secondary:hover) {
+.org-brand-scope :where(.text-secondary, .hover\:text-secondary:hover, .text-moss) {
   color: var(--org-text, var(--color-secondary));
 }
 
