@@ -2370,6 +2370,8 @@ export default {
     skillLabel: 'Habilidad',
     skillHint: 'Una de tus habilidades, o escribe una nueva.',
     newSkillNote: '«{name}» es nueva y se añadirá a tus habilidades al guardar.',
+    moveSkillHint: "¿En la habilidad equivocada? Elige otra de tus habilidades o escribe una nueva.",
+    moveSkillNote: "Al guardar, este objetivo pasa a «{name}», con las entradas registradas para él.",
     errorSkill: 'Elige la habilidad que desarrolla este objetivo.',
     reviewHint: 'Sugerido a partir de lo que escribiste. Comprueba que sea correcto y cambia lo que no lo sea.',
     titleLabel: 'Objetivo',

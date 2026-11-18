@@ -2371,6 +2371,8 @@ export default {
     skillLabel: 'Competenza',
     skillHint: 'Una delle tue competenze, o scrivine una nuova.',
     newSkillNote: '«{name}» è nuova e verrà aggiunta alle tue competenze quando salvi.',
+    moveSkillHint: "Sulla competenza sbagliata? Scegli un’altra delle tue competenze o scrivine una nuova.",
+    moveSkillNote: "Al salvataggio questo obiettivo passa a «{name}», con le voci registrate per esso.",
     errorSkill: 'Scegli la competenza che questo obiettivo sviluppa.',
     reviewHint: 'Suggerito in base a ciò che hai scritto. Controlla che sia corretto e modifica ciò che non lo è.',
     titleLabel: 'Obiettivo',

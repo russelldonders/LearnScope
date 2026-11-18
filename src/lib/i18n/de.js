@@ -2371,6 +2371,8 @@ export default {
     skillLabel: 'Fähigkeit',
     skillHint: 'Eine deiner Fähigkeiten, oder gib eine neue ein.',
     newSkillNote: '„{name}“ ist neu und wird beim Speichern zu deinen Fähigkeiten hinzugefügt.',
+    moveSkillHint: "Bei der falschen Fähigkeit? Wähle eine andere deiner Fähigkeiten oder gib eine neue ein.",
+    moveSkillNote: "Dieses Ziel wird beim Speichern zu „{name}“ verschoben, mit den dafür erfassten Einträgen.",
     errorSkill: 'Wähle die Fähigkeit, die dieses Ziel weiterentwickelt.',
     reviewHint: 'Vorschlag auf Grundlage deines Textes. Prüfe, ob es passt, und ändere, was nicht stimmt.',
     titleLabel: 'Ziel',

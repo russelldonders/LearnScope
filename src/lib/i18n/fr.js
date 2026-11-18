@@ -2371,6 +2371,8 @@ export default {
     skillLabel: 'Compétence',
     skillHint: 'Une de vos compétences, ou saisissez-en une nouvelle.',
     newSkillNote: '« {name} » est nouvelle et sera ajoutée à vos compétences à l’enregistrement.',
+    moveSkillHint: "Mauvaise compétence ? Choisissez une autre de vos compétences ou saisissez-en une nouvelle.",
+    moveSkillNote: "À l’enregistrement, cet objectif passe à « {name} », avec les entrées enregistrées pour lui.",
     errorSkill: 'Choisissez la compétence que cet objectif développe.',
     reviewHint: 'Suggestion basée sur ce que vous avez écrit. Vérifiez que tout est correct et modifiez ce qui ne convient pas.',
     titleLabel: 'Objectif',

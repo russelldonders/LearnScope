@@ -2350,6 +2350,8 @@ export default {
     skillLabel: '技能',
     skillHint: '选择你的一项技能，或输入新技能。',
     newSkillNote: '“{name}”是新技能，保存时会添加到你的技能中。',
+    moveSkillHint: "放错技能了？选择你的其他技能，或输入一个新技能。",
+    moveSkillNote: "保存后，此目标及其记录会移到“{name}”。",
     errorSkill: '请选择这个目标所提升的技能。',
     reviewHint: '根据你写的内容提出的建议。请检查是否正确,并修改不合适的地方。',
     titleLabel: '目标',

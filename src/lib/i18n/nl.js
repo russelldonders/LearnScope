@@ -2369,6 +2369,8 @@ export default {
     skillLabel: 'Vaardigheid',
     skillHint: 'Een van je vaardigheden, of typ een nieuwe.',
     newSkillNote: '‘{name}’ is nieuw en wordt bij opslaan aan je vaardigheden toegevoegd.',
+    moveSkillHint: "Bij de verkeerde vaardigheid? Kies een andere vaardigheid van je of typ een nieuwe.",
+    moveSkillNote: "Bij opslaan gaat dit doel naar ‘{name}’, met de vastgelegde invoer ervoor.",
     errorSkill: 'Kies de vaardigheid die dit doel ontwikkelt.',
     reviewHint: 'Voorgesteld op basis van wat je schreef. Controleer of het klopt en wijzig wat niet klopt.',
     titleLabel: 'Doel',

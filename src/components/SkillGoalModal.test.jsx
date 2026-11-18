@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mySkills = [{ id: 'skill-run', name: 'Running' }]
+const mySkills = [{ id: 'skill-run', name: 'Running' }, { id: 'skill-weight', name: 'Weight loss' }]
+const updateSkillGoal = vi.fn(() => Promise.resolve())
+const moveSkillGoal = vi.fn(() => Promise.resolve(3))
 const draftSkillGoal = vi.fn()
 const createSkillGoal = vi.fn(() => Promise.resolve({ id: 'new-goal' }))
 const listSkillGoals = vi.fn(() => Promise.resolve([]))
@@ -11,7 +13,8 @@ vi.mock('../lib/skillGoals', () => ({
   draftSkillGoal: (...args) => draftSkillGoal(...args),
   createSkillGoal: (...args) => createSkillGoal(...args),
   listSkillGoals: (...args) => listSkillGoals(...args),
-  updateSkillGoal: vi.fn(),
+  updateSkillGoal: (...args) => updateSkillGoal(...args),
+  moveSkillGoal: (...args) => moveSkillGoal(...args),
   stopSkillGoal: vi.fn(),
   deleteSkillGoal: vi.fn(),
 }))
@@ -70,7 +73,7 @@ async function draftFromHome(goal) {
 describe('adding a goal from Home, without a skill', () => {
   it('asks AI to place the goal among the learner skills', async () => {
     await draftFromHome({ ...weightGoal, skill_name: 'Weight management', skill_is_new: true })
-    expect(draftSkillGoal).toHaveBeenCalledWith(expect.objectContaining({ skillName: null, skills: ['Running'] }))
+    expect(draftSkillGoal).toHaveBeenCalledWith(expect.objectContaining({ skillName: null, skills: ['Running', 'Weight loss'] }))
   })
 
   it('creates the suggested new skill on save, then the goal on it', async () => {
@@ -99,5 +102,39 @@ describe('adding a goal from Home, without a skill', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm goal' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose the skill this goal develops.')
     expect(createSkillGoal).not.toHaveBeenCalled()
+  })
+})
+
+describe('editing a goal', () => {
+  const running = { id: 'skill-run', name: 'Running', user_id: 'me' }
+  const goal = { ...weightGoal, id: 'goal-1', skill_id: 'skill-run', started_on: '2026-11-01' }
+
+  function renderEdit() {
+    const onSaved = vi.fn()
+    render(<SkillGoalModal skill={running} goal={goal} goals={[goal]} onSaved={onSaved} onClose={vi.fn()} />)
+    return onSaved
+  }
+
+  it("moves a goal set on the wrong skill, then saves the rest on the skill it's now on", async () => {
+    const onSaved = renderEdit()
+    const skillInput = await screen.findByLabelText('Skill')
+    expect(skillInput).toHaveValue('Running')
+    expect(screen.getByText('On the wrong skill? Choose another of your skills, or type a new one.')).toBeInTheDocument()
+    fireEvent.change(skillInput, { target: { value: 'weight loss' } })
+    expect(screen.getByText('This goal moves to “Weight loss” when you save, with the entries logged for it.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(moveSkillGoal).toHaveBeenCalledWith('goal-1', 'skill-weight')
+    expect(updateSkillGoal).toHaveBeenCalledWith(expect.objectContaining({ id: 'goal-1', skill_id: 'skill-weight' }), expect.anything())
+    expect(moveSkillGoal.mock.invocationCallOrder[0]).toBeLessThan(updateSkillGoal.mock.invocationCallOrder[0])
+  })
+
+  it("leaves the skill alone when it isn't changed", async () => {
+    const onSaved = renderEdit()
+    await screen.findByLabelText('Skill')
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(moveSkillGoal).not.toHaveBeenCalled()
+    expect(updateSkillGoal).toHaveBeenCalledWith(goal, expect.anything())
   })
 })

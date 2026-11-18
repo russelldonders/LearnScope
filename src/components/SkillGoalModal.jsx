@@ -4,7 +4,7 @@ import VoiceInputButton from './VoiceInputButton'
 import { useLanguage } from '../context/LanguageContext'
 import { formatClock } from '../lib/xapiStatement'
 import { MEASURE_KINDS, isDerivedKind, localDateString, parseClock } from '../lib/skillGoalProgress'
-import { createSkillGoal, deleteSkillGoal, draftSkillGoal, listSkillGoals, stopSkillGoal, updateSkillGoal } from '../lib/skillGoals'
+import { createSkillGoal, deleteSkillGoal, draftSkillGoal, listSkillGoals, moveSkillGoal, stopSkillGoal, updateSkillGoal } from '../lib/skillGoals'
 import { supabase } from '../lib/supabaseClient'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 import { pickExample, useExampleSeed } from '../lib/placeholderExamples'
@@ -148,18 +148,21 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const picksSkill = !skill && !isEdit
+  // A new goal from Home picks its skill; an existing one can be moved to
+  // another of the learner's skills if it was set on the wrong one.
+  const picksSkill = (!skill && !isEdit) || (isEdit && Boolean(skill))
+  const ownerId = userId ?? skill?.user_id ?? null
   const [mySkills, setMySkills] = useState([])
-  const [skillName, setSkillName] = useState('')
+  const [skillName, setSkillName] = useState(isEdit ? skill?.name ?? '' : '')
   const [listening, setListening] = useState(false)
 
   useEffect(() => {
-    if (!picksSkill || !userId) return
+    if (!picksSkill || !ownerId) return
     let active = true
     supabase
       .from('skills')
       .select('id, name')
-      .eq('user_id', userId)
+      .eq('user_id', ownerId)
       .order('name')
       .then(({ data }) => {
         if (active) setMySkills(data ?? [])
@@ -167,7 +170,7 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
     return () => {
       active = false
     }
-  }, [picksSkill, userId])
+  }, [picksSkill, ownerId])
 
   const matchingSkill = mySkills.find((other) => other.name.toLowerCase() === skillName.trim().toLowerCase()) ?? null
 
@@ -263,7 +266,18 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
     setSaving(true)
     try {
       if (isEdit) {
-        await updateSkillGoal(goal, shared)
+        // Moved first, so a new target (which is a new goal) is set on the
+        // skill the goal now belongs to.
+        let current = goal
+        const movesSkill = skill && skillName.trim().toLowerCase() !== skill.name.toLowerCase()
+        if (movesSkill) {
+          const target = matchingSkill ?? (await findOrCreatePersonalSkill(ownerId, skillName.trim())).skill
+          if (target.id !== goal.skill_id) {
+            await moveSkillGoal(goal.id, target.id)
+            current = { ...goal, skill_id: target.id }
+          }
+        }
+        await updateSkillGoal(current, shared)
       } else {
         // From Home: the skill they chose, or a new one made for this goal.
         // Its goals are read so the new goal's measure lines up with theirs.
@@ -416,7 +430,11 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
               <p id="skill-goal-skill-hint" className="text-xs text-secondary mt-1">
                 {skillName.trim() && !matchingSkill
                   ? t('skillGoals.newSkillNote', { name: skillName.trim() })
-                  : t('skillGoals.skillHint')}
+                  : isEdit && skillName.trim() && skillName.trim().toLowerCase() !== skill?.name?.toLowerCase()
+                    ? t('skillGoals.moveSkillNote', { name: matchingSkill?.name ?? skillName.trim() })
+                    : isEdit
+                      ? t('skillGoals.moveSkillHint')
+                      : t('skillGoals.skillHint')}
               </p>
             </div>
           )}

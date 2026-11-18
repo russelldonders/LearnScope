@@ -2368,6 +2368,8 @@ export default {
     skillLabel: 'Skill',
     skillHint: 'One of your skills, or type a new one.',
     newSkillNote: '“{name}” is new and will be added to your skills when you save.',
+    moveSkillHint: "On the wrong skill? Choose another of your skills, or type a new one.",
+    moveSkillNote: "This goal moves to “{name}” when you save, with the entries logged for it.",
     errorSkill: 'Choose the skill this goal develops.',
     reviewHint: 'Suggested from what you wrote. Check that it looks right, and change anything that does not.',
     titleLabel: 'Goal',

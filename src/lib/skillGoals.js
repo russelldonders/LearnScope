@@ -192,6 +192,15 @@ export async function updateSkillGoal(goal, changes) {
   if (closeError) throw closeError
 }
 
+// Moves a goal set on the wrong skill to another of the learner's skills,
+// with the goals it replaced and, for a measured goal, the entries logged for
+// it (move_skill_goal, run 0318). Returns how many entries moved with it.
+export async function moveSkillGoal(goalId, skillId) {
+  const { data, error } = await supabase.rpc('move_skill_goal', { p_goal_id: goalId, p_skill_id: skillId })
+  if (error) throw error
+  return data ?? 0
+}
+
 export async function stopSkillGoal(goalId) {
   const { error } = await supabase
     .from('skill_goals')
