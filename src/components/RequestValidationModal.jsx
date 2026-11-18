@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
 import { LEVEL_LABELS } from '../lib/levels'
 import AccessibleDialog from './AccessibleDialog'
 import {
   listValidatorCandidates,
   createValidationRequest,
-  getValidationRequestContact,
   sendValidationRequestEmail,
 } from '../lib/skillValidationRequests'
 import { useLanguage } from '../context/LanguageContext'
@@ -35,22 +33,15 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
     setError(null)
     setSending(true)
     try {
-      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
       const requestId = await createValidationRequest({
         skillId: skill.id,
         requesterId: user.id,
         validatorId: selected.validator_id,
         targetLevel,
       })
-      const contact = await getValidationRequestContact(requestId)
-      if (contact?.email) {
-        await sendValidationRequestEmail({
-          toEmail: contact.email,
-          requesterName: profile?.full_name || user.email,
-          skillName: skill.name,
-          reviewUrl: `${window.location.origin}/validate-request/${requestId}`,
-        })
-      }
+      // Addressed on the server from the request itself: the validator's
+      // email address never reaches the requester.
+      await sendValidationRequestEmail({ reviewUrl: `${window.location.origin}/validate-request/${requestId}` })
       setSent(true)
     } catch (err) {
       setError(err.message)

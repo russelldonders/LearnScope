@@ -162,7 +162,15 @@ function TemplateCard({ template, onSaved }) {
                 <p className="text-[11px] uppercase tracking-wide text-secondary">Preview — sample data, not a real send</p>
                 <p className="text-sm font-medium text-ink mt-0.5">{preview.subject}</p>
               </div>
-              <div className="p-4 bg-white" dangerouslySetInnerHTML={{ __html: preview.html }} />
+              {/* A sandboxed frame with no scripts: a template's HTML is
+                  shown as an email client would, but can't run code in the
+                  admin's own session. */}
+              <iframe
+                title="Email preview"
+                sandbox=""
+                srcDoc={preview.html}
+                className="block w-full h-96 bg-white"
+              />
             </div>
           )}
         </div>

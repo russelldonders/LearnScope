@@ -181,6 +181,56 @@ export async function planInviteEmail(admin, userId, url) {
   return { toEmail: invitation.invitee_email, title: plan.title }
 }
 
+// The same rule for the other emails: a rating or recommendation invite goes
+// only to the address on a waiting invite the sender made, for their own
+// skill, with that skill's real name; a validation request only to the
+// validator the sender asked, for a request still waiting. Null if it
+// doesn't check out.
+async function ownSkillName(admin, userId, skillId) {
+  const { data: skill } = await admin.from('skills').select('name, user_id').eq('id', skillId).maybeSingle()
+  return skill && skill.user_id === userId ? skill.name : null
+}
+
+export async function connectionInviteEmail(admin, userId, url, inviteType) {
+  const code = new URL(url).pathname.split('/').pop()
+  const { data: invite } = await admin
+    .from('connection_invites')
+    .select('invitee_email, inviter_id, status, invite_type, skill_id')
+    .eq('share_code', code)
+    .maybeSingle()
+  if (
+    !invite || invite.inviter_id !== userId || invite.status !== 'pending'
+    || invite.invite_type !== inviteType || !invite.invitee_email
+  ) {
+    return null
+  }
+  const title = await ownSkillName(admin, userId, invite.skill_id)
+  return title ? { toEmail: invite.invitee_email, title } : null
+}
+
+export async function validationRequestEmail(admin, userId, url) {
+  const requestId = new URL(url).pathname.split('/').pop()
+  const { data: request } = await admin
+    .from('skill_validation_requests')
+    .select('requester_id, validator_id, status, skill_id')
+    .eq('id', requestId)
+    .maybeSingle()
+  if (!request || request.requester_id !== userId || request.status !== 'pending') return null
+  const title = await ownSkillName(admin, userId, request.skill_id)
+  if (!title) return null
+  const { data } = await admin.auth.admin.getUserById(request.validator_id)
+  const toEmail = data?.user?.email
+  return toEmail ? { toEmail, title } : null
+}
+
+// Where each email may go and what it's about, from the database rather
+// than the request.
+function verifiedEmail(admin, userId, type, url) {
+  if (type === 'plan_invite') return planInviteEmail(admin, userId, url)
+  if (type === 'validation_request') return validationRequestEmail(admin, userId, url)
+  return connectionInviteEmail(admin, userId, url, type === 'recommend' ? 'recommend' : 'rate')
+}
+
 const EMAIL_TYPES = {
   invite: { templateKey: 'peer_rating_invite', urlField: 'shareUrl' },
   recommend: { templateKey: 'skill_recommend', urlField: 'shareUrl' },
@@ -213,37 +263,29 @@ export default async function handler(req, res) {
     return
   }
 
-  const { toEmail, skillName } = payload
+  // The recipient and the skill or plan named in the email come from the
+  // sender's own waiting invite or request (verifiedEmail), never from the
+  // request body, so the endpoint can't mail arbitrary text to arbitrary
+  // people. Any toEmail/skillName the client still sends is ignored.
   const url = payload[emailType.urlField]
-  if (!toEmail || !skillName || !url) {
-    res.status(400).json({ error: `Missing toEmail, skillName, or ${emailType.urlField}` })
-    return
-  }
-  if (typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Invalid skillName' })
-    return
-  }
-  // One address per call: Resend also accepts an array, which would let a
-  // single quota unit fan out to many recipients.
-  if (typeof toEmail !== 'string') {
-    res.status(400).json({ error: 'Invalid toEmail' })
+  if (typeof url !== 'string' || !url) {
+    res.status(400).json({ error: `Missing ${emailType.urlField}` })
     return
   }
   if (!isAppLink(url, type, req.headers.host)) {
     res.status(400).json({ error: `Invalid ${emailType.urlField}` })
     return
   }
-  let recipient = toEmail
-  let subjectName = skillName
-  if (type === 'plan_invite') {
-    const invite = await planInviteEmail(supabaseAdmin(), user.id, url).catch(() => null)
-    if (!invite) {
-      res.status(400).json({ error: 'That invitation isn’t waiting to be sent.' })
-      return
-    }
-    recipient = invite.toEmail
-    subjectName = invite.title
+  const verified = await verifiedEmail(supabaseAdmin(), user.id, type, url).catch((err) => {
+    console.error(`send-email (${type}) lookup error:`, err)
+    return null
+  })
+  if (!verified) {
+    res.status(400).json({ error: 'That invitation isn’t waiting to be sent.' })
+    return
   }
+  const recipient = verified.toEmail
+  const subjectName = verified.title
   if (!(await consumeQuota(user.id, 'email'))) {
     sendQuotaExceeded(res)
     return

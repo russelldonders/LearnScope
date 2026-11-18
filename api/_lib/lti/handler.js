@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { resolve } from 'node:path'
 import { supabaseAdmin } from '../supabaseAdmin.js'
 import { verifySupabaseUser } from '../auth.js'
@@ -76,6 +77,13 @@ async function runJob(db, id, config) {
     must(await db.from('lti_grade_jobs').update({status:'failed',error:'Delivery failed. Check LMS permissions and connection settings.',lease_until:null,next_attempt:new Date(Date.now()+Math.min(3600,30*2**job.attempts)*1000).toISOString()}).eq('link_id',id).eq('revision',job.revision))
   }
 }
+// Compared in constant time, so the worker secret can't be guessed byte by
+// byte from response times. Hashing first makes both sides the same length.
+function sameSecret(given, expected) {
+  if (typeof given !== 'string') return false
+  const digest = (value) => createHash('sha256').update(value).digest()
+  return timingSafeEqual(digest(given), digest(expected))
+}
 export default async function ltiHandler(req,res) {
   res.setHeader('Cache-Control','no-store')
   res.setHeader('Referrer-Policy','no-referrer')
@@ -105,7 +113,7 @@ export default async function ltiHandler(req,res) {
     const input = body(req)
     if (action === 'jwks' && req.method === 'GET') return res.status(200).json(publicJwks(config.jwk,JSON.parse(process.env.LTI_PREVIOUS_PUBLIC_JWKS || '[]')))
     if (action === 'worker' && req.method === 'POST') {
-      if (!process.env.LTI_WORKER_SECRET || req.headers.authorization !== `Bearer ${process.env.LTI_WORKER_SECRET}`) return res.status(401).json({error:'Unauthorized'})
+      if (!process.env.LTI_WORKER_SECRET || !sameSecret(req.headers.authorization, `Bearer ${process.env.LTI_WORKER_SECRET}`)) return res.status(401).json({error:'Unauthorized'})
       const jobs = must(await db.from('lti_grade_jobs').select('link_id').in('status',['pending','failed']).lte('next_attempt',new Date().toISOString()).lt('attempts',8).order('next_attempt').limit(2))
       for (const job of jobs) await runJob(db,job.link_id,config)
       must(await db.from('lti_transactions').delete().lt('expires_at',new Date().toISOString()))

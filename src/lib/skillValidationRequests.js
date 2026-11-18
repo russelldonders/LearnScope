@@ -28,16 +28,10 @@ export async function createValidationRequest({ skillId, requesterId, validatorI
   return data.id
 }
 
-// The validator's email is never exposed while browsing candidates -- only
-// once a request naming them already exists, and only to the requester who
-// created it, via this security-definer lookup.
-export async function getValidationRequestContact(requestId) {
-  const { data, error } = await supabase.rpc('get_validation_request_contact', { p_request_id: requestId })
-  if (error) throw error
-  return data?.[0] ?? null
-}
-
-export async function sendValidationRequestEmail({ toEmail, requesterName, skillName, reviewUrl }) {
+// The server addresses it to the validator named on the request and names
+// the requester's own skill (api/send-email.js) -- the validator's email is
+// never sent to the requester's browser.
+export async function sendValidationRequestEmail({ reviewUrl }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -47,7 +41,7 @@ export async function sendValidationRequestEmail({ toEmail, requesterName, skill
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ type: 'validation_request', toEmail, requesterName, skillName, reviewUrl }),
+    body: JSON.stringify({ type: 'validation_request', reviewUrl }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

@@ -2,6 +2,9 @@ name: Release platform version
 on:
   push:
     branches: [ master ]
+# The job only reads the repo; its writes go to Supabase with its own keys.
+permissions:
+  contents: read
 jobs:
   release:
     timeout-minutes: 5

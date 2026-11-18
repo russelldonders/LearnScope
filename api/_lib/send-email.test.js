@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isAppLink, planInviteEmail } from '../send-email.js'
+import { connectionInviteEmail, isAppLink, planInviteEmail, validationRequestEmail } from '../send-email.js'
 
 // A stand-in for the service-role client: one row per table, looked up by
 // the last .eq() value.
-function fakeAdmin(rows) {
+function fakeAdmin(rows, users = {}) {
   return {
+    auth: { admin: { getUserById: async (id) => ({ data: { user: users[id] ?? null } }) } },
     from(table) {
       const query = {
         select: () => query,
@@ -32,6 +33,52 @@ describe('planInviteEmail', () => {
     const used = { ...rows, learner_plan_invitations: { ...rows.learner_plan_invitations, status: 'accepted' } }
     expect(await planInviteEmail(fakeAdmin(used), 'me', url)).toBeNull()
     expect(await planInviteEmail(fakeAdmin(rows), 'me', 'https://learnscope.example.com/plan-invite/zzz')).toBeNull()
+  })
+})
+
+describe('connectionInviteEmail', () => {
+  const rows = {
+    connection_invites: { share_code: 'abc', invitee_email: 'cat@example.com', inviter_id: 'me', status: 'pending', invite_type: 'rate', skill_id: 's1' },
+    skills: { id: 's1', name: 'Public speaking', user_id: 'me' },
+  }
+  const url = 'https://learnscope.example.com/rate/abc'
+
+  it('sends to the invited address with the sender’s own skill name', async () => {
+    expect(await connectionInviteEmail(fakeAdmin(rows), 'me', url, 'rate')).toEqual({ toEmail: 'cat@example.com', title: 'Public speaking' })
+  })
+
+  it('refuses someone else’s invite, a used one, a link-only one, the wrong kind, or an unknown code', async () => {
+    expect(await connectionInviteEmail(fakeAdmin(rows), 'someone-else', url, 'rate')).toBeNull()
+    const with_ = (change) => ({ ...rows, connection_invites: { ...rows.connection_invites, ...change } })
+    expect(await connectionInviteEmail(fakeAdmin(with_({ status: 'accepted' })), 'me', url, 'rate')).toBeNull()
+    expect(await connectionInviteEmail(fakeAdmin(with_({ invitee_email: null })), 'me', url, 'rate')).toBeNull()
+    expect(await connectionInviteEmail(fakeAdmin(rows), 'me', url, 'recommend')).toBeNull()
+    expect(await connectionInviteEmail(fakeAdmin(rows), 'me', 'https://learnscope.example.com/rate/zzz', 'rate')).toBeNull()
+  })
+
+  it('refuses an invite for a skill that isn’t the sender’s', async () => {
+    const theirs = { ...rows, skills: { ...rows.skills, user_id: 'someone-else' } }
+    expect(await connectionInviteEmail(fakeAdmin(theirs), 'me', url, 'rate')).toBeNull()
+  })
+})
+
+describe('validationRequestEmail', () => {
+  const id = '0f8fad5b-d9cb-469f-a165-70867728950e'
+  const rows = {
+    skill_validation_requests: { id, requester_id: 'me', validator_id: 'val', status: 'pending', skill_id: 's1' },
+    skills: { id: 's1', name: 'SQL', user_id: 'me' },
+  }
+  const users = { val: { email: 'validator@example.com' } }
+  const url = `https://learnscope.example.com/validate-request/${id}`
+
+  it('sends only to the validator named on the sender’s own waiting request', async () => {
+    expect(await validationRequestEmail(fakeAdmin(rows, users), 'me', url)).toEqual({ toEmail: 'validator@example.com', title: 'SQL' })
+  })
+
+  it('refuses someone else’s request or one already decided', async () => {
+    expect(await validationRequestEmail(fakeAdmin(rows, users), 'someone-else', url)).toBeNull()
+    const decided = { ...rows, skill_validation_requests: { ...rows.skill_validation_requests, status: 'confirmed' } }
+    expect(await validationRequestEmail(fakeAdmin(decided, users), 'me', url)).toBeNull()
   })
 })
 

@@ -1467,10 +1467,10 @@ async function inviteManagerTeamMemberByEmail(admin, caller, { teamId, email }, 
     await notifyManagerTeamInvitePending(admin, trimmedEmail, caller.id, team.name)
   }
 
-  // No alreadyExisted here (unlike the admin-only invite actions): any
-  // signed-in user can lead a team, so it would reveal whether an email
-  // address has a LearnScope account.
-  res.status(200).json({ ok: true, userId })
+  // No alreadyExisted or userId here (unlike the admin-only invite actions):
+  // any signed-in user can lead a team, so either would reveal whether an
+  // email address has a LearnScope account -- and the userId which one.
+  res.status(200).json({ ok: true })
 }
 
 // Nudges someone who hasn't answered a pending team invite yet. Re-checks
