@@ -18,8 +18,8 @@ vi.mock('../lib/courseCatalogue', () => ({
     ])
   },
   listMyCatalogueCourseIds: () => Promise.resolve(new Set(['taken'])),
-  startedCatalogueCourseIds: () => Promise.resolve(new Set()),
 }))
+vi.mock('../lib/courseContent', () => ({ listCourseProgressByCatalogueId: () => Promise.resolve({}) }))
 vi.mock('../lib/skillStats', () => ({
   countSkillTrackers: () => Promise.resolve(7),
   listConnectionsWithSkill: () => Promise.resolve([]),

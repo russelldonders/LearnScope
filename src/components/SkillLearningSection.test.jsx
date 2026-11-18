@@ -41,12 +41,20 @@ describe('SkillLearningSection', () => {
       ],
       availableCourses: [{ course: available, level: 4 }],
       // A lesson of Putting Clinic has been started; Driving Range not yet.
-      startedCatalogueIds: new Set(['cat-2']),
+      progressByCatalogueId: { 'cat-2': { completed: 1, total: 4 }, 'cat-3': { completed: 0, total: 3 } },
       onOpenAvailable,
     })
     expect(headings()).toEqual([l.available, l.enrolled, l.inProgress, l.completed])
     expect(within(group(l.enrolled)).getByRole('link', { name: /Driving Range/ })).toHaveAttribute('href', '/courses/c3/learn')
     expect(within(group(l.inProgress)).getByRole('link', { name: /Putting Clinic/ })).toHaveAttribute('href', '/courses/c2/learn')
+    // How far through it, as a bar, and a prompt to carry on.
+    const bar = within(group(l.inProgress)).getByRole('progressbar', { name: l.progressLabel })
+    expect(bar).toHaveAttribute('aria-valuenow', '25')
+    expect(within(group(l.inProgress)).getByText('25% complete')).toBeInTheDocument()
+    expect(within(group(l.inProgress)).getByRole('link', { name: /Continue/ })).toBeInTheDocument()
+    // A course not started yet has no bar, and offers to start it.
+    expect(within(group(l.enrolled)).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(group(l.enrolled)).getByRole('link', { name: /Start/ })).toBeInTheDocument()
     expect(within(group(l.completed)).getByRole('link', { name: /Golf Basics/ })).toHaveAttribute('href', '/courses/c1')
     const offered = within(group(l.available)).getByRole('button', { name: /Advanced Golf/ })
     expect(offered).toHaveTextContent('Teaches Skilled')
@@ -93,12 +101,40 @@ describe('SkillLearningSection', () => {
     expect(within(group(l.completed)).queryByRole('button', { name: l.cancel })).not.toBeInTheDocument()
   })
 
+  it('enrols in a recommended course straight away, or adds it to the plan', () => {
+    const onEnrol = vi.fn()
+    const onPlan = vi.fn()
+    const recommended = { id: 'cat-9', name: 'Advanced Golf', provider: null }
+    const { rerender } = renderSection({ availableCourses: [{ course: recommended, level: 3 }], onEnrol, onPlan })
+    fireEvent.click(within(group(l.available)).getByRole('button', { name: l.enrol }))
+    expect(onEnrol).toHaveBeenCalledWith(recommended)
+    fireEvent.click(within(group(l.available)).getByRole('button', { name: l.addToPlan }))
+    expect(onPlan).toHaveBeenCalledWith(recommended)
+
+    // While enrolling, the row says so and nothing else can be started.
+    rerender(
+      <MemoryRouter>
+        <SkillLearningSection
+          courseLinks={[]}
+          availableCourses={[{ course: recommended, level: 3 }]}
+          onOpenAvailable={vi.fn()}
+          onEnrol={onEnrol}
+          onPlan={onPlan}
+          enrollingId="cat-9"
+        />
+      </MemoryRouter>,
+    )
+    expect(within(group(l.available)).getByRole('button', { name: l.enrolling })).toBeDisabled()
+    expect(within(group(l.available)).getByRole('button', { name: l.addToPlan })).toBeDisabled()
+  })
+
   it('offers no actions on someone else’s skill', () => {
     renderSection({
       courseLinks: [{ id: 'l3', courses: { id: 'c3', name: 'Driving Range', provider: null, completed_date: null } }],
       availableCourses: [{ course: { id: 'cat-9', name: 'Advanced Golf', provider: null }, level: 3 }],
     })
     expect(screen.queryByRole('button', { name: l.addToPlan })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: l.enrol })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: l.cancel })).not.toBeInTheDocument()
   })
 

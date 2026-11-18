@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
+import ProgressBar from './ProgressBar'
 
 // The learning behind a skill, styled like the Goals section, top to bottom:
 // recommended (catalogue courses teaching the skill the learner has no record
@@ -10,15 +11,21 @@ import { LEVEL_LABELS } from '../lib/levels'
 // at all. Course links are associations -- listing them here changes nothing
 // about the courses themselves; the actions below only change a course's own
 // status (courses.status), and only on the learner's own skill.
-// startedCatalogueIds: catalogue courses with a lesson started (see
-// startedCatalogueCourseIds); a course outside the catalogue has no lessons
-// to start, so it stays Enrolled until it's completed.
+// progressByCatalogueId: catalogue course id -> { completed, total } lessons
+// (see listCourseProgressByCatalogueId). A course with a lesson started is In
+// progress, with a progress bar; a course outside the catalogue has no
+// lessons to start, so it stays Enrolled until it's completed.
+// A recommended course can be enrolled in straight away (onEnrol) or added
+// to the plan first (onPlan); a planned one enrolled in from the plan
+// (onEnrolPlanned). enrollingId: the course being enrolled in just now.
 export default function SkillLearningSection({
   courseLinks,
   availableCourses = null,
-  startedCatalogueIds = new Set(),
+  progressByCatalogueId = {},
   onFindCourse,
   onOpenAvailable,
+  onEnrol = null,
+  enrollingId = null,
   onPlan = null,
   onEnrolPlanned = null,
   onRemovePlanned = null,
@@ -34,7 +41,18 @@ export default function SkillLearningSection({
     .filter((course) => course.status === 'cancelled')
     .sort((a, b) => (b.cancelled_at ?? '').localeCompare(a.cancelled_at ?? ''))
   const underway = courses.filter((course) => !course.completed_date && !course.status)
-  const started = (course) => Boolean(course.catalogue_course_id && startedCatalogueIds.has(course.catalogue_course_id))
+  const progressOf = (course) => (course.catalogue_course_id ? progressByCatalogueId[course.catalogue_course_id] : null)
+  const started = (course) => (progressOf(course)?.completed ?? 0) > 0
+  const percentOf = (course) => {
+    const progress = progressOf(course)
+    return progress?.total ? Math.round((progress.completed / progress.total) * 100) : null
+  }
+  const enrolAction = (course, handler) => handler && {
+    label: enrollingId === course.id ? t('skillDetail.learning.enrolling') : t('skillDetail.learning.enrol'),
+    onClick: () => handler(course),
+    primary: true,
+    disabled: Boolean(enrollingId),
+  }
   const inProgress = underway.filter(started)
   const enrolled = underway.filter((course) => !started(course))
   const recommended = availableCourses ?? []
@@ -68,7 +86,11 @@ export default function SkillLearningSection({
               name={course.name}
               detail={[course.provider, level ? t('skillDetail.learning.teachesLevel', { level: LEVEL_LABELS[level] }) : null]}
               onClick={() => onOpenAvailable(course)}
-              actions={onPlan && [{ label: t('skillDetail.learning.addToPlan'), onClick: () => onPlan(course) }]}
+              cta={t('skillDetail.learning.viewCourse')}
+              actions={[
+                enrolAction(course, onEnrol),
+                onPlan && { label: t('skillDetail.learning.addToPlan'), onClick: () => onPlan(course), disabled: Boolean(enrollingId) },
+              ]}
             />
           ))}
         </Group>
@@ -80,8 +102,8 @@ export default function SkillLearningSection({
               name={course.name}
               detail={[course.provider]}
               actions={[
-                onEnrolPlanned && { label: t('skillDetail.learning.enrol'), onClick: () => onEnrolPlanned(course) },
-                onRemovePlanned && { label: t('skillDetail.learning.removeFromPlan'), onClick: () => onRemovePlanned(course) },
+                enrolAction(course, onEnrolPlanned),
+                onRemovePlanned && { label: t('skillDetail.learning.removeFromPlan'), onClick: () => onRemovePlanned(course), disabled: Boolean(enrollingId) },
               ]}
             />
           ))}
@@ -94,6 +116,7 @@ export default function SkillLearningSection({
               name={course.name}
               detail={[course.provider]}
               to={`/courses/${course.id}/learn`}
+              cta={t('skillDetail.learning.startCourse')}
               actions={onCancel && [{ label: t('skillDetail.learning.cancel'), onClick: () => onCancel(course) }]}
             />
           ))}
@@ -106,6 +129,8 @@ export default function SkillLearningSection({
               name={course.name}
               detail={[course.provider]}
               to={`/courses/${course.id}/learn`}
+              cta={t('skillDetail.learning.continueCourse')}
+              percent={percentOf(course)}
               actions={onCancel && [{ label: t('skillDetail.learning.cancel'), onClick: () => onCancel(course) }]}
             />
           ))}
@@ -118,6 +143,7 @@ export default function SkillLearningSection({
               name={course.name}
               detail={[course.provider, t('skillDetail.learning.completedOn', { date: formatFullDate(course.completed_date) })]}
               to={`/courses/${course.id}`}
+              cta={t('skillDetail.learning.viewCourse')}
             />
           ))}
         </Group>
@@ -148,31 +174,65 @@ function Group({ title, children }) {
   )
 }
 
-function Course({ name, detail, to = null, onClick = null, actions = null }) {
+// A course row. One that opens somewhere reads as a link: its name in the
+// link colour, a "Continue →"-style prompt, and the whole row highlighting on
+// hover. percent: how far through it the learner is, as a progress bar.
+function Course({ name, detail, to = null, onClick = null, cta = null, percent = null, actions = null }) {
+  const { t } = useLanguage()
   const shownActions = (actions ?? []).filter(Boolean)
+  const opens = Boolean(to || onClick)
+  const shownDetail = detail.filter(Boolean)
   const text = (
     <>
-      <span className={`block text-sm text-ink ${to || onClick ? 'group-hover:text-moss group-hover:underline underline-offset-2' : ''}`}>{name}</span>
-      {detail.filter(Boolean).length > 0 && (
-        <span className="block text-xs text-secondary">{detail.filter(Boolean).join(' · ')}</span>
+      <span className={`block text-sm ${opens ? 'font-medium text-moss group-hover:underline underline-offset-2' : 'text-ink'}`}>{name}</span>
+      {shownDetail.length > 0 && <span className="block text-xs text-secondary">{shownDetail.join(' · ')}</span>}
+      {percent != null && (
+        <span className="mt-1.5 block max-w-xs">
+          <span className="block text-xs text-secondary">{t('skillDetail.learning.percentComplete', { percent })}</span>
+          <span
+            role="progressbar"
+            aria-label={t('skillDetail.learning.progressLabel')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            className="mt-1 block"
+          >
+            <ProgressBar percent={percent} />
+          </span>
+        </span>
+      )}
+      {opens && cta && (
+        <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-moss">
+          {cta}
+          <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
+        </span>
       )}
     </>
   )
+  const linkClass = 'group -mx-2 block rounded-md px-2 py-1 text-left hover:bg-card focus-visible:bg-card'
   return (
-    <li className="py-2 flex items-start justify-between gap-3">
-      <div className="min-w-0">
+    <li className="py-1.5 flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
         {to ? (
-          <Link to={to} className="group block">{text}</Link>
+          <Link to={to} className={linkClass}>{text}</Link>
         ) : onClick ? (
-          <button type="button" onClick={onClick} className="group block w-full text-left">{text}</button>
+          <button type="button" onClick={onClick} className={`${linkClass} w-full`}>{text}</button>
         ) : (
-          <div>{text}</div>
+          <div className="py-1">{text}</div>
         )}
       </div>
       {shownActions.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 shrink-0 pt-1">
           {shownActions.map((action) => (
-            <button key={action.label} type="button" onClick={action.onClick} className="text-xs font-medium text-moss hover:underline">
+            <button
+              key={action.label}
+              type="button"
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className={action.primary
+                ? 'rounded-md bg-moss text-paper text-xs font-medium px-3 py-1 hover:opacity-90 disabled:opacity-60'
+                : 'text-xs font-medium text-moss hover:underline disabled:opacity-60'}
+            >
               {action.label}
             </button>
           ))}

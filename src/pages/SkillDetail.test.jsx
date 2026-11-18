@@ -10,6 +10,12 @@ import { LanguageProvider } from '../context/LanguageContext'
 
 const fixtures = vi.hoisted(() => ({ tables: {} }))
 const libraryCalls = vi.hoisted(() => ({ connectionsWithSkill: [] }))
+const catalogue = vi.hoisted(() => ({
+  enrolInCatalogueCourse: vi.fn(),
+  enrolInCourseCohort: vi.fn(),
+  listCourseCohorts: vi.fn(),
+  removePlannedCourse: vi.fn(),
+}))
 
 // Any supabase query resolves to its table's fixture rows: a list read gets
 // the array, a single-row read its first row.
@@ -50,13 +56,13 @@ vi.mock('../lib/skillTags', () => ({
 vi.mock('../lib/skillValidationRequests', () => ({
   listOutgoingValidationRequests: () => Promise.resolve(fixtures.validationRequests ?? []),
 }))
-vi.mock('../lib/courseCatalogue', () => ({
+vi.mock('../lib/courseCatalogue', async (importOriginal) => ({
+  ...(await importOriginal()),
   cancelCourse: vi.fn(),
   listCatalogueCourses: () => Promise.resolve([]),
   listMyCatalogueCourseIds: () => Promise.resolve(new Set()),
   planCatalogueCourse: vi.fn(),
-  removePlannedCourse: vi.fn(),
-  startedCatalogueCourseIds: () => Promise.resolve(new Set()),
+  ...catalogue,
 }))
 vi.mock('../lib/skillStats', () => ({
   countSkillTrackers: () => Promise.resolve(0),
@@ -126,7 +132,16 @@ beforeEach(() => {
   fixtures.statements = []
   fixtures.validationRequests = [{ id: 'v1', status: 'pending', validator_id: 'validator-1' }]
   libraryCalls.connectionsWithSkill = []
+  catalogue.enrolInCatalogueCourse.mockReset().mockResolvedValue({ id: 'c-planned' })
+  catalogue.enrolInCourseCohort.mockReset().mockResolvedValue({ id: 'c-cohort' })
+  catalogue.listCourseCohorts.mockReset().mockResolvedValue([])
+  catalogue.removePlannedCourse.mockReset().mockResolvedValue()
 })
+
+const plannedCourse = {
+  id: 'c-planned', name: 'Deal Making', provider: 'Academy', course_type: 'online', duration: '2h',
+  completed_date: null, catalogue_course_id: 'cat-1', status: 'planned', cancelled_at: null,
+}
 
 afterEach(cleanup)
 
@@ -214,5 +229,34 @@ describe('SkillDetail', () => {
     await screen.findByRole('heading', { name: 'Negotiation', level: 1 })
     await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(3))
     expect(libraryCalls.connectionsWithSkill).toEqual([['lib-1', 'learner-1']])
+  })
+
+  it('enrols in a planned course right from the skill page, without going to Training', async () => {
+    fixtures.tables.skill_course_links = [{ id: 'link-1', relationship: 'developed', created_at: '2026-11-01T10:00:00Z', courses: plannedCourse }]
+    renderPage()
+    const planned = (await screen.findByRole('heading', { name: 'Planned learning' })).parentElement
+    fireEvent.click(within(planned).getByRole('button', { name: 'Enrol' }))
+    await waitFor(() => expect(catalogue.enrolInCatalogueCourse).toHaveBeenCalledWith(
+      'learner-1',
+      { id: 'cat-1', name: 'Deal Making', provider: 'Academy', course_type: 'online', duration: '2h' },
+      'skill-1',
+    ))
+    expect(catalogue.listCourseCohorts).toHaveBeenCalledWith('cat-1')
+  })
+
+  it('asks which cohort for a course that runs in cohorts, then takes the planned copy off the plan', async () => {
+    fixtures.tables.skill_course_links = [{ id: 'link-1', relationship: 'developed', created_at: '2026-11-01T10:00:00Z', courses: plannedCourse }]
+    catalogue.listCourseCohorts.mockResolvedValue([
+      { id: 'cohort-1', name: 'Spring run', start_date: '2026-12-01', capacity: null, seatsRemaining: null, enrolment_open: true, sessions: [] },
+    ])
+    renderPage()
+    const planned = (await screen.findByRole('heading', { name: 'Planned learning' })).parentElement
+    fireEvent.click(within(planned).getByRole('button', { name: 'Enrol' }))
+    const picker = await screen.findByRole('dialog', { name: 'Choose a cohort' })
+    expect(catalogue.enrolInCatalogueCourse).not.toHaveBeenCalled()
+    fireEvent.click(within(picker).getByRole('button', { name: 'Enrol in this cohort' }))
+    await waitFor(() => expect(catalogue.enrolInCourseCohort).toHaveBeenCalledWith('cohort-1', 'skill-1'))
+    await waitFor(() => expect(catalogue.removePlannedCourse).toHaveBeenCalledWith('c-planned'))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a cohort' })).not.toBeInTheDocument())
   })
 })

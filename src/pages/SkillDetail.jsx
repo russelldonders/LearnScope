@@ -15,7 +15,15 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
 import { computeGoalProgress } from '../lib/skillGoalProgress'
-import { cancelCourse, planCatalogueCourse, removePlannedCourse } from '../lib/courseCatalogue'
+import {
+  cancelCourse,
+  enrolInCatalogueCourse,
+  enrolInCourseCohort,
+  listCourseCohorts,
+  planCatalogueCourse,
+  removePlannedCourse,
+} from '../lib/courseCatalogue'
+import CohortPickerModal from '../components/CohortPickerModal'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
@@ -148,6 +156,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [expertValidationOpen, setExpertValidationOpen] = useState(false)
   const [findExpertOpen, setFindExpertOpen] = useState(false)
   const [cancellingCourse, setCancellingCourse] = useState(null)
+  // The course (recommended or planned) being enrolled in from the Learning
+  // section, and the cohort picker for one that runs in cohorts.
+  const [enrollingCourseId, setEnrollingCourseId] = useState(null)
+  const [cohortPicker, setCohortPicker] = useState(null)
+  const [cohortEnrolling, setCohortEnrolling] = useState(false)
+  const [cohortError, setCohortError] = useState(null)
   const [learningError, setLearningError] = useState(null)
   const [quickLogOpen, setQuickLogOpen] = useState(false)
   const [quickLogGoals, setQuickLogGoals] = useState([])
@@ -168,7 +182,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
     totalTrackersCount,
     knownPeople,
     availableCourses,
-    startedCatalogueIds,
+    progressByCatalogueId,
     refreshAvailableCourses,
     composite,
     loadingComposite,
@@ -237,6 +251,46 @@ export default function SkillDetail({ skillId, embedded = false }) {
     }
     await loadHistory()
     refreshAvailableCourses()
+  }
+
+  // Enrols straight from the skill page, the same way the catalogue does: a
+  // course that runs in cohorts asks which one first. rowId is the row the
+  // learner pressed Enrol on; plannedRecord, the planned course it replaces
+  // (enrolling reuses that record, except through a cohort, which makes its
+  // own -- the planned one then comes off the plan).
+  async function handleEnrol(catalogueCourse, rowId, plannedRecord = null) {
+    setLearningError(null)
+    setEnrollingCourseId(rowId)
+    try {
+      const cohorts = await listCourseCohorts(catalogueCourse.id)
+      if (cohorts.length > 0) {
+        setCohortError(null)
+        setCohortPicker({ course: catalogueCourse, cohorts, plannedRecord })
+        return
+      }
+      await runLearningAction(() => enrolInCatalogueCourse(user.id, catalogueCourse, skill.id))
+    } catch (err) {
+      setLearningError(err.message)
+    } finally {
+      setEnrollingCourseId(null)
+    }
+  }
+
+  async function handleCohortEnrol(cohortId) {
+    const { plannedRecord } = cohortPicker
+    setCohortError(null)
+    setCohortEnrolling(true)
+    try {
+      await enrolInCourseCohort(cohortId, skill.id)
+      if (plannedRecord) await removePlannedCourse(plannedRecord.id)
+      setCohortPicker(null)
+      await loadHistory()
+      refreshAvailableCourses()
+    } catch (err) {
+      setCohortError(err.message)
+    } finally {
+      setCohortEnrolling(false)
+    }
   }
 
   async function handleAddTag(tagName) {
@@ -612,10 +666,21 @@ export default function SkillDetail({ skillId, embedded = false }) {
             <SkillLearningSection
               courseLinks={courseLinks}
               availableCourses={availableCourses}
-              startedCatalogueIds={startedCatalogueIds}
+              progressByCatalogueId={progressByCatalogueId}
+              enrollingId={enrollingCourseId}
+              onEnrol={skill.user_id === user.id ? (course) => handleEnrol(course, course.id) : null}
               onPlan={skill.user_id === user.id ? (course) => runLearningAction(() => planCatalogueCourse(user.id, course, skill.id)) : null}
               onRemovePlanned={skill.user_id === user.id ? (course) => runLearningAction(() => removePlannedCourse(course.id)) : null}
-              onEnrolPlanned={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
+              onEnrolPlanned={skill.user_id === user.id
+                ? (course) => (course.catalogue_course_id
+                  ? handleEnrol(
+                    { id: course.catalogue_course_id, name: course.name, provider: course.provider, course_type: course.course_type, duration: course.duration },
+                    course.id,
+                    course,
+                  )
+                  // Not from the catalogue: enrol through Training as before.
+                  : navigate('/training', { state: trainingScopeState }))
+                : null}
               onCancel={skill.user_id === user.id ? (course) => setCancellingCourse(course) : null}
               onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
               onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
@@ -798,6 +863,17 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
             )}
             </div>
+
+            {cohortPicker && (
+              <CohortPickerModal
+                courseName={cohortPicker.course.name}
+                cohorts={cohortPicker.cohorts}
+                enrolling={cohortEnrolling}
+                error={cohortError}
+                onEnrol={handleCohortEnrol}
+                onClose={() => setCohortPicker(null)}
+              />
+            )}
 
             {cancellingCourse && (
               <ConfirmDialog

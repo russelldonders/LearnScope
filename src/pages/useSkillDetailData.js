@@ -5,7 +5,8 @@ import { useLanguage } from '../context/LanguageContext'
 import { fetchStatementsForSkill } from '../lib/activitySkillLinks'
 import { listTags, listSkillTags } from '../lib/skillTags'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
-import { listCatalogueCourses, listMyCatalogueCourseIds, startedCatalogueCourseIds } from '../lib/courseCatalogue'
+import { listCatalogueCourses, listMyCatalogueCourseIds } from '../lib/courseCatalogue'
+import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 import { getProfiles, listConnections } from '../lib/connections'
 import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
@@ -220,7 +221,9 @@ export function useSkillRelatedData(skill, courseLinks) {
   const [totalTrackersCount, setTotalTrackersCount] = useState(0)
   const [knownPeople, setKnownPeople] = useState({})
   const [availableCourses, setAvailableCourses] = useState(null)
-  const [startedCatalogueIds, setStartedCatalogueIds] = useState(new Set())
+  // catalogue course id -> { completed, total } lessons, for enrolled
+  // catalogue courses on the learner's own skill.
+  const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
   // Bumped after planning, removing or cancelling a course, so Recommended
   // reloads along with the page's course links.
   const [learningVersion, setLearningVersion] = useState(0)
@@ -243,8 +246,8 @@ export function useSkillRelatedData(skill, courseLinks) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [skill?.library_skill_id])
 
-  // Which enrolled catalogue courses have a lesson started, so the Learning
-  // section can tell In progress from Enrolled.
+  // How far the learner is through each enrolled catalogue course, so the
+  // Learning section can tell In progress from Enrolled and show progress.
   const underwayCatalogueKey = courseLinks
     .map((link) => link.courses)
     .filter((course) => course && !course.completed_date && course.catalogue_course_id)
@@ -253,16 +256,16 @@ export function useSkillRelatedData(skill, courseLinks) {
     .join(',')
   useEffect(() => {
     if (!underwayCatalogueKey || skill?.user_id !== user.id) {
-      setStartedCatalogueIds(new Set())
+      setProgressByCatalogueId({})
       return
     }
     let live = true
-    startedCatalogueCourseIds(user.id, underwayCatalogueKey.split(','))
-      .then((ids) => {
-        if (live) setStartedCatalogueIds(ids)
+    listCourseProgressByCatalogueId(underwayCatalogueKey.split(','), user.id)
+      .then((progress) => {
+        if (live) setProgressByCatalogueId(progress)
       })
       .catch(() => {
-        if (live) setStartedCatalogueIds(new Set())
+        if (live) setProgressByCatalogueId({})
       })
     return () => {
       live = false
@@ -386,7 +389,7 @@ export function useSkillRelatedData(skill, courseLinks) {
     totalTrackersCount,
     knownPeople,
     availableCourses,
-    startedCatalogueIds,
+    progressByCatalogueId,
     refreshAvailableCourses: () => setLearningVersion((v) => v + 1),
     composite,
     loadingComposite,
