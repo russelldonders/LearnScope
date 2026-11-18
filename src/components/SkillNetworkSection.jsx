@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import PersonAvatar from './PersonAvatar'
+import GrowthRing from './GrowthRing'
+import SkillLevelFilter from './SkillLevelFilter'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
+import { LEVEL_FILTER_THRESHOLD, atLeastLevel, sortByLevel } from '../lib/peopleByLevel'
 
 // Who else is involved with a skill, on its Network tab, in three cards:
-//   1. Your skill network -- your connections who also have the skill.
+//   1. Your skill network -- your connections who also have the skill, with
+//      their level, the most skilled first, and a level filter once there
+//      are more than a handful (as in Find an expert, see peopleByLevel.js).
 //   2. Recommending -- who you've recommended it to, and who took it up.
 //   3. Beyond your connections -- how many people have it (information only,
 //      no names), and Find an expert among those who chose to be findable.
@@ -24,6 +30,9 @@ export default function SkillNetworkSection({
   onRecommend,
 }) {
   const { t } = useLanguage()
+  const [minLevel, setMinLevel] = useState(0)
+  const showLevelFilter = connections.length > LEVEL_FILTER_THRESHOLD
+  const shownConnections = sortByLevel(atLeastLevel(connections, showLevelFilter ? minLevel : 0))
   const recommendedWaiting = recommendInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
   const recommendedAccepted = recommendInvites.filter((invite) => invite.status === 'accepted')
   const { known, nameFor } = peopleByEmail(knownPeople)
@@ -44,16 +53,26 @@ export default function SkillNetworkSection({
           {connections.length === 0 ? (
             <Empty>{t('skillDetail.noConnectionsTrackSkill')}</Empty>
           ) : (
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-              {connections.map((connection) => (
-                <Person
-                  key={connection.id}
-                  name={connection.name}
-                  avatarUrl={connection.avatarUrl}
-                  to={`/skills-profile/${connection.id}`}
-                />
-              ))}
-            </ul>
+            <>
+              {showLevelFilter && (
+                <SkillLevelFilter id="skill-network-level" value={minLevel} onChange={setMinLevel} className="sm:max-w-xs" />
+              )}
+              {shownConnections.length === 0 ? (
+                <Empty>{t('modals.peopleWithSkill.noMatches')}</Empty>
+              ) : (
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                  {shownConnections.map((connection) => (
+                    <Person
+                      key={connection.id}
+                      name={connection.name}
+                      avatarUrl={connection.avatarUrl}
+                      level={connection.level}
+                      to={`/skills-profile/${connection.id}`}
+                    />
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </Part>
 
@@ -198,16 +217,20 @@ function PeopleList({ heading, children }) {
   )
 }
 
-function Person({ name, avatarUrl = null, detail = null, to = null }) {
+// level: their level on the skill, shown as its ring (as in Find an expert)
+// and in words under their name.
+function Person({ name, avatarUrl = null, detail = null, level = null, to = null }) {
+  const levelLabel = level ? LEVEL_LABELS[level] : null
   const body = (
     <>
       <PersonAvatar name={name} avatarUrl={avatarUrl} size={6} />
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className={`block text-sm text-ink truncate ${to ? 'group-hover:text-moss group-hover:underline underline-offset-2' : ''}`}>
           {name}
         </span>
-        {detail && <span className="block text-xs text-secondary truncate">{detail}</span>}
+        {(detail || levelLabel) && <span className="block text-xs text-secondary truncate">{detail ?? levelLabel}</span>}
       </span>
+      {level ? <GrowthRing level={level} size={24} labels={LEVEL_LABELS} /> : null}
     </>
   )
   const className = 'flex items-center gap-2 py-1 min-w-0'

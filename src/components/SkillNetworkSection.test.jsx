@@ -108,3 +108,42 @@ describe('RatingsFromOthers (in the Validate box)', () => {
     expect(screen.getByText(n.noRatingsYet)).toBeInTheDocument()
   })
 })
+
+describe('your connections with the skill', () => {
+  const connection = (id, name, level) => ({ id, name, avatarUrl: null, level })
+  const SIX = [
+    connection('c3', 'Ben Beginner', 1),
+    connection('c2', 'Sam Skilled', 4),
+    connection('c5', 'Cal Capable', 3),
+    connection('c1', 'Eva Expert', 5),
+    connection('c6', 'Dee Developing', 2),
+    connection('c4', 'Una Unknown', null),
+  ]
+  const yourNetwork = () => screen.getByRole('heading', { name: n.yourNetworkTitle }).closest('section')
+  const shownNames = () => within(yourNetwork()).getAllByRole('link').map((link) => SIX.find((c) => link.textContent.includes(c.name))?.name)
+
+  it('shows each connection\'s level, the most skilled first', () => {
+    renderSection({ connections: SIX.slice(0, 5) })
+    expect(shownNames()).toEqual(['Eva Expert', 'Sam Skilled', 'Cal Capable', 'Dee Developing', 'Ben Beginner'])
+    expect(within(yourNetwork()).getByRole('link', { name: /Eva Expert/ })).toHaveTextContent('Expert')
+    expect(within(yourNetwork()).getByRole('link', { name: /Sam Skilled/ })).toHaveTextContent('Skilled')
+    // Five fit at a glance: no filter yet.
+    expect(within(yourNetwork()).queryByLabelText('Skill level')).not.toBeInTheDocument()
+  })
+
+  it('offers a level filter once more than five connections have the skill', () => {
+    renderSection({ connections: SIX })
+    const filter = within(yourNetwork()).getByLabelText('Skill level')
+    expect(shownNames()).toEqual(['Eva Expert', 'Sam Skilled', 'Cal Capable', 'Dee Developing', 'Ben Beginner', 'Una Unknown'])
+    fireEvent.change(filter, { target: { value: '4' } })
+    expect(shownNames()).toEqual(['Eva Expert', 'Sam Skilled'])
+    fireEvent.change(filter, { target: { value: '5' } })
+    expect(shownNames()).toEqual(['Eva Expert'])
+  })
+
+  it('says so when no connection is at the chosen level', () => {
+    renderSection({ connections: SIX.map((c) => ({ ...c, level: c.level && Math.min(c.level, 3) })) })
+    fireEvent.change(within(yourNetwork()).getByLabelText('Skill level'), { target: { value: '5' } })
+    expect(within(yourNetwork()).getByText(english.modals.peopleWithSkill.noMatches)).toBeInTheDocument()
+  })
+})

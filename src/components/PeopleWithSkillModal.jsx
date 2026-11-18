@@ -5,6 +5,8 @@ import PersonAvatar from './PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listSkillMatches, sendConnectionRequest, isDuplicatePendingRequestError } from '../lib/skillDiscovery'
 import AccessibleDialog from './AccessibleDialog'
+import SkillLevelFilter from './SkillLevelFilter'
+import { LEVEL_FILTER_THRESHOLD, atLeastLevel, sortByLevel } from '../lib/peopleByLevel'
 import { useLanguage } from '../context/LanguageContext'
 
 const SEARCH_THRESHOLD = 10
@@ -27,10 +29,10 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
       .finally(() => setLoading(false))
   }, [librarySkillId])
 
-  // "Skilled or above" rather than exactly one level: someone looking for an
-  // expert is happy with anyone at least that good. No level means not known
-  // to be that good, so they drop out once a level is chosen.
-  const byLevel = minLevel ? matches.filter((m) => m.level != null && m.level >= minLevel) : matches
+  // Experts at the top; a level filter once there are enough people to need
+  // one (see peopleByLevel.js), as on the skill's Network tab.
+  const showLevelFilter = matches.length > LEVEL_FILTER_THRESHOLD
+  const byLevel = sortByLevel(atLeastLevel(matches, showLevelFilter ? minLevel : 0), (m) => m.level, (m) => m.full_name)
   const visible =
     search.trim() && matches.length > SEARCH_THRESHOLD
       ? byLevel.filter((m) => (m.full_name || '').toLowerCase().includes(search.trim().toLowerCase()))
@@ -57,22 +59,9 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
           {t('modals.peopleWithSkill.subtitle')}
         </p>
 
-        <label htmlFor="people-with-skill-level" className="block text-xs text-secondary mb-1">
-          {t('modals.peopleWithSkill.levelFilterLabel')}
-        </label>
-        <select
-          id="people-with-skill-level"
-          value={minLevel}
-          onChange={(e) => setMinLevel(Number(e.target.value))}
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-moss"
-        >
-          <option value={0}>{t('modals.peopleWithSkill.levelAny')}</option>
-          {[5, 4, 3, 2].map((level) => (
-            <option key={level} value={level}>
-              {level === 5 ? LEVEL_LABELS[5] : t('modals.peopleWithSkill.levelAtLeast', { level: LEVEL_LABELS[level] })}
-            </option>
-          ))}
-        </select>
+        {showLevelFilter && (
+          <SkillLevelFilter id="people-with-skill-level" value={minLevel} onChange={setMinLevel} className="mb-4" />
+        )}
 
         {matches.length > SEARCH_THRESHOLD && (
           <input
@@ -103,14 +92,20 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                     className="flex items-center gap-3 min-w-0 group flex-1"
                   >
                     <PersonAvatar name={m.full_name} avatarUrl={m.avatar_url} />
-                    <span className="text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
-                      {m.full_name || t('modals.peopleWithSkill.someone')}
+                    <span className="min-w-0">
+                      <span className="block text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
+                        {m.full_name || t('modals.peopleWithSkill.someone')}
+                      </span>
+                      {m.level ? <span className="block text-xs text-secondary">{LEVEL_LABELS[m.level]}</span> : null}
                     </span>
                   </Link>
                 ) : (
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <PersonAvatar name={m.full_name} avatarUrl={m.avatar_url} />
-                    <span className="text-sm text-ink font-medium truncate">{m.full_name || t('modals.peopleWithSkill.someone')}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm text-ink font-medium truncate">{m.full_name || t('modals.peopleWithSkill.someone')}</span>
+                      {m.level ? <span className="block text-xs text-secondary">{LEVEL_LABELS[m.level]}</span> : null}
+                    </span>
                   </div>
                 )}
                 <GrowthRing level={m.level} size={24} labels={LEVEL_LABELS} />
