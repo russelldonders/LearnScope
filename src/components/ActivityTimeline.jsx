@@ -34,11 +34,23 @@ const OUTCOME_CLASS = {
   failed: 'bg-hairline/60 text-secondary',
 }
 
-// A day's sessions in one course package (0316) as one entry that leads with
-// what was achieved -- stamps and badges earned, passed and how well -- then
-// how much was done, opening to show each session. Also used by a skill's
-// History tab (dated adds the date, for lists without day headings).
-export function PackageSessions({ rows, now = Date.now(), dated = false, onOpen }) {
+// Sessions in one course package (0316) as one entry that leads with what
+// was achieved -- stamps and badges earned, passed and how well -- then how
+// much was done, opening to show each session. On the timeline it's a day's
+// sessions; a skill's History adds the date (dated, for lists without day
+// headings); a package resource shows all of the learner's sessions in it
+// the same way, under its own title (titled=false, showSkills=false,
+// sessionDates, with children shown alongside the sessions when opened).
+export function PackageSessions({
+  rows,
+  dated = false,
+  titled = true,
+  showSkills = true,
+  sessionDates = false,
+  onOpen,
+  onOpenChange,
+  children = null,
+}) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const summary = packageGroupSummary(rows)
@@ -51,24 +63,36 @@ export function PackageSessions({ rows, now = Date.now(), dated = false, onOpen 
     formatMinutes(summary.minutes),
   ].filter(Boolean).join(' · ')
   const achieved = summary.earned.length > 0 || summary.outcome === 'passed' || summary.outcome === 'completed'
+  const outcomeBadge = outcomeText && (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${OUTCOME_CLASS[summary.outcome]}`}>{outcomeText}</span>
+  )
+  const workedThrough = !achieved && <p className="text-xs text-secondary mt-0.5">{t('activity.timeline.packageWorkedThrough')}</p>
+
+  function toggle() {
+    const next = !open
+    setOpen(next)
+    onOpenChange?.(next)
+  }
 
   return (
     <div data-package-sessions="">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          {onOpen ? (
-            <button type="button" onClick={() => onOpen(newest)} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
-              {summary.title}
-            </button>
-          ) : (
-            <p className="text-sm font-medium text-ink break-words">{summary.title}</p>
-          )}
-          {!achieved && <p className="text-xs text-secondary mt-0.5">{t('activity.timeline.packageWorkedThrough')}</p>}
+      {titled ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {onOpen ? (
+              <button type="button" onClick={() => onOpen(newest)} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
+                {summary.title}
+              </button>
+            ) : (
+              <p className="text-sm font-medium text-ink break-words">{summary.title}</p>
+            )}
+            {workedThrough}
+          </div>
+          {outcomeBadge}
         </div>
-        {outcomeText && (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${OUTCOME_CLASS[summary.outcome]}`}>{outcomeText}</span>
-        )}
-      </div>
+      ) : (
+        (outcomeBadge || workedThrough) && <div className="flex flex-wrap items-center gap-2">{outcomeBadge}{workedThrough}</div>
+      )}
 
       {summary.earned.length > 0 && (
         <div className="mt-2">
@@ -87,13 +111,13 @@ export function PackageSessions({ rows, now = Date.now(), dated = false, onOpen 
       <p className="text-xs text-secondary mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span>{amount}</span>
         {dated && <span title={formatAbsoluteDate(newest.recorded_at)}>· {formatRelativeDate(newest.recorded_at)}</span>}
-        <span>· {t('activity.timeline.via', { source: t('activity.timeline.packageSource') })}</span>
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={ACTION_CLASS}>
+        {titled && <span>· {t('activity.timeline.via', { source: t('activity.timeline.packageSource') })}</span>}
+        <button type="button" aria-expanded={open} onClick={toggle} className={ACTION_CLASS}>
           {open ? t('activity.timeline.packageHideSessions') : t('activity.timeline.packageShowSessions')} {open ? '▴' : '▾'}
         </button>
       </p>
 
-      {summary.skills.length > 0 && (
+      {showSkills && summary.skills.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {summary.skills.map((skill) => <SkillChip key={skill.id} skill={skill} />)}
         </div>
@@ -104,7 +128,9 @@ export function PackageSessions({ rows, now = Date.now(), dated = false, onOpen 
           {summary.sessions.map((session) => (
             <li key={session.row.id} className="text-xs text-secondary">
               <span className="text-ink tabular-nums">
-                {new Date(session.row.recorded_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                {new Date(session.row.recorded_at).toLocaleString(undefined, sessionDates
+                  ? { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }
+                  : { hour: 'numeric', minute: '2-digit' })}
               </span>
               {[
                 formatMinutes(session.minutes),
@@ -115,17 +141,18 @@ export function PackageSessions({ rows, now = Date.now(), dated = false, onOpen 
           ))}
         </ol>
       )}
+      {open && children}
     </div>
   )
 }
 
-function PackageItem({ rows, now, onOpen }) {
+function PackageItem({ rows, onOpen }) {
   const summary = packageGroupSummary(rows)
   const achieved = summary.earned.length > 0 || summary.outcome === 'passed' || summary.outcome === 'completed'
   return (
     <li className="relative">
       {achieved ? <AchievementMark className="absolute -left-[26.5px] top-0.5" /> : <Dot />}
-      <PackageSessions rows={rows} now={now} onOpen={onOpen} />
+      <PackageSessions rows={rows} onOpen={onOpen} />
     </li>
   )
 }
@@ -294,7 +321,7 @@ export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(
                   )
                 }
                 if (item.type === 'package') {
-                  return <PackageItem key={`package-${item.rows[0].id}`} rows={item.rows} now={now} onOpen={onOpen} />
+                  return <PackageItem key={`package-${item.rows[0].id}`} rows={item.rows} onOpen={onOpen} />
                 }
                 if (item.type === 'checkIns') return <CheckInsItem key={item.rows[0].id} rows={item.rows} />
                 if (item.type === 'checkIn') {

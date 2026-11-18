@@ -326,27 +326,49 @@ describe('SkillResourcesSection', () => {
     expect(screen.getByText(/its package files were deleted/)).toBeInTheDocument()
   })
 
-  it('shows the learner\'s own activity on an xAPI package, and what it recorded when opened up', async () => {
+  it('shows the learner\'s own activity on an xAPI package the way the timeline does, and what it recorded when opened up', async () => {
     lib.listSharedResources.mockResolvedValue([{
       id: 'x1', kind: 'xapi', title: 'Fire drill', file_name: 'drill.zip', audience: 'connections', sharer_name: 'Sam',
       package_path: 'learners/sam/x1', launch_path: 'story.html', created_at: '2026-11-18T09:00:00Z',
     }])
+    const sessionRow = (id, recordedAt, { verb = 'http://adlnet.gov/expapi/verbs/experienced', minutes, score, earned = [] } = {}) => ({
+      id,
+      recorded_at: recordedAt,
+      created_at: recordedAt,
+      statement: {
+        verb: { id: verb },
+        object: { definition: { name: { 'en-US': 'Fire drill' } } },
+        result: { ...(minutes ? { duration: `PT${minutes}M` } : {}), ...(score != null ? { score: { scaled: score } } : {}) },
+        context: { extensions: { 'https://learnscope.app/xapi/extensions/package-session': { resourceId: 'x1', sessionId: id, statementCount: 3, earned } } },
+      },
+    })
     lib.listMyPackageSessions.mockResolvedValue({
       x1: [
-        { id: 's2', openedAt: '2026-11-18T14:00:00Z', minutes: 12, outcome: 'passed', earned: ['Gold stamp'] },
-        { id: 's1', openedAt: '2026-11-17T09:00:00Z', minutes: 5, outcome: null, earned: ['Bronze stamp', 'Gold stamp'] },
+        sessionRow('s2', '2026-11-18T14:00:00Z', { verb: 'http://adlnet.gov/expapi/verbs/passed', minutes: 12, score: 0.85, earned: ['Gold stamp'] }),
+        sessionRow('s1', '2026-11-17T09:00:00Z', { minutes: 5, earned: ['Bronze stamp', 'Gold stamp'] }),
       ],
     })
     lib.listMyPackageStatements.mockResolvedValue([
       { id: 'st1', recorded_at: '2026-11-18T14:05:00Z', statement: { verb: { id: 'https://openbadgespec.org/xapi/verbs/earned', display: { 'en-US': 'earned' } }, object: { definition: { name: { 'en-US': 'Gold stamp' } } } } },
     ])
     render(<SkillResourcesSection skill={librarySkill} user={user} />)
-    const activity = await screen.findByText(/Opened 2 times/)
-    expect(activity).toHaveTextContent(`Opened 2 times · last ${formatFullDate('2026-11-18T14:00:00Z')} · Passed · 2 earned`)
-    expect(screen.getByText('Bronze stamp')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show your activity' }))
-    expect(screen.getByText(`${formatFullDate('2026-11-18T14:00:00Z')} · 12 min · Passed · 1 earned`)).toBeInTheDocument()
-    expect(await screen.findByText(/^earned$/)).toBeInTheDocument()
+    const activity = await waitFor(() => {
+      const found = document.querySelector('[data-package-activity]')
+      if (!found) throw new Error('not yet')
+      return found
+    })
+    // What was achieved leads, as on the timeline: best outcome and score, then
+    // everything earned once each in the order earned.
+    expect(within(activity).getByText('Passed · 85%')).toBeInTheDocument()
+    const earned = within(activity).getByRole('list', { name: 'Earned' })
+    expect(within(earned).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['★Bronze stamp', '★Gold stamp'])
+    expect(within(activity).getByText('2 sessions · 17m')).toBeInTheDocument()
+    // The resource already names the package and its skill.
+    expect(within(activity).queryByText('Fire drill')).not.toBeInTheDocument()
+
+    fireEvent.click(within(activity).getByRole('button', { name: /Show sessions/ }))
+    expect(within(activity).getByText(/· 12m · Passed 85% · ★ Gold stamp/)).toBeInTheDocument()
+    expect(await within(activity).findByText(/^earned$/)).toBeInTheDocument()
     expect(lib.listMyPackageStatements).toHaveBeenCalledWith('me', 'x1')
   })
 

@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 import { readPackage, removeStorageFolder, scormLaunchUrl, uploadZipEntries } from './courseContent'
-import { PROVENANCE_EXTENSION_IRI, durationMinutes, packageSessionFromStatement } from './xapiStatement'
+import { PROVENANCE_EXTENSION_IRI, packageSessionFromStatement } from './xapiStatement'
 
 // A learner's own resources on a skill -- documents, videos and links they
 // keep for learning it -- and the ones others have shared with them. See
@@ -291,12 +291,13 @@ export function suggestResourcesForLevel(resources, levels, limit = 3) {
 }
 
 // The learner's own sessions in xAPI package resources -- the one activity
-// the LRS writes per session (0316) -- grouped by resource id, newest first.
+// the LRS writes per session (0316) -- grouped by resource id, newest first,
+// as rows the timeline's package entry reads (see packageGroupSummary).
 // Only ever their own: these are rows of their own xAPI record.
 export async function listMyPackageSessions(userId) {
   const { data, error } = await supabase
     .from('xapi_statements')
-    .select('id, recorded_at, statement')
+    .select('id, recorded_at, created_at, statement')
     .eq('user_id', userId)
     // Only the activities the LRS wrote for sessions -- never statements a
     // package sent itself dressed up as one.
@@ -310,37 +311,9 @@ export async function listMyPackageSessions(userId) {
   for (const row of data ?? []) {
     const session = packageSessionFromStatement(row.statement)
     if (!session?.resourceId) continue
-    ;(byResource[session.resourceId] ??= []).push(packageSessionSummary(row))
+    ;(byResource[session.resourceId] ??= []).push(row)
   }
   return byResource
-}
-
-const OUTCOME_BY_VERB = {
-  'http://adlnet.gov/expapi/verbs/passed': 'passed',
-  'http://adlnet.gov/expapi/verbs/failed': 'failed',
-  'http://adlnet.gov/expapi/verbs/completed': 'completed',
-}
-
-// One session as the resource shows it.
-export function packageSessionSummary(row) {
-  const session = packageSessionFromStatement(row.statement) ?? {}
-  return {
-    id: row.id,
-    openedAt: row.recorded_at,
-    minutes: durationMinutes(row.statement),
-    outcome: OUTCOME_BY_VERB[row.statement?.verb?.id] ?? null,
-    earned: Array.isArray(session.earned) ? session.earned : [],
-  }
-}
-
-// Across sessions: how often opened, when last, the best outcome reached and
-// everything earned.
-export function packageActivityOverview(sessions) {
-  if (!sessions?.length) return null
-  const rank = { completed: 1, failed: 0, passed: 2 }
-  const outcome = sessions.reduce((best, s) => (s.outcome && (best == null || rank[s.outcome] > rank[best]) ? s.outcome : best), null)
-  const earned = [...new Set(sessions.flatMap((s) => s.earned))]
-  return { count: sessions.length, lastOpenedAt: sessions[0].openedAt, outcome, earned }
 }
 
 // What the package itself recorded for this learner, newest first.
