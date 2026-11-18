@@ -13,10 +13,12 @@ import { createSkillPackageLaunchSession, packageLaunchUrl } from '../lib/skillR
 // loaded through fetchShimmedLaunchDoc so its storage probes don't crash it;
 // it can't reach a window.API from inside the sandbox, so it plays without
 // reporting progress. An xAPI package is launched with its own short-lived
-// session, so the statements it sends go to the learner's xAPI record. A
-// package anyone may have shared is told only that launch, not who the
-// learner is: its actor is the session, which the LRS maps back to them.
-export default function SkillPackageOverlay({ resource, userId, onClose }) {
+// session, so the statements it sends go to the learner's xAPI record and
+// the session shows as one activity on skillId, the skill it was opened
+// from. A package anyone may have shared isn't told who the learner is: its
+// actor is the learner's registration for that package (the same each time,
+// so it can resume), which the LRS maps back to them.
+export default function SkillPackageOverlay({ resource, userId, skillId = null, onClose }) {
   const { t } = useLanguage()
   const [frame, setFrame] = useState(null)
   const [error, setError] = useState(null)
@@ -26,8 +28,8 @@ export default function SkillPackageOverlay({ resource, userId, onClose }) {
     if (!baseUrl) return undefined
     let cancelled = false
     const load = resource.kind === 'xapi'
-      ? createSkillPackageLaunchSession(resource.id, userId)
-        .then((session) => ({ src: buildAdlLaunchUrl(baseUrl, session, session.id, xapiActivityId(resource)) }))
+      ? createSkillPackageLaunchSession(resource.id, userId, skillId)
+        .then((session) => ({ src: buildAdlLaunchUrl(baseUrl, session, session.registration, xapiActivityId(resource)) }))
       : fetchShimmedLaunchDoc(baseUrl).then((srcDoc) => ({ srcDoc }))
     load
       .then((next) => !cancelled && setFrame(next))

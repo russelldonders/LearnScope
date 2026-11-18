@@ -11,6 +11,10 @@ export async function fetchConnectorContributions(userId, source) {
     .from('xapi_statements')
     .select('id, statement, recorded_at, skill_id')
     .eq('user_id', userId)
+    // A course package's own statements can't pass themselves off as a
+    // connector's.
+    .is('skill_resource_id', null)
+    .is('resource_id', null)
     .contains('statement', { context: { extensions: { [PROVENANCE_EXTENSION_IRI]: { source } } } })
   if (error) throw error
   if (!statements?.length) return []

@@ -58,6 +58,9 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
       .from('xapi_statements')
       .select('*')
       .eq('user_id', user.id)
+      // A package's own statements are listed on its resource; each session
+      // shows here as one activity instead (0316).
+      .is('skill_resource_id', null)
       .order('created_at', { ascending: false })
     if (error) setError(error.message)
     else setStatements(data)

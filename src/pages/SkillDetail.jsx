@@ -28,7 +28,7 @@ import CourseOverlay from '../components/CourseOverlay'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
-import { isDiagnosticStatement, isPeerRatingStatement } from '../lib/xapiStatement'
+import { isDiagnosticStatement, isPeerRatingStatement, packageSessionFromStatement } from '../lib/xapiStatement'
 import { saveActivity } from '../lib/activitySkillLinks'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
@@ -331,8 +331,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // excluded here or it silently marks "Record an activity" done and
   // inflates practical trust/history for a skill nobody has practiced yet.
   const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement) && !isPeerRatingStatement(s.statement))
+  // Time spent in a course package is listed as activity on the skill and
+  // counts towards goals, but isn't evidence of doing the skill: opening a
+  // package mustn't make a level "Evidence supported" or tick off logging an
+  // activity that shows the skill in action (0316).
+  const evidenceStatements = practicalStatements.filter((s) => !packageSessionFromStatement(s.statement))
   const invitesSentCount = invites.length
-  const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
+  const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || evidenceStatements.length > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
   // The most recent knowledge-axis event wins, whichever kind it is. A fresh
   // self-assessment after a confirmation is a claim of having grown beyond
@@ -378,7 +383,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
     ? computeTrustStatus({
         axis: 'practical',
         selfAssessedCount,
-        evidenceCount: practicalStatements.length,
+        evidenceCount: evidenceStatements.length,
         peerRatingsCount: peerRatings.length,
         formallyValidated: isPersonValidated(
           skill.lifecycle_stage,
@@ -440,7 +445,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
     hasKnowledgeLevel: Boolean(skill?.knowledge_level),
     peerRatingsCount: peerRatings.length,
     invitesSentCount,
-    statementsCount: practicalStatements.length,
+    statementsCount: evidenceStatements.length,
     courseLinks,
     hasTarget: targets.length > 0,
     hasPendingExpertValidation: validationRequests.some((r) => r.status === 'pending'),
@@ -691,6 +696,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
             />
             {skill.user_id === user.id && (
               <SkillResourcesSection
+                onActivityChange={loadHistory}
                 skill={skill}
                 user={user}
                 knowledgeLevel={displayedKnowledgeLevel}

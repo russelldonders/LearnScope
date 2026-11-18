@@ -275,4 +275,39 @@ describe('SkillDetail', () => {
     expect(screen.queryByRole('dialog', { name: 'Closing Deals' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Negotiation', level: 1 })).toBeInTheDocument()
   })
+
+  it('lists time in a course package as activity, without calling the level evidence supported', async () => {
+    fixtures.tables.skill_peer_ratings = []
+    const packageSession = {
+      id: 'pkg-session-1',
+      recorded_at: '2026-11-18T10:00:00Z',
+      created_at: '2026-11-18T10:20:00Z',
+      statement: {
+        verb: { id: 'http://adlnet.gov/expapi/verbs/experienced', display: { 'en-US': 'Did it' } },
+        object: { id: 'https://learnscope.app/xapi/activities/res-1', definition: { name: { 'en-US': 'Fire drill' } } },
+        result: { duration: 'PT20M' },
+        context: { extensions: {
+          'https://learnscope.app/xapi/extensions/provenance': { source: 'package', externalId: 'sess-1' },
+          'https://learnscope.app/xapi/extensions/package-session': { resourceId: 'res-1', sessionId: 'sess-1', statementCount: 4, earned: [] },
+        } },
+      },
+    }
+    fixtures.statements = [packageSession]
+    renderPage('/skills/skill-1?tab=application')
+    const panel = await screen.findByRole('tabpanel')
+    await waitFor(() => expect(within(panel).getByText(/1 activity logged/)).toBeInTheDocument())
+    expect(within(panel).getByText('Fire drill')).toBeInTheDocument()
+    expect(within(panel).getByText('Self-assessed')).toBeInTheDocument()
+    expect(within(panel).queryByText('Evidence supported')).not.toBeInTheDocument()
+
+    // Something the learner logged themselves does count as evidence.
+    cleanup()
+    fixtures.statements = [packageSession, {
+      id: 'manual-1', recorded_at: '2026-11-17T10:00:00Z', created_at: '2026-11-17T10:00:00Z',
+      statement: { verb: { id: 'https://learnscope.app/xapi/verbs/practiced' }, object: { definition: { name: { 'en-US': 'Ran a fire drill' } } } },
+    }]
+    renderPage('/skills/skill-1?tab=application')
+    const again = await screen.findByRole('tabpanel')
+    await waitFor(() => expect(within(again).getByText('Evidence supported')).toBeInTheDocument())
+  })
 })

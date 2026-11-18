@@ -59,7 +59,9 @@ export function buildAdlLaunchUrl(baseUrl, session, actorName, activityId) {
       // to arbitrary uploaded package code just to identify them.
       account: { homePage: 'https://learnscope.app', name: actorName },
     }),
-    registration: session.id,
+    // The same for every launch of a package by this learner (0316), so it
+    // finds the state it saved last time.
+    registration: session.registration ?? session.id,
     activity_id: activityId,
   })
   return `${baseUrl}?${params.toString()}`

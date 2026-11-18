@@ -84,6 +84,9 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       .from('xapi_statements')
       .select('id, statement, resource_id')
       .eq('user_id', user.id)
+      // A package's own statements are listed on its resource; each session
+      // shows here as one activity instead (0316).
+      .is('skill_resource_id', null)
       .order('created_at', { ascending: false })
       .limit(RECENT_ROWS)
     setRecentRows(data ?? [])

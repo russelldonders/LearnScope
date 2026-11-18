@@ -4,6 +4,7 @@ import { formatFullDate } from '../lib/dates'
 import { listConnections } from '../lib/connections'
 import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS } from '../lib/levels'
 import SkillPackageOverlay from './SkillPackageOverlay'
+import PackageActivity from './PackageActivity'
 import {
   MAX_PACKAGE_BYTES,
   MAX_RESOURCE_FILE_BYTES,
@@ -18,6 +19,7 @@ import {
   hideSharedResource,
   isHttpUrl,
   splitWebAddress,
+  listMyPackageSessions,
   listMyResources,
   listSharedResources,
   REPORT_REASONS,
@@ -35,7 +37,9 @@ import {
 // material, so it doesn't change the skill's levels.
 // knowledgeLevel and practicalLevel are the learner's current levels on the
 // skill (either may be null), used to sort and suggest by fit.
-export default function SkillResourcesSection({ skill, user, knowledgeLevel = null, practicalLevel = null }) {
+// onActivityChange: told when a package was closed, as it may have added an
+// activity to the skill (0316).
+export default function SkillResourcesSection({ skill, user, knowledgeLevel = null, practicalLevel = null, onActivityChange = null }) {
   const { t } = useLanguage()
   const [mine, setMine] = useState([])
   const [shared, setShared] = useState([])
@@ -49,6 +53,8 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
   const [reportingId, setReportingId] = useState(null)
   // A SCORM/xAPI package open over the page.
   const [openPackage, setOpenPackage] = useState(null)
+  // The learner's own sessions in xAPI packages, by resource id.
+  const [packageSessions, setPackageSessions] = useState({})
   // The shared resource just hidden or reported, for "Hidden. Undo".
   const [hiddenNotice, setHiddenNotice] = useState(null)
   const hasLibrarySkill = Boolean(skill.library_skill_id)
@@ -74,7 +80,9 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
     ])
     setMine(own)
     setShared(others)
-  }, [skill.id, hasLibrarySkill])
+    // Their own activity in packages is a nicety: the list stands without it.
+    setPackageSessions(await listMyPackageSessions(user.id).catch(() => ({})))
+  }, [skill.id, hasLibrarySkill, user.id])
 
   useEffect(() => {
     let active = true
@@ -224,6 +232,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
                   ) : (
                     <>
                       <ResourceSummary resource={resource} onOpenFile={openFile} onOpenPackage={setOpenPackage} fit={resourceLevelFit(resource, levels)?.fit} />
+                      <PackageActivity resource={resource} sessions={packageSessions[resource.id]} userId={user.id} />
                       <p className="mt-1 text-xs text-secondary">
                         <AudienceText resource={resource} connections={connections} />
                       </p>
@@ -299,6 +308,7 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
                 {shownShared.map((resource) => (
                   <li key={resource.id} className="rounded-md border border-hairline bg-card p-3">
                     <ResourceSummary resource={resource} onOpenFile={openFile} onOpenPackage={setOpenPackage} fit={resourceLevelFit(resource, levels)?.fit} />
+                    <PackageActivity resource={resource} sessions={packageSessions[resource.id]} userId={user.id} />
                     <p className="mt-1 text-xs text-secondary">
                       {t('skillDetail.resources.sharedBy', { name: resource.sharer_name, date: formatFullDate(resource.created_at) })}
                     </p>
@@ -341,7 +351,18 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
       )}
 
       {openPackage && (
-        <SkillPackageOverlay resource={openPackage} userId={user.id} onClose={() => setOpenPackage(null)} />
+        <SkillPackageOverlay
+          resource={openPackage}
+          userId={user.id}
+          skillId={skill.user_id === user.id ? skill.id : null}
+          onClose={() => {
+            setOpenPackage(null)
+            // What the package just recorded shows straight away, here and on
+            // the skill's activity.
+            load().catch(() => {})
+            onActivityChange?.()
+          }}
+        />
       )}
     </section>
   )

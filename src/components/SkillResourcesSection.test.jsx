@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { formatFullDate } from '../lib/dates'
 
 const lib = vi.hoisted(() => ({
   listMyResources: vi.fn(),
@@ -12,6 +13,8 @@ const lib = vi.hoisted(() => ({
   unhideSharedResource: vi.fn(),
   reportSharedResource: vi.fn(),
   createSkillPackageLaunchSession: vi.fn(),
+  listMyPackageSessions: vi.fn(),
+  listMyPackageStatements: vi.fn(),
 }))
 const content = vi.hoisted(() => ({ fetchShimmedLaunchDoc: vi.fn() }))
 const connections = vi.hoisted(() => ({ listConnections: vi.fn() }))
@@ -31,12 +34,14 @@ vi.mock('../context/LanguageContext', async () => {
 const { default: SkillResourcesSection } = await import('./SkillResourcesSection')
 
 const user = { id: 'me' }
-const librarySkill = { id: 'skill-1', library_skill_id: 'lib-1' }
+const librarySkill = { id: 'skill-1', user_id: 'me', library_skill_id: 'lib-1' }
 const customSkill = { id: 'skill-2', library_skill_id: null }
 
 beforeEach(() => {
   lib.listMyResources.mockResolvedValue([])
   lib.listSharedResources.mockResolvedValue([])
+  lib.listMyPackageSessions.mockResolvedValue({})
+  lib.listMyPackageStatements.mockResolvedValue([])
   lib.addResource.mockResolvedValue('new-id')
   lib.updateResource.mockResolvedValue()
   lib.deleteResource.mockResolvedValue()
@@ -292,7 +297,7 @@ describe('SkillResourcesSection', () => {
   })
 
   it('launches a shared xAPI package with its own session, recording to the viewer', async () => {
-    lib.createSkillPackageLaunchSession.mockResolvedValue({ id: 'reg-1', token: 'tok' })
+    lib.createSkillPackageLaunchSession.mockResolvedValue({ id: 'session-1', token: 'tok', registration: 'reg-1' })
     lib.listSharedResources.mockResolvedValue([{
       id: 'x1', kind: 'xapi', title: 'Fire drill', file_name: 'drill.zip', audience: 'connections', sharer_name: 'Sam',
       package_path: 'learners/sam/x1', launch_path: 'story.html', created_at: '2026-11-18T09:00:00Z',
@@ -300,7 +305,8 @@ describe('SkillResourcesSection', () => {
     render(<SkillResourcesSection skill={librarySkill} user={user} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Fire drill' }))
     const frame = await within(screen.getByRole('dialog')).findByTitle('Fire drill')
-    expect(lib.createSkillPackageLaunchSession).toHaveBeenCalledWith('x1', 'me')
+    // Opened from the learner's own skill, so the session is an activity there.
+    expect(lib.createSkillPackageLaunchSession).toHaveBeenCalledWith('x1', 'me', 'skill-1')
     const src = new URL(frame.getAttribute('src'), 'http://localhost')
     expect(src.pathname).toBe('/course-content/learners/sam/x1/story.html')
     expect(src.searchParams.get('registration')).toBe('reg-1')
@@ -318,5 +324,46 @@ describe('SkillResourcesSection', () => {
     expect(await screen.findByText('Gone course')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Gone course' })).not.toBeInTheDocument()
     expect(screen.getByText(/its package files were deleted/)).toBeInTheDocument()
+  })
+
+  it('shows the learner\'s own activity on an xAPI package, and what it recorded when opened up', async () => {
+    lib.listSharedResources.mockResolvedValue([{
+      id: 'x1', kind: 'xapi', title: 'Fire drill', file_name: 'drill.zip', audience: 'connections', sharer_name: 'Sam',
+      package_path: 'learners/sam/x1', launch_path: 'story.html', created_at: '2026-11-18T09:00:00Z',
+    }])
+    lib.listMyPackageSessions.mockResolvedValue({
+      x1: [
+        { id: 's2', openedAt: '2026-11-18T14:00:00Z', minutes: 12, outcome: 'passed', earned: ['Gold stamp'] },
+        { id: 's1', openedAt: '2026-11-17T09:00:00Z', minutes: 5, outcome: null, earned: ['Bronze stamp', 'Gold stamp'] },
+      ],
+    })
+    lib.listMyPackageStatements.mockResolvedValue([
+      { id: 'st1', recorded_at: '2026-11-18T14:05:00Z', statement: { verb: { id: 'https://openbadgespec.org/xapi/verbs/earned', display: { 'en-US': 'earned' } }, object: { definition: { name: { 'en-US': 'Gold stamp' } } } } },
+    ])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    const activity = await screen.findByText(/Opened 2 times/)
+    expect(activity).toHaveTextContent(`Opened 2 times · last ${formatFullDate('2026-11-18T14:00:00Z')} · Passed · 2 earned`)
+    expect(screen.getByText('Bronze stamp')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show your activity' }))
+    expect(screen.getByText(`${formatFullDate('2026-11-18T14:00:00Z')} · 12 min · Passed · 1 earned`)).toBeInTheDocument()
+    expect(await screen.findByText(/^earned$/)).toBeInTheDocument()
+    expect(lib.listMyPackageStatements).toHaveBeenCalledWith('me', 'x1')
+  })
+
+  it('refreshes the package\'s activity, and tells the skill, when it\'s closed', async () => {
+    const onActivityChange = vi.fn()
+    content.fetchShimmedLaunchDoc.mockResolvedValue('<p>Lesson</p>')
+    lib.listMyResources.mockResolvedValue([{
+      id: 'p1', kind: 'scorm', title: 'Safety basics', file_name: 'safety.zip', audience: 'private', recipientIds: [],
+      package_path: 'learners/me/p1', launch_path: 'index.html', created_at: '2026-11-18T09:00:00Z',
+    }])
+    render(<SkillResourcesSection skill={librarySkill} user={user} onActivityChange={onActivityChange} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Safety basics' }))
+    const dialog = screen.getByRole('dialog', { name: 'Safety basics' })
+    await within(dialog).findByTitle('Safety basics')
+    const loadsBefore = lib.listMyPackageSessions.mock.calls.length
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(onActivityChange).toHaveBeenCalled()
+    await waitFor(() => expect(lib.listMyPackageSessions.mock.calls.length).toBeGreaterThan(loadsBefore))
   })
 })

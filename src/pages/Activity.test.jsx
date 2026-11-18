@@ -6,7 +6,7 @@ const tables = { xapi_statements: [], skills: [] }
 vi.mock('../lib/supabaseClient', () => {
   const query = (table) => {
     const result = () => Promise.resolve({ data: tables[table], error: null })
-    const chain = { select: () => chain, eq: () => chain, order: result, then: (ok, fail) => result().then(ok, fail) }
+    const chain = { select: () => chain, eq: () => chain, is: () => chain, order: result, then: (ok, fail) => result().then(ok, fail) }
     return chain
   }
   return { supabase: { from: query } }

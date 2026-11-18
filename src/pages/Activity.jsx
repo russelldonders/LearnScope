@@ -48,6 +48,9 @@ export default function Activity() {
       .from('xapi_statements')
       .select('*')
       .eq('user_id', user.id)
+      // A package's own statements are listed on its resource; each session
+      // shows here as one activity instead (0316).
+      .is('skill_resource_id', null)
     if (error) setError(error.message)
     else setStatements(data)
     setLoading(false)

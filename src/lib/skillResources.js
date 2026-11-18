@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { readPackage, removeStorageFolder, scormLaunchUrl, uploadZipEntries } from './courseContent'
+import { PROVENANCE_EXTENSION_IRI, durationMinutes, packageSessionFromStatement } from './xapiStatement'
 
 // A learner's own resources on a skill -- documents, videos and links they
 // keep for learning it -- and the ones others have shared with them. See
@@ -42,12 +43,14 @@ export function packageLaunchUrl(resource) {
 }
 
 // One launch of an xAPI package on a skill: the package records its
-// statements to the learner's own xAPI record with this session's token.
-export async function createSkillPackageLaunchSession(resourceId, userId) {
+// statements to the learner's own xAPI record with this session's token,
+// and the session shows as one activity on skillId, the learner's own skill
+// it was opened from (0316).
+export async function createSkillPackageLaunchSession(resourceId, userId, skillId = null) {
   const { data, error } = await supabase
     .from('xapi_launch_sessions')
-    .insert({ skill_resource_id: resourceId, user_id: userId })
-    .select('id, token')
+    .insert({ skill_resource_id: resourceId, user_id: userId, skill_id: skillId })
+    .select('id, token, registration')
     .single()
   if (error) throw error
   return data
@@ -285,6 +288,72 @@ export function suggestResourcesForLevel(resources, levels, limit = 3) {
     .sort((a, b) => rank[a.fit.fit] - rank[b.fit.fit]
       || String(b.resource.created_at ?? '').localeCompare(String(a.resource.created_at ?? '')))
     .slice(0, limit)
+}
+
+// The learner's own sessions in xAPI package resources -- the one activity
+// the LRS writes per session (0316) -- grouped by resource id, newest first.
+// Only ever their own: these are rows of their own xAPI record.
+export async function listMyPackageSessions(userId) {
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .select('id, recorded_at, statement')
+    .eq('user_id', userId)
+    // Only the activities the LRS wrote for sessions -- never statements a
+    // package sent itself dressed up as one.
+    .is('skill_resource_id', null)
+    .not('launch_session_id', 'is', null)
+    .contains('statement', { context: { extensions: { [PROVENANCE_EXTENSION_IRI]: { source: 'package' } } } })
+    .order('recorded_at', { ascending: false })
+    .limit(500)
+  if (error) throw error
+  const byResource = {}
+  for (const row of data ?? []) {
+    const session = packageSessionFromStatement(row.statement)
+    if (!session?.resourceId) continue
+    ;(byResource[session.resourceId] ??= []).push(packageSessionSummary(row))
+  }
+  return byResource
+}
+
+const OUTCOME_BY_VERB = {
+  'http://adlnet.gov/expapi/verbs/passed': 'passed',
+  'http://adlnet.gov/expapi/verbs/failed': 'failed',
+  'http://adlnet.gov/expapi/verbs/completed': 'completed',
+}
+
+// One session as the resource shows it.
+export function packageSessionSummary(row) {
+  const session = packageSessionFromStatement(row.statement) ?? {}
+  return {
+    id: row.id,
+    openedAt: row.recorded_at,
+    minutes: durationMinutes(row.statement),
+    outcome: OUTCOME_BY_VERB[row.statement?.verb?.id] ?? null,
+    earned: Array.isArray(session.earned) ? session.earned : [],
+  }
+}
+
+// Across sessions: how often opened, when last, the best outcome reached and
+// everything earned.
+export function packageActivityOverview(sessions) {
+  if (!sessions?.length) return null
+  const rank = { completed: 1, failed: 0, passed: 2 }
+  const outcome = sessions.reduce((best, s) => (s.outcome && (best == null || rank[s.outcome] > rank[best]) ? s.outcome : best), null)
+  const earned = [...new Set(sessions.flatMap((s) => s.earned))]
+  return { count: sessions.length, lastOpenedAt: sessions[0].openedAt, outcome, earned }
+}
+
+// What the package itself recorded for this learner, newest first.
+export async function listMyPackageStatements(userId, resourceId) {
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .select('id, recorded_at, statement')
+    .eq('user_id', userId)
+    .eq('skill_resource_id', resourceId)
+    .order('recorded_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data ?? []
 }
 
 // Hiding and reporting a resource someone else shared (0292). Reporting

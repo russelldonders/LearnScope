@@ -7,6 +7,8 @@
 // mirror src/lib/levels.js and src/lib/skillLifecycle.js. The colocated test
 // fails if either copy drifts.
 
+import { PACKAGE_SESSION_EXTENSION_IRI } from './xapiPackageSession.js'
+
 export const LEVEL_LABELS = { 1: 'Beginner', 2: 'Developing', 3: 'Capable', 4: 'Skilled', 5: 'Expert' }
 
 // Forward lifecycle flow, in order, with the learner-facing label for each.
@@ -34,10 +36,14 @@ const PEER_RATING_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/peer-r
 
 // Diagnostic quizzes and connection ratings are logged as statements too, but
 // neither is practical activity -- same exclusion as SkillDetail's
-// practicalStatements.
-function isPracticalStatement(statement) {
+// practicalStatements. Nor is time in a course package (0316): it's learning,
+// not doing the skill, and its outcome and title come from the package --
+// same exclusion as SkillDetail's evidenceStatements.
+export function isPracticalStatement(statement) {
   const extensions = statement?.result?.extensions
-  return !extensions?.[DIAGNOSTIC_EXTENSION_IRI] && !extensions?.[PEER_RATING_EXTENSION_IRI]
+  return !extensions?.[DIAGNOSTIC_EXTENSION_IRI]
+    && !extensions?.[PEER_RATING_EXTENSION_IRI]
+    && !statement?.context?.extensions?.[PACKAGE_SESSION_EXTENSION_IRI]
 }
 
 function localised(map, fallback) {

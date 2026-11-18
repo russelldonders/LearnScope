@@ -2,15 +2,18 @@ import { randomUUID, createHmac } from 'node:crypto'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { completionFromStatements, launchedActivityId, shouldRecord } from '../_lib/xapiCompletion.js'
+import { buildSessionActivity } from '../_lib/xapiPackageSession.js'
+import { handleState } from '../_lib/xapiState.js'
 
 // A minimal Learning Record Store for uploaded xAPI/Tin Can packages (see
 // 0079_xapi_resources.sql). This is NOT a spec-conformant LRS -- it
 // implements just enough of the xAPI 1.0 surface for typical generated
-// packages to launch and record statements: the "about" handshake and the
-// Statements resource (GET/POST/PUT). The State/Agent-Profile/Activity-
-// Profile APIs are deliberately not implemented; a package that depends on
-// them for bookmarking will degrade (lose that bookmark) rather than fail
-// outright, since real LRS clients treat those as best-effort.
+// packages to launch and record statements: the "about" handshake, the
+// Statements resource (GET/POST/PUT) and, so packages resume where the
+// learner left off, the State resource (0316, api/_lib/xapiState.js). The
+// Agent-Profile/Activity-Profile APIs are not implemented; a package that
+// depends on them degrades rather than fails, since real LRS clients treat
+// those as best-effort.
 //
 // One function file handles every /api/xapi/* route (Vercel catch-all) --
 // this project sits at the Hobby plan's 12-function cap (see
@@ -59,8 +62,12 @@ function setCorsHeaders(res) {
   // launch token, checked below), so `*` is the only workable and still
   // safe choice here.
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Experience-API-Version')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Experience-API-Version,If-Match,If-None-Match')
+  // Everything here is data for a package, on the app's own origin: never
+  // something a browser should render or run as a page.
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'")
+  res.setHeader('X-Content-Type-Options', 'nosniff')
 }
 
 async function resolveSession(req, res) {
@@ -86,7 +93,7 @@ async function resolveSession(req, res) {
   const admin = supabaseAdmin()
   const { data: session, error } = await admin
     .from('xapi_launch_sessions')
-    .select('id, resource_id, skill_resource_id, user_id, course_id, expires_at')
+    .select('id, resource_id, skill_resource_id, skill_id, user_id, course_id, registration, summary_statement_id, summary_dismissed, created_at, expires_at')
     .eq('token', token)
     .maybeSingle()
   if (error) throw error
@@ -138,13 +145,45 @@ async function recordPackageCompletion(admin, session, statements) {
   if (error) throw error
 }
 
+// The session's one activity on the skill it was launched from (0316),
+// rebuilt from the session's statements each time new ones arrive -- only
+// the parts it uses, and timed by when the server received them.
+// insertedCount: how many of this request's statements were new. A session
+// whose activity the learner deleted (summary_dismissed, 0316) isn't given
+// it back.
+async function recordSessionActivity(admin, session, insertedCount) {
+  if (!session.skill_resource_id || insertedCount === 0 || session.summary_dismissed) return
+  const [{ data: parts, error: rowsError }, { data: resource, error: resourceError }, { data: skill, error: skillError }] = await Promise.all([
+    admin.from('xapi_statements')
+      .select('created_at, verb:statement->verb, object:statement->object, result:statement->result')
+      .eq('launch_session_id', session.id)
+      .eq('user_id', session.user_id)
+      .not('skill_resource_id', 'is', null),
+    admin.from('skill_resources').select('title').eq('id', session.skill_resource_id).maybeSingle(),
+    session.skill_id
+      ? admin.from('skills').select('id, name').eq('id', session.skill_id).eq('user_id', session.user_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ])
+  if (rowsError) throw rowsError
+  if (resourceError) throw resourceError
+  if (skillError) throw skillError
+  if (!parts?.length) return
+  const rows = parts.map((part) => ({
+    received_at: part.created_at,
+    statement: { verb: part.verb, object: part.object, result: part.result ?? undefined },
+  }))
+  const activity = buildSessionActivity({ session, rows, resourceTitle: resource?.title, skill })
+  const { error } = await admin.from('xapi_statements').upsert(activity, { onConflict: 'id' })
+  if (error) throw error
+}
+
 async function handleStatements(req, res) {
   const resolved = await resolveSession(req, res)
   if (!resolved) return
   const { admin, session } = resolved
 
   if (req.method === 'GET') {
-    const registration = req.query.registration ?? session.id
+    const registration = req.query.registration ?? session.registration
     const { data, error } = await forSessionResource(admin
       .from('xapi_statements')
       .select('statement'), session)
@@ -208,6 +247,7 @@ async function handleStatements(req, res) {
         resource_id: session.resource_id,
         ...(session.skill_resource_id ? { skill_resource_id: session.skill_resource_id } : {}),
         course_id: session.course_id,
+        launch_session_id: session.id,
         statement: stamped,
         recorded_at: stamped.timestamp ? new Date(stamped.timestamp) : new Date(),
       }
@@ -231,7 +271,10 @@ async function handleStatements(req, res) {
       return
     }
 
-    const { error } = await admin.from('xapi_statements').upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
+    const { data: inserted, error } = await admin
+      .from('xapi_statements')
+      .upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
+      .select('id')
     if (error) throw error
 
     // A package's own completed/passed statement about the launched activity
@@ -241,6 +284,11 @@ async function handleStatements(req, res) {
       await recordPackageCompletion(admin, session, incoming)
     } catch (progressError) {
       console.error('xapi completion progress error:', progressError)
+    }
+    try {
+      await recordSessionActivity(admin, session, inserted?.length ?? 0)
+    } catch (activityError) {
+      console.error('xapi session activity error:', activityError)
     }
 
     res.status(req.method === 'PUT' ? 204 : 200)
@@ -431,6 +479,12 @@ export default async function handler(req, res) {
     }
     if (resource === 'statements') {
       await handleStatements(req, res)
+      return
+    }
+    if (resource === 'activities' && path[1] === 'state') {
+      const resolved = await resolveSession(req, res)
+      if (!resolved) return
+      await handleState(resolved.admin, resolved.session, req, res)
       return
     }
     if (resource === 'lti-launch') {

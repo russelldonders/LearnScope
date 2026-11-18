@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { LEVEL_LABELS as CLIENT_LEVEL_LABELS } from '../../src/lib/levels'
 import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES, lifecycleWeight as clientWeight } from '../../src/lib/skillLifecycle'
-import { LEVEL_LABELS, lifecycleWeight, loadValidationEvidence, toWeightedPeerRating } from './skillValidationEvidence.js'
+import { LEVEL_LABELS, isPracticalStatement, lifecycleWeight, loadValidationEvidence, toWeightedPeerRating } from './skillValidationEvidence.js'
+import { PACKAGE_SESSION_EXTENSION_IRI } from './xapiPackageSession.js'
 
 // Minimal stand-in for the supabase-js query builder: each chained filter is
 // applied to that table's rows, and awaiting the chain resolves { data }.
@@ -91,5 +92,13 @@ describe('skill validation evidence', () => {
     expect(await loadValidationEvidence(fakeDb(baseTables()), 'intruder', SKILL)).toBeNull()
     expect(await loadValidationEvidence(fakeDb(baseTables({ skill_targets: [] })), OWNER, SKILL)).toBeNull()
     expect(await loadValidationEvidence(fakeDb(baseTables()), OWNER, 42)).toBeNull()
+  })
+
+  it('leaves time in a course package out of the practical evidence it weighs', () => {
+    expect(isPracticalStatement({ verb: { id: 'https://learnscope.app/xapi/verbs/practiced' } })).toBe(true)
+    expect(isPracticalStatement({
+      verb: { id: 'http://adlnet.gov/expapi/verbs/passed' },
+      context: { extensions: { [PACKAGE_SESSION_EXTENSION_IRI]: { resourceId: 'r1', sessionId: 's1', statementCount: 3, earned: [] } } },
+    })).toBe(false)
   })
 })

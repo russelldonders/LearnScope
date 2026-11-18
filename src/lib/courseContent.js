@@ -784,7 +784,7 @@ export async function createXapiLaunchSession(resourceId, userId, courseId = nul
   const { data, error } = await supabase
     .from('xapi_launch_sessions')
     .insert({ resource_id: resourceId, user_id: userId, course_id: courseId })
-    .select('id, token')
+    .select('id, token, registration')
     .single()
   if (error) throw error
   return data

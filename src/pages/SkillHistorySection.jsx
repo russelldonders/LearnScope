@@ -129,7 +129,10 @@ export function HistorySection({
             date: skill.date_added,
             createdAt: skill.date_added,
             source: skill.source,
-            provenanceSource: importProvenanceSource,
+            // Only an imported skill came from its first synced activity's
+            // source; a package session on any other skill says nothing
+            // about where the skill came from.
+            provenanceSource: skill.source === 'external_import' ? importProvenanceSource : null,
           },
           { type: 'today', date: new Date().toISOString(), createdAt: new Date().toISOString() },
           // Same-day events sort by day first, then by when the record was

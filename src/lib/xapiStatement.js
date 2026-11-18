@@ -16,6 +16,15 @@ export const PEER_RATING_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions
 // [{ metric, kind, value, unit }]. Each one describes itself, so the statement
 // still reads correctly without skill_goals (see skillGoalProgress.js).
 export const MEASUREMENT_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/measurement'
+// One session in an xAPI package resource, as the single activity the LRS
+// writes for it (api/_lib/xapiPackageSession.js, 0316):
+// { resourceId, sessionId, statementCount, earned: [names] }. Its provenance
+// source is 'package'.
+export const PACKAGE_SESSION_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/package-session'
+
+export function packageSessionFromStatement(statement) {
+  return statement?.context?.extensions?.[PACKAGE_SESSION_EXTENSION_IRI] ?? null
+}
 
 // True for statements an automated diagnostic generated (e.g. the
 // Confirming Baseline knowledge-check quiz, see skillDiagnostics.js) rather
@@ -288,6 +297,7 @@ export function provenanceFromStatement(statement) {
 // "Strava" string means a future connector just adds an entry here.
 export const PROVENANCE_SOURCE_LABELS = {
   strava: 'Strava',
+  package: 'Course package',
 }
 
 // "Advanced Databases · Computer Science BSc" rather than just "Advanced
