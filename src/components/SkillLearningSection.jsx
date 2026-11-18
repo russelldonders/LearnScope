@@ -18,8 +18,9 @@ import ProgressBar from './ProgressBar'
 // A recommended course can be enrolled in straight away (onEnrol) or added
 // to the plan first (onPlan); a planned one enrolled in from the plan
 // (onEnrolPlanned). enrollingId: the course being enrolled in just now.
-// onOpenCourse: opens an enrolled course's lessons over the page (on the
-// learner's own skill); without it, the course's own page is linked.
+// onOpenCourse: opens a course's lessons over the page -- enrolled, in
+// progress or completed (on the learner's own skill); without it, the
+// course's own page is linked.
 export default function SkillLearningSection({
   courseLinks,
   availableCourses = null,
@@ -51,9 +52,11 @@ export default function SkillLearningSection({
     return progress?.total ? Math.round((progress.completed / progress.total) * 100) : null
   }
   // An enrolled course opens over the page where it can, else on its own page.
-  const openProps = (course) => (onOpenCourse
+  // A course opens over the page where it can -- enrolled, in progress or
+  // completed alike -- else on its own page (fallbackTo).
+  const openProps = (course, fallbackTo = `/courses/${course.id}/learn`) => (onOpenCourse
     ? { onClick: () => onOpenCourse(course), opensDialog: true }
-    : { to: `/courses/${course.id}/learn` })
+    : { to: fallbackTo })
   const enrolAction = (course, handler) => handler && {
     label: enrollingId === course.id ? t('skillDetail.learning.enrolling') : t('skillDetail.learning.enrol'),
     onClick: () => handler(course),
@@ -149,7 +152,7 @@ export default function SkillLearningSection({
               key={course.id}
               name={course.name}
               detail={[course.provider, t('skillDetail.learning.completedOn', { date: formatFullDate(course.completed_date) })]}
-              to={`/courses/${course.id}`}
+              {...openProps(course, `/courses/${course.id}`)}
               cta={t('skillDetail.learning.viewCourse')}
             />
           ))}

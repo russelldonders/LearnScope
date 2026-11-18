@@ -872,6 +872,8 @@ export default {
     personal: 'Persoonlijk',
     assignedByPrefix: 'Toegewezen door',
     percentCompleteSuffix: 'voltooid',
+    filterAll: "Alle",
+    filterLabel: "Cursussen tonen",
   },
   actions: {
     heading: 'Acties',

@@ -170,4 +170,17 @@ describe('SkillLearningSection', () => {
     expect(onOpenCourse).toHaveBeenCalledWith(enrolled)
     expect(screen.queryByRole('link', { name: /Putting Clinic|Driving Range/ })).not.toBeInTheDocument()
   })
+
+  it('opens a completed course over the page too, and on its own record page without that', () => {
+    const onOpenCourse = vi.fn()
+    const done = { id: 'c1', name: 'Golf Basics', provider: null, completed_date: '2026-10-01' }
+    const { unmount } = renderSection({ courseLinks: [{ id: 'l1', courses: done }], onOpenCourse })
+    const row = within(group(l.completed)).getByRole('button', { name: /Golf Basics/ })
+    expect(row).toHaveAttribute('aria-haspopup', 'dialog')
+    fireEvent.click(row)
+    expect(onOpenCourse).toHaveBeenCalledWith(done)
+    unmount()
+    renderSection({ courseLinks: [{ id: 'l1', courses: done }] })
+    expect(within(group(l.completed)).getByRole('link', { name: /Golf Basics/ })).toHaveAttribute('href', '/courses/c1')
+  })
 })

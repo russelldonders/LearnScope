@@ -872,6 +872,8 @@ export default {
     personal: '个人',
     assignedByPrefix: '指派人：',
     percentCompleteSuffix: '已完成',
+    filterAll: "全部",
+    filterLabel: "显示课程",
   },
   actions: {
     heading: '待办',

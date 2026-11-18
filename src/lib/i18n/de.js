@@ -872,6 +872,8 @@ export default {
     personal: 'Persönlich',
     assignedByPrefix: 'Zugewiesen von',
     percentCompleteSuffix: 'abgeschlossen',
+    filterAll: "Alle",
+    filterLabel: "Kurse anzeigen",
   },
   actions: {
     heading: 'Aktionen',

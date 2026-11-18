@@ -872,6 +872,8 @@ export default {
     personal: 'Personnel',
     assignedByPrefix: 'Assigné par',
     percentCompleteSuffix: 'terminé',
+    filterAll: "Tous",
+    filterLabel: "Afficher les cours",
   },
   actions: {
     heading: 'Actions',
