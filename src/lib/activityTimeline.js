@@ -13,6 +13,7 @@ import {
   packageSessionFromStatement,
   provenanceFromStatement,
   relatedSkillsFromStatement,
+  sharedWithFromStatement,
 } from './xapiStatement'
 import { isMeasuredUnit, localDateString } from './skillGoalProgress'
 
@@ -32,6 +33,32 @@ export function checkInLevel(row) {
     ?? result[DIAGNOSTIC_EXTENSION_IRI]?.calibratedLevel
     ?? result[PEER_RATING_EXTENSION_IRI]?.level
   return Number.isInteger(level) && level >= 1 && level <= 5 ? level : null
+}
+
+// What a check-in is, for saying it plainly on the timeline:
+//   ratingGiven    -- your copy of a rating you gave someone (who, which skill)
+//   ratingReceived -- a connection's rating of your skill (who rated it)
+//   knowledgeCheck -- a knowledge check-in on one of your skills
+// with the level it landed on (a knowledge level for a knowledge check).
+// Older copies of a rating you gave only have "Alex's SQL" as their name,
+// so that stands in for the person and skill.
+export function describeCheckIn(row) {
+  const statement = row.statement ?? {}
+  const title = activityName(statement)
+  const level = checkInLevel(row)
+  const skillName = relatedSkillsFromStatement(statement)[0]?.name ?? null
+  if (isPeerRatingStatement(statement)) {
+    const rating = statement.result?.extensions?.[PEER_RATING_EXTENSION_IRI] ?? {}
+    if (rating.raterId || rating.raterName) {
+      return { kind: 'ratingReceived', name: rating.raterName || null, skill: skillName ?? title, level }
+    }
+    const sharedWith = sharedWithFromStatement(statement)
+    const skill = sharedWith?.skills?.[0]?.name
+    return sharedWith?.name && skill
+      ? { kind: 'ratingGiven', name: sharedWith.name, skill, level }
+      : { kind: 'ratingGiven', name: null, skill: title, level }
+  }
+  return { kind: 'knowledgeCheck', name: null, skill: skillName ?? title, level }
 }
 
 // Where an imported activity came from ("Strava"), and its note with the

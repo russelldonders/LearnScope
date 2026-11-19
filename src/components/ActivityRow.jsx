@@ -17,8 +17,9 @@ import {
   sharedWithFromStatement,
 } from '../lib/xapiStatement'
 import { XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
-import { activitySource, checkInLevel, isCheckIn, isJustAdded } from '../lib/activityTimeline'
+import { activitySource, describeCheckIn, isCheckIn, isJustAdded } from '../lib/activityTimeline'
 import { gradientPairFor } from '../lib/placeholderGradient'
+import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS } from '../lib/levels'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -59,14 +60,22 @@ function Figure({ children }) {
 
 // A knowledge check-in or a connection's rating: something the app recorded
 // rather than something the learner did, so it stays compact.
+// A rating or knowledge check, said plainly: who rated what at which level.
 function CheckInLine({ row }) {
   const { t } = useLanguage()
-  const level = checkInLevel(row)
+  const { kind, name, skill, level } = describeCheckIn(row)
+  const levelLabel = level ? (kind === 'knowledgeCheck' ? KNOWLEDGE_LEVEL_LABELS[level] : LEVEL_LABELS[level]) : null
+  const key = kind === 'ratingGiven'
+    ? (name ? 'ratingGiven' : 'ratingGivenTitle')
+    : kind === 'ratingReceived'
+      ? (name ? 'ratingReceived' : 'ratingReceivedAnon')
+      : 'knowledgeCheck'
   return (
     <div className="flex items-center gap-2 min-w-0">
       {level && <span aria-hidden="true" className="shrink-0"><GrowthRing level={level} size={22} color="var(--color-slate)" /></span>}
-      <p className="text-xs text-secondary min-w-0 break-words">
-        <span className="font-medium text-ink">{t('activity.timeline.checkIn')}</span> · {activityName(row.statement)}
+      <p className="text-sm text-ink min-w-0 break-words">
+        {t(`activity.timeline.checkInLine.${key}`, { name, skill, title: skill })}
+        {levelLabel && <>: <span className="font-medium">{levelLabel}</span></>}
       </p>
     </div>
   )

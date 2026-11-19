@@ -90,11 +90,11 @@ describe('ActivityTimeline', () => {
     })
     renderTimeline([activity('Walk', 8), checkIn('Confirming baseline: Running'), checkIn('Confirming baseline: Cycling')])
     expect(screen.getByRole('heading', { name: 'Today · 1 activity' })).toBeInTheDocument()
-    const fold = screen.getByRole('button', { name: /2 check-ins/ })
-    const checkInText = (_, el) => el?.tagName === 'P' && el.textContent === 'Check-in · Confirming baseline: Running'
-    expect(screen.queryByText(checkInText)).not.toBeInTheDocument()
+    const fold = screen.getByRole('button', { name: /2 knowledge checks/ })
+    const checkInText = (_, el) => el?.tagName === 'P' && el.textContent === 'Knowledge check on Running: Familiar'
+    expect(screen.queryAllByText(checkInText)).toHaveLength(0)
     fireEvent.click(fold)
-    expect(screen.getByText(checkInText)).toBeInTheDocument()
+    expect(screen.getAllByText(checkInText)).toHaveLength(2)
   })
 
   it('marks a backdated entry that was just added', () => {

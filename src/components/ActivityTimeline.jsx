@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ActivityRow, { SkillChip } from './ActivityRow'
 import ActivityReflection from './ActivityReflection'
-import { combinedSetRow, dayGroups, dayLabel, displayLocale, foldTimeline, packageGroupSummary } from '../lib/activityTimeline'
+import { combinedSetRow, dayGroups, dayLabel, displayLocale, foldTimeline, packageGroupSummary, describeCheckIn } from '../lib/activityTimeline'
 import { formatMinutes } from '../lib/xapiStatement'
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates'
 import { REFLECTION_PROMPTS, canRepeatRow } from '../lib/quickActivityLog'
@@ -260,6 +260,13 @@ function SetsItem(props) {
 function CheckInsItem({ rows }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
+  // Says what's folded away: "2 ratings · 1 knowledge check".
+  const ratings = rows.filter((row) => describeCheckIn(row).kind !== 'knowledgeCheck').length
+  const checks = rows.length - ratings
+  const summary = [
+    ratings ? t(ratings === 1 ? 'activity.timeline.oneRating' : 'activity.timeline.ratings', { count: ratings }) : null,
+    checks ? t(checks === 1 ? 'activity.timeline.oneKnowledgeCheck' : 'activity.timeline.knowledgeChecks', { count: checks }) : null,
+  ].filter(Boolean).join(' · ')
   return (
     <li className="relative">
       <Dot muted />
@@ -269,7 +276,7 @@ function CheckInsItem({ rows }) {
         onClick={() => setOpen((value) => !value)}
         className="text-xs text-secondary hover:text-ink"
       >
-        {t('activity.timeline.checkIns', { count: rows.length })} {open ? '▴' : '▾'}
+        {summary} {open ? '▴' : '▾'}
       </button>
       {open && (
         <ul className="mt-2 space-y-2">

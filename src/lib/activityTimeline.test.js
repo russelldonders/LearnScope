@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { activitySource, checkInLevel, combinedSetRow, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, packageGroupSummary, timelineRows } from './activityTimeline'
-import { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI, measurementsFromStatement } from './xapiStatement'
+import { activitySource, checkInLevel, combinedSetRow, describeCheckIn, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, packageGroupSummary, timelineRows } from './activityTimeline'
+import { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SHARED_WITH_EXTENSION_IRI, SKILL_EXTENSION_IRI, measurementsFromStatement } from './xapiStatement'
 
 // Sunday 8 November 2026, midday local time.
 const NOW = new Date(2026, 10, 8, 12).getTime()
@@ -194,5 +194,28 @@ describe('course package sessions on the timeline', () => {
     expect(summary.bestScore).toBe(85)
     expect(summary.minutes).toBe(25)
     expect(summary.sessions.map((s) => [s.row.id, s.outcome, s.score])).toEqual([['s3', 'failed', 40], ['s2', 'passed', 85], ['s1', null, null]])
+  })
+})
+
+describe('describeCheckIn', () => {
+  const rating = (extension, extra = {}) => ({ id: 'r', statement: { object: { definition: { name: { 'en-US': extra.title ?? 'SQL' } } }, result: { extensions: { [PEER_RATING_EXTENSION_IRI]: extension } }, context: extra.context } })
+
+  it('says who you rated, on which skill, and the level', () => {
+    const row = rating({ level: 4 }, { title: 'Ben’s SQL', context: { extensions: { [SHARED_WITH_EXTENSION_IRI]: { name: 'Ben', kind: 'rated', skills: [{ name: 'SQL' }] } } } })
+    expect(describeCheckIn(row)).toEqual({ kind: 'ratingGiven', name: 'Ben', skill: 'SQL', level: 4 })
+  })
+
+  it('falls back to an older rating’s own name', () => {
+    expect(describeCheckIn(rating({ level: 2 }, { title: 'Ben’s SQL' }))).toEqual({ kind: 'ratingGiven', name: null, skill: 'Ben’s SQL', level: 2 })
+  })
+
+  it('says who rated your skill', () => {
+    const row = rating({ level: 3, raterId: 'ana', raterName: 'Ana' }, { context: { extensions: { [SKILL_EXTENSION_IRI]: [{ id: 's', name: 'SQL' }] } } })
+    expect(describeCheckIn(row)).toEqual({ kind: 'ratingReceived', name: 'Ana', skill: 'SQL', level: 3 })
+  })
+
+  it('names a knowledge check by its skill', () => {
+    const row = { id: 'd', statement: { object: { definition: { name: { 'en-US': 'Confirming baseline: SQL (Knowledge level 3)' } } }, result: { extensions: { [DIAGNOSTIC_EXTENSION_IRI]: { confirmedLevel: 3 } } }, context: { extensions: { [SKILL_EXTENSION_IRI]: [{ id: 's', name: 'SQL' }] } } } }
+    expect(describeCheckIn(row)).toEqual({ kind: 'knowledgeCheck', name: null, skill: 'SQL', level: 3 })
   })
 })
