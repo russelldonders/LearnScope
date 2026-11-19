@@ -13,6 +13,8 @@ const employer = vi.hoisted(() => ({ listMyLineManagementWithConnections: vi.fn(
 vi.mock('../lib/connections', () => connections)
 vi.mock('../lib/managerTeams', () => teams)
 vi.mock('../lib/employerManagement', () => employer)
+// Tested on its own (ConnectionSharedActivity.test.jsx).
+vi.mock('./ConnectionSharedActivity', () => ({ default: ({ connection }) => <p>Log something with {connection.name}</p> }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' }, refreshWorkspaces: vi.fn() }) }))
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
@@ -30,9 +32,9 @@ function PeoplePage() {
   return <p>People page {location.state?.disconnectedName}</p>
 }
 
-function renderPanel(props = {}) {
+function renderPanel(props = {}, path = '/skills-profile/alex') {
   return render(
-    <MemoryRouter initialEntries={['/skills-profile/alex']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/skills-profile/:userId" element={<ConnectionPanel userId="alex" name="Alex" {...props} />} />
         <Route path="/connections" element={<PeoplePage />} />
@@ -96,6 +98,7 @@ describe('ConnectionPanel', () => {
     expect(screen.queryByText('They rated your SQL: Capable')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
+    expect(screen.getByText('Log something with Alex')).toBeInTheDocument()
     expect(screen.getByText('Data Basics')).toBeInTheDocument()
     // Level changes are the profile's own Recent growth, shown after.
     expect(screen.queryByText('Python')).not.toBeInTheDocument()
@@ -143,5 +146,11 @@ describe('ConnectionPanel', () => {
     renderPanel()
     fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }))
     expect(screen.getByText('Nothing new from Alex lately.')).toBeInTheDocument()
+  })
+
+  it('opens on the Activity tab from a link', async () => {
+    renderPanel({}, '/skills-profile/alex?tab=activity')
+    expect(await screen.findByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Log something with Alex')).toBeInTheDocument()
   })
 })

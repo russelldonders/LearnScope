@@ -32,6 +32,14 @@ export function packageSessionFromStatement(statement) {
 // lead back to the step.
 export const PLAN_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/plan'
 
+// An activity logged in a connection's context: the other person's name, how
+// it relates to them -- "joint" (done together) or "observed" (they did it,
+// the learner saw), with addedFrom on a copy someone added from what a
+// connection logged -- and the skills involved by library id, so the other
+// person's own matching skills can be found. Who it is lives on the row
+// (with_user_id); this keeps the record readable on its own.
+export const SHARED_WITH_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/shared-with'
+
 export function relatedPlanFromStatement(statement) {
   const plan = statement?.context?.extensions?.[PLAN_EXTENSION_IRI]
   return plan?.id ? plan : null
@@ -139,6 +147,7 @@ export function buildStatement({
   relatedExperience,
   relatedPlan,
   provenance,
+  sharedWith,
   durationHours,
   durationMinutes,
   measurements,
@@ -176,7 +185,7 @@ export function buildStatement({
     statement.result = { ...statement.result, extensions: { [MEASUREMENT_EXTENSION_IRI]: measurements } }
   }
 
-  if (skills.length > 0 || relatedExperience || relatedPlan || provenance) {
+  if (skills.length > 0 || relatedExperience || relatedPlan || provenance || sharedWith) {
     statement.context = { extensions: {} }
     if (skills.length > 0) {
       statement.context.extensions[SKILL_EXTENSION_IRI] = skills.map((s) => ({ id: s.id, name: s.name }))
@@ -203,6 +212,15 @@ export function buildStatement({
     if (relatedPlan) {
       statement.context.extensions[PLAN_EXTENSION_IRI] = { id: relatedPlan.id, title: relatedPlan.title, itemId: relatedPlan.itemId }
     }
+    if (sharedWith) {
+      statement.context.extensions[SHARED_WITH_EXTENSION_IRI] = {
+        name: sharedWith.name,
+        kind: sharedWith.kind,
+        skills: (sharedWith.skills ?? []).map((skill) => ({ libraryId: skill.libraryId ?? null, name: skill.name })),
+        // A copy the learner added from what the connection logged.
+        ...(sharedWith.addedFrom ? { addedFrom: true } : {}),
+      }
+    }
   }
 
   return statement
@@ -217,7 +235,9 @@ export function buildStatement({
 // ActivityRow/Activity.jsx's click-through navigates straight to
 // `/skills/${relatedSkills[0].id}` assuming it's the viewer's own skill --
 // including it would produce a broken link for the rater.
-export function buildPeerRatingStatement({ actor, ownerName, skillName, level, comments }) {
+// skillLibraryId (optional) names the skill for the "shared with" tag, so the
+// rating shows on the connection's page for both of you (see 0322).
+export function buildPeerRatingStatement({ actor, ownerName, skillName, level, comments, skillLibraryId = null }) {
   return {
     id: crypto.randomUUID(),
     actor: {
@@ -241,6 +261,11 @@ export function buildPeerRatingStatement({ actor, ownerName, skillName, level, c
     result: {
       extensions: { [PEER_RATING_EXTENSION_IRI]: { level } },
     },
+    context: {
+      extensions: {
+        [SHARED_WITH_EXTENSION_IRI]: { name: ownerName, kind: 'rated', skills: [{ libraryId: skillLibraryId, name: skillName }] },
+      },
+    },
   }
 }
 
@@ -263,6 +288,10 @@ export function relatedSkillsFromStatement(statement) {
   const value = statement.context?.extensions?.[SKILL_EXTENSION_IRI]
   if (!value) return []
   return Array.isArray(value) ? value : [value]
+}
+
+export function sharedWithFromStatement(statement) {
+  return statement?.context?.extensions?.[SHARED_WITH_EXTENSION_IRI] ?? null
 }
 
 export function relatedExperienceFromStatement(statement) {

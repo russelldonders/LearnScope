@@ -14,6 +14,7 @@ import {
   formatMeasurements,
   planStepPath,
   relatedPlanFromStatement,
+  sharedWithFromStatement,
 } from '../lib/xapiStatement'
 import { XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
 import { activitySource, checkInLevel, isCheckIn, isJustAdded } from '../lib/activityTimeline'
@@ -100,6 +101,11 @@ export default function ActivityRow({ row, onClick, framed = true, dated = false
   // Recorded by ticking off a plan step: it names the plan and leads back to
   // the step there.
   const relatedPlan = relatedPlanFromStatement(statement)
+  // Logged with or about a connection, or added from what one logged.
+  const sharedWith = sharedWithFromStatement(statement)
+  const sharedChip = sharedWith?.name
+    ? t(`sharedActivity.chip.${sharedWith.addedFrom && sharedWith.kind === 'observed' ? 'seenBy' : sharedWith.kind === 'observed' ? 'observed' : 'joint'}`, { name: sharedWith.name })
+    : null
   const { source, note, distance } = activitySource(statement)
   const figures = [
     ...(formatMeasurements(statement) ? formatMeasurements(statement).split(' · ') : []),
@@ -158,9 +164,12 @@ export default function ActivityRow({ row, onClick, framed = true, dated = false
         )}
       </div>
 
-      {(relatedSkills.length > 0 || relatedExperience || relatedPlan || source) && (
+      {(relatedSkills.length > 0 || relatedExperience || relatedPlan || source || sharedChip) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {relatedSkills.map((skill) => <SkillChip key={skill.id} skill={skill} />)}
+          {sharedChip && (
+            <span className="inline-flex items-center rounded-full border border-moss/40 bg-moss/10 px-2 py-0.5 text-xs text-ink">{sharedChip}</span>
+          )}
           {relatedPlan && (
             <Link
               to={planStepPath(relatedPlan)}

@@ -5,7 +5,9 @@ import { uploadEvidenceFiles } from './skillEvidence'
 // row (primary skill + optional experience), its full related-skill links,
 // and any evidence files. The single path every "record activity" surface
 // uses, so they can't drift apart.
-export async function saveActivity({ userId, statement, evidence, skillIds, experienceId = null }) {
+// sharedWith ({ userId, kind }) tags it with a connection: done together
+// ("joint") or seen them do ("observed"), see 0322.
+export async function saveActivity({ userId, statement, evidence, skillIds, experienceId = null, sharedWith = null }) {
   const primarySkillId = skillIds[0] ?? null
   const { data, error } = await supabase
     .from('xapi_statements')
@@ -16,6 +18,7 @@ export async function saveActivity({ userId, statement, evidence, skillIds, expe
       skill_id: primarySkillId,
       experience_id: experienceId,
       evidence_url: evidence?.evidenceUrl || null,
+      ...(sharedWith ? { with_user_id: sharedWith.userId, with_kind: sharedWith.kind } : {}),
     })
     .select()
     .single()

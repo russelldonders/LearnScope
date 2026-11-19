@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import ConfirmDialog from './ConfirmDialog'
 import ConnectionTeamInviteControl from './ConnectionTeamInviteControl'
+import ConnectionSharedActivity from './ConnectionSharedActivity'
 import GrowthRing from './GrowthRing'
 import { EventRow } from './ConnectionsActivityFeed'
 import { describeRelationships, tieKindOf } from '../lib/connectionRelationships'
@@ -46,7 +47,7 @@ const TAB_KEYS = ['you', 'skills', 'activity']
 // someone you aren't connected to there's no "you and them", so the page
 // shows its own skills and growth untabbed (fallback).
 export default function ConnectionPanel({
-  userId, name, header = () => null, commonSkills = null, skills = null, growth = null, fallback = null,
+  userId, name, header = () => null, commonSkills = null, skills = null, growth = null, fallback = null, theirSkills = [],
 }) {
   const { user, refreshWorkspaces } = useAuth()
   const { t } = useLanguage()
@@ -55,7 +56,9 @@ export default function ConnectionPanel({
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('you')
+  // ?tab=activity opens a tab directly, e.g. from a "logged with you" alert.
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => (TAB_KEYS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'you'))
   const tabRefs = useRef({})
 
   useEffect(() => {
@@ -226,6 +229,7 @@ export default function ConnectionPanel({
 
         {activeTab === 'activity' && (
           <div className="space-y-8">
+            <ConnectionSharedActivity connection={{ id: userId, name }} theirSkills={theirSkills} />
             {state.activity.length > 0 && (
               <section aria-labelledby="connection-activity-heading" className="bg-card border border-hairline rounded-lg p-6">
                 <h2 id="connection-activity-heading" className={heading}>{t('connections.recentActivity')}</h2>

@@ -157,7 +157,7 @@ export default function SkillsProfile() {
   }
 
   async function handleSubmitRating(level, comments) {
-    await rateConnectionSkill(ratingSkill, name || 'This person', level, comments)
+    await rateConnectionSkill(ratingSkill, name || 'This person', level, comments, userId)
     setMyRatingBySkillId((prev) => ({ ...prev, [ratingSkill.id]: { level, ratedAt: new Date().toISOString() } }))
     setRatingSkill(null)
   }
@@ -391,6 +391,7 @@ export default function SkillsProfile() {
                 userId={userId}
                 name={displayName}
                 header={profileBox}
+                theirSkills={visible ? skills : []}
                 commonSkills={commonSkillsSection}
                 skills={allSkillsSection}
                 growth={growthSection}

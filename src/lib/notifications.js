@@ -14,6 +14,7 @@ import { listMyManagerTeamInvites } from './managerTeams'
 import { loadActionSources } from './actionLoading'
 import { listIncomingPlanInvitations } from './learnerPlans'
 import { listActiveGoalsForAttention } from './skillGoals'
+import { listSharedActivitySuggestions } from './sharedActivities'
 import { supabase } from './supabaseClient'
 import { LEVEL_LABELS } from './levels'
 
@@ -104,6 +105,16 @@ export function buildNotificationItems(values, profiles = {}) {
       detail: `${item.inviter_name || 'Someone'} recommended ${item.skill_name || 'a skill'}.`,
       occurredAt: item.created_at,
       actions: [{ label: 'Review recommendation', href: `/recommend/${item.share_code}` }],
+    })),
+    ...(values.sharedActivities ?? []).map((item) => notification({
+      id: item.id,
+      kind: 'shared-activity',
+      title: 'Shared Activity',
+      detail: item.kind === 'observed'
+        ? `${item.logged_by_name || 'A connection'} saw you: “${item.title || 'an activity'}”. Add it to your record?`
+        : `${item.logged_by_name || 'A connection'} logged “${item.title || 'an activity'}” with you. Add it to your record?`,
+      occurredAt: item.happened_at,
+      actions: [{ label: 'Review', href: `/skills-profile/${item.logged_by}?tab=activity` }],
     })),
     ...values.unseenRatings.map((item) => notification({
       id: item.id,
@@ -235,6 +246,7 @@ export async function loadNotifications(userId) {
     { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(userId) },
     { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
     { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },
+    { key: 'sharedActivities', label: 'shared activities', fallback: [], load: listSharedActivitySuggestions },
     { key: 'selfAssessments', label: 'self-assessment reminders', fallback: [], load: () => listUpcomingSelfAssessments(userId) },
     { key: 'targets', label: 'skill target reminders', fallback: [], load: () => listUpcomingTargets(userId) },
     { key: 'goals', label: 'goal reminders', fallback: [], load: () => listActiveGoalsForAttention(userId) },

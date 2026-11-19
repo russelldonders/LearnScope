@@ -27,6 +27,15 @@ export default function VoiceInputButton({ text, onText, onError, onListeningCha
   const recognitionRef = useRef(null)
 
   useEffect(() => () => recognitionRef.current?.abort(), [])
+  // The form disables the button once it's sent ("Log it"): stop listening
+  // there and then, dropping anything still being heard, so the microphone
+  // doesn't stay on and a late result can't refill the box that was cleared.
+  useEffect(() => {
+    if (!disabled || !recognitionRef.current) return
+    const recognition = recognitionRef.current
+    recognition.onresult = null
+    recognition.abort()
+  }, [disabled])
   useEffect(() => {
     onListeningChange?.(listening)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reacts to listening changing

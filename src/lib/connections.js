@@ -359,7 +359,10 @@ export async function markPeerRatingsSeen() {
 // function (20260908090000) also writes the owner's own xAPI copy of this
 // rating server-side, since it crosses into the owner's user_id; this then
 // writes the rater's own copy client-side, which stays within their own row.
-export async function rateConnectionSkill(skill, ownerName, level, comments) {
+// ownerId tags your own copy with the person you rated, so it also shows on
+// their page for both of you; without it (or if tagging is refused) the copy
+// is saved untagged as before.
+export async function rateConnectionSkill(skill, ownerName, level, comments, ownerId = null) {
   const { data, error } = await supabase.rpc('rate_connection_skill', {
     p_skill_id: skill.id,
     p_level: level,
@@ -382,8 +385,13 @@ export async function rateConnectionSkill(skill, ownerName, level, comments) {
       skillName: skill.name,
       level,
       comments,
+      skillLibraryId: skill.library_skill_id ?? null,
     })
-    await supabase.from('xapi_statements').insert({ user_id: user.id, statement, recorded_at: statement.timestamp })
+    const row = { user_id: user.id, statement, recorded_at: statement.timestamp }
+    const { error: taggedError } = ownerId
+      ? await supabase.from('xapi_statements').insert({ ...row, with_user_id: ownerId, with_kind: 'rated' })
+      : { error: true }
+    if (taggedError) await supabase.from('xapi_statements').insert(row)
   } catch {
     // Non-fatal -- see comment above.
   }

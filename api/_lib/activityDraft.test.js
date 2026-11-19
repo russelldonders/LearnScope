@@ -214,3 +214,37 @@ describe('sets', () => {
     expect(buildActivityDraftRequest({ text: '3 sets of 20 push-ups', skills, goals: withDaily }, TODAY).prompt).toContain('never add the sets up into one value')
   })
 })
+
+describe('logging on a connection’s page', () => {
+  const connection = { name: 'Alex', skills: [{ name: 'Public speaking' }, { name: 'SQL' }] }
+  const withAlex = (body = {}) => buildActivityDraftRequest({ text: 'Alex gave a great board talk', skills, goals, connection, ...body }, TODAY)
+
+  it('asks who did it, listing their skills, and works without skills of your own', () => {
+    const request = withAlex({ skills: [] })
+    expect(request.error).toBeUndefined()
+    expect(request.prompt).toContain('T1: Public speaking')
+    expect(request.prompt).toContain('done_by')
+    expect(request.schema.properties.activities.items.required).toContain('their_skills')
+    // Without a connection the usual schema and rule stand.
+    expect(buildActivityDraftRequest({ text: 'ran', skills: [] }, TODAY).error).toBeTruthy()
+    expect(buildActivityDraftRequest({ text: 'ran', skills }, TODAY).schema.properties.activities.items.required).not.toContain('done_by')
+  })
+
+  it('keeps something they did off your own skills and goals, naming their skills instead', () => {
+    const draft = normalizeActivityDraft({
+      outcome: 'activities',
+      message: null,
+      activities: [activity({ title: 'Board talk', done_by: 'them', skills: [2], goal_values: [{ goal: 2, value: 30, distance: null, seconds: null, sets: [] }], their_skills: [1, 1, 9], new_skill: 'Speaking', experience: null })],
+    }, withAlex().context)
+    expect(draft.activities[0]).toMatchObject({ done_by: 'them', skills: [], goal_values: [], new_skill: null, their_skills: [0] })
+  })
+
+  it('keeps your own skills on something you did together', () => {
+    const draft = normalizeActivityDraft({
+      outcome: 'activities',
+      message: null,
+      activities: [activity({ title: 'Paired on SQL', done_by: 'together', skills: [3], their_skills: [2], experience: null })],
+    }, withAlex().context)
+    expect(draft.activities[0]).toMatchObject({ done_by: 'together', skills: [2], their_skills: [1] })
+  })
+})

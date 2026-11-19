@@ -51,7 +51,9 @@ export function currentExperiences(rows, today = localDateString()) {
 // Asks AI to read the sentence. Skills, goals and current roles/projects are
 // sent as plain lists and come back as positions in them, so it can only
 // point at what the learner has.
-export async function draftActivitiesFromText({ text, skills, goals, experiences = [], language }) {
+// connection ({ name, skills }): logging on a connection's page, where each
+// activity is either done together or something they did that you saw.
+export async function draftActivitiesFromText({ text, skills, goals, experiences = [], language, connection = null }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -83,6 +85,7 @@ export async function draftActivitiesFromText({ text, skills, goals, experiences
         start_date: experience.start_date,
         end_date: experience.end_date,
       })),
+      ...(connection ? { connection: { name: connection.name, skills: connection.skills.map((skill) => ({ name: skill.name })) } } : {}),
     }),
   })
   const body = await res.json().catch(() => ({}))
