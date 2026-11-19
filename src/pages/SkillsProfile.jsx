@@ -183,9 +183,13 @@ export default function SkillsProfile() {
             <GrowthRing level={skill.level} size={48} />
             <div className="min-w-0 flex-1">
               <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-              {LEVEL_LABELS[skill.level] && <p className="text-sm text-secondary">{LEVEL_LABELS[skill.level]}</p>}
+              {/* Their level is the focus, beside its ring; yours and the
+                  ratings are quieter, there to compare against. */}
+              {LEVEL_LABELS[skill.level] && (
+                <p className="text-base font-semibold text-ink leading-snug">{LEVEL_LABELS[skill.level]}</p>
+              )}
               {mine && (
-                <p className="text-xs text-ink mt-1">
+                <p className="text-xs text-secondary mt-1.5">
                   {t('skillsProfile.yourLevel', { level: LEVEL_LABELS[mine.level] ?? '—' })}
                 </p>
               )}
