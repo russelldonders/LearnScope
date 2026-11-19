@@ -601,6 +601,8 @@ export default {
       noTies: "Todavía no compartís un equipo ni una línea jerárquica.",
       youRated: "Valoraste su {skill}: {level}",
       theyRated: "Valoró tu {skill}: {level}",
+      tabs: { skills: "Habilidades", activity: "Actividad" },
+      noActivity: "Nada reciente de {name}.",
     },
     filterBySkill: "Filtrar por habilidad",
     allSkills: "Todas las habilidades",

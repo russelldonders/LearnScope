@@ -601,6 +601,8 @@ export default {
       noTies: "You don’t share a team or a reporting line yet.",
       youRated: "You rated their {skill}: {level}",
       theyRated: "They rated your {skill}: {level}",
+      tabs: { skills: "Skills", activity: "Activity" },
+      noActivity: "Nothing new from {name} lately.",
     },
     filterBySkill: "Filter by skill",
     allSkills: "All skills",

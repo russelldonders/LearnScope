@@ -35,7 +35,9 @@ describe('SkillsProfile', () => {
       </MemoryRouter>
     )
     expect(await screen.findByRole('heading', { name: 'This person' })).toBeInTheDocument()
-    expect(screen.getByText("This person hasn't made their skills profile visible.")).toBeInTheDocument()
+    // Not a connection, so no tabs: the hidden-profile state shows on its own.
+    expect(await screen.findByText("This person hasn't made their skills profile visible.")).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.getByText(/Member since/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Request skill access' })).toBeInTheDocument()
   })

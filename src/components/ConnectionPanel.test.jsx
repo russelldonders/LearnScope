@@ -30,11 +30,11 @@ function PeoplePage() {
   return <p>People page {location.state?.disconnectedName}</p>
 }
 
-function renderPanel() {
+function renderPanel(props = {}) {
   return render(
     <MemoryRouter initialEntries={['/skills-profile/alex']}>
       <Routes>
-        <Route path="/skills-profile/:userId" element={<ConnectionPanel userId="alex" name="Alex" />} />
+        <Route path="/skills-profile/:userId" element={<ConnectionPanel userId="alex" name="Alex" {...props} />} />
         <Route path="/connections" element={<PeoplePage />} />
       </Routes>
     </MemoryRouter>,
@@ -66,19 +66,29 @@ afterEach(() => {
 })
 
 describe('ConnectionPanel', () => {
-  it('shows how you relate, their activity and the ratings between you', async () => {
-    renderPanel()
+  it('puts how you relate and your ratings first, then their skills and activity in tabs', async () => {
+    renderPanel({ skills: <p>Their skills</p>, growth: <p>Their growth</p> })
+    expect(await screen.findByRole('tab', { name: 'You and Alex' })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByRole('heading', { name: 'You and Alex' })).toBeInTheDocument()
     expect(screen.getByText('Your line manager at Acme')).toBeInTheDocument()
     expect(screen.getByText('Leads you in Coaching')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/connections?section=teams&team=team-1')
     // Already in a team together, so no add-to-team.
     expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()
-    expect(screen.getByText('Data Basics')).toBeInTheDocument()
-    // Level changes are the profile's own Recent growth section.
-    expect(screen.queryByText('Python')).not.toBeInTheDocument()
     expect(screen.getByText('They rated your SQL: Capable')).toBeInTheDocument()
     expect(screen.queryByText(/Excel/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Data Basics')).not.toBeInTheDocument()
+    expect(screen.queryByText('Their skills')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Skills' }))
+    expect(screen.getByText('Their skills')).toBeInTheDocument()
+    expect(screen.queryByText('They rated your SQL: Capable')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
+    expect(screen.getByText('Data Basics')).toBeInTheDocument()
+    // Level changes are the profile's own Recent growth, shown after.
+    expect(screen.queryByText('Python')).not.toBeInTheDocument()
+    expect(screen.getByText('Their growth')).toBeInTheDocument()
   })
 
   it('offers to add them to a team when you share none', async () => {
@@ -107,5 +117,19 @@ describe('ConnectionPanel', () => {
     const { container } = renderPanel()
     await waitFor(() => expect(connections.listConnections).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows the page untabbed for someone you aren’t connected to', async () => {
+    connections.listConnections.mockResolvedValue([{ id: 'sam', name: 'Sam' }])
+    renderPanel({ fallback: <p>Untabbed profile</p> })
+    expect(await screen.findByText('Untabbed profile')).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+  })
+
+  it('says so when there’s no activity to show', async () => {
+    connections.listConnectionsActivity.mockResolvedValue([])
+    renderPanel()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }))
+    expect(screen.getByText('Nothing new from Alex lately.')).toBeInTheDocument()
   })
 })

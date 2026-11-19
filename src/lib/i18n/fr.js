@@ -601,6 +601,8 @@ export default {
       noTies: "Vous ne partagez pas encore d’équipe ni de lien hiérarchique.",
       youRated: "Vous avez évalué sa compétence {skill} : {level}",
       theyRated: "A évalué votre compétence {skill} : {level}",
+      tabs: { skills: "Compétences", activity: "Activité" },
+      noActivity: "Rien de récent de la part de {name}.",
     },
     filterBySkill: "Filtrer par compétence",
     allSkills: "Toutes les compétences",

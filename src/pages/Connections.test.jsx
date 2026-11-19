@@ -129,8 +129,10 @@ describe('Connections sections', () => {
     ])
     renderPage()
     expect(await screen.findByText('Reached Skilled in Python · Completed “Data Basics”')).toBeInTheDocument()
-    expect(screen.getByText('No updates in the last month')).toBeInTheDocument()
-    expect(screen.getByText('Connected')).toBeInTheDocument()
+    // Nothing new is simply left unsaid, and there's no date on the card.
+    expect(screen.queryByText('No updates in the last month')).not.toBeInTheDocument()
+    expect(screen.queryByText('Connected')).not.toBeInTheDocument()
+    expect(screen.queryByText(/ago$/)).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'What your connections are up to' })).not.toBeInTheDocument()
     const profiles = screen.getAllByRole('link').map((link) => link.getAttribute('href')).filter((href) => href.startsWith('/skills-profile/'))
     expect(profiles).toEqual(['/skills-profile/sam', '/skills-profile/alex', '/skills-profile/kim'])
@@ -190,8 +192,10 @@ describe('Connections sections', () => {
       { connectionUserId: 'alex', teamId: 'team-1', teamName: 'Coaching', membershipStatus: 'active', myRole: 'member', theirRole: 'manager' },
     ])
     renderPage()
-    expect(await screen.findByText('Your line manager at Acme')).toBeInTheDocument()
-    expect(screen.getByText('Leads you in Coaching')).toBeInTheDocument()
+    // Icons only on the card: the words are for screen readers and a tooltip.
+    expect(await screen.findByText('Your line manager at Acme')).toHaveClass('sr-only')
+    expect(screen.getByText('Leads you in Coaching')).toHaveClass('sr-only')
+    expect(screen.getByTitle('Leads you in Coaching')).toBeInTheDocument()
     expect(screen.getByText(/^Shared skills: Excel, Python, SQL/)).toHaveTextContent('Shared skills: Excel, Python, SQL +1 more')
     expect(screen.queryByRole('button', { name: 'Disconnect from Alex' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()
@@ -226,7 +230,12 @@ describe('Connections sections', () => {
     connectionApi.sendInviteEmail.mockResolvedValue()
     renderPage()
     expect(await screen.findByText('Invitation to connect — sent to new@example.com')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Resend email' }))
+    // The actions sit behind one small options button.
+    expect(screen.queryByRole('button', { name: 'Resend email' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Options for the invite to new@example.com' }))
+    expect(screen.getByRole('menuitem', { name: 'Copy link' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Revoke' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Resend email' }))
     await waitFor(() => expect(connectionApi.sendInviteEmail).toHaveBeenCalledWith(expect.objectContaining({
       toEmail: 'new@example.com', shareUrl: 'https://app.example/connect/abc', emailType: 'connect',
     })))

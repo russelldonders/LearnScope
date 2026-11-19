@@ -174,6 +174,152 @@ export default function SkillsProfile() {
   const filteredSkills = filterMode === 'common' ? commonSkills : skills
   const expertCount = useMemo(() => skills.filter((s) => s.level === EXPERT_LEVEL).length, [skills])
 
+  // The skills they share and their recent growth. For a connection these sit
+  // in the Skills and Activity tabs beside "You and {name}" (ConnectionPanel);
+  // otherwise one after the other.
+  const skillsSection = !visible ? (
+    <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+      <p className="text-secondary">{t('skillsProfile.notVisible', { name: displayName })}</p>
+      {!isOwnProfile && <RequestAccessButton
+        name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
+    </div>
+  ) : (
+    <div className="mb-10">
+      {!isOwnProfile && skills.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label={t('skillsProfile.filterLabel')}>
+          <button
+            type="button"
+            onClick={() => setFilterMode('common')}
+            aria-pressed={filterMode === 'common'}
+            className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
+              filterMode === 'common'
+                ? 'bg-moss text-paper border-moss'
+                : 'border-hairline text-secondary hover:text-ink'
+            }`}
+          >
+            {t('skillsProfile.inCommon', { count: commonSkills.length })}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            aria-pressed={filterMode === 'all'}
+            className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
+              filterMode === 'all'
+                ? 'bg-moss text-paper border-moss'
+                : 'border-hairline text-secondary hover:text-ink'
+            }`}
+          >
+            {t('skillsProfile.allSkills', { count: skills.length })}
+          </button>
+        </div>
+      )}
+
+      {filteredSkills.length === 0 ? (
+        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">
+            {filterMode === 'common' && skills.length > 0
+              ? t('skillsProfile.noneInCommon')
+              : t('skillsProfile.noneTracked')}
+          </p>
+          {!isOwnProfile && skills.length === 0 && <RequestAccessButton
+            name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filteredSkills.map((skill) => {
+            const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
+            const content = <>
+              <GrowthRing level={skill.level} size={48} />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
+                {tagsBySkill.get(skill.id)?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {tagsBySkill.get(skill.id).map((tag) => (
+                      <span
+                        key={tag}
+                        className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {canRate && lastRatedAt && (
+                  <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
+                    {t('skillsProfile.lastRatedByYou', { when: formatRelativeDate(lastRatedAt) })}
+                  </p>
+                )}
+              </div>
+            </>
+            return canRate ? (
+              <button
+                key={skill.id}
+                type="button"
+                onClick={() => setRatingSkill(skill)}
+                className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
+              >
+                {content}
+              </button>
+            ) : (
+              <div key={skill.id} className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center">
+                {content}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+  const growthSection = (growth.length > 0 || growthError) ? (
+    <div>
+      <h2 className="font-display text-xl text-ink mb-6">{t('skillsProfile.recentGrowth')}</h2>
+      {growthError ? (
+        <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
+          <p className="text-sm text-secondary">{t('skillsProfile.growthError')}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {growth.map((row) => (
+            <div
+              key={`${row.skill_id}-${row.assessed_at}`}
+              className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4"
+            >
+              <div className="flex items-center gap-2 shrink-0">
+                <LevelChangeRings
+                  previousLevel={row.previous_level}
+                  level={row.level}
+                  targetLevel={row.target_level}
+                  previousSize={38}
+                  size={56}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink truncate">{row.skill_name}</p>
+                <p className="text-sm text-secondary">
+                  <LevelChangeText previousLevel={row.previous_level} level={row.level} emphasiseCurrent />
+                </p>
+                {row.target_level && (
+                  <p
+                    className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
+                    title={formatAbsoluteDate(row.target_date)}
+                  >
+                    {t('skillsProfile.target', { level: LEVEL_LABELS[row.target_level], when: formatRelativeDate(row.target_date) })}
+                  </p>
+                )}
+              </div>
+              <p
+                className="font-mono text-xs text-secondary shrink-0 self-start"
+                title={formatAbsoluteDate(row.assessed_at)}
+              >
+                {formatRelativeDate(row.assessed_at)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -209,150 +355,14 @@ export default function SkillsProfile() {
               </div>
             </div>
 
-            {!isOwnProfile && <ConnectionPanel userId={userId} name={displayName} />}
-
-            {!visible ? (
-              <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-                <p className="text-secondary">{t('skillsProfile.notVisible', { name: displayName })}</p>
-                {!isOwnProfile && <RequestAccessButton
-                  name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
-              </div>
-            ) : (
-              <div className="mb-10">
-                {!isOwnProfile && skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label={t('skillsProfile.filterLabel')}>
-                    <button
-                      type="button"
-                      onClick={() => setFilterMode('common')}
-                      aria-pressed={filterMode === 'common'}
-                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
-                        filterMode === 'common'
-                          ? 'bg-moss text-paper border-moss'
-                          : 'border-hairline text-secondary hover:text-ink'
-                      }`}
-                    >
-                      {t('skillsProfile.inCommon', { count: commonSkills.length })}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterMode('all')}
-                      aria-pressed={filterMode === 'all'}
-                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
-                        filterMode === 'all'
-                          ? 'bg-moss text-paper border-moss'
-                          : 'border-hairline text-secondary hover:text-ink'
-                      }`}
-                    >
-                      {t('skillsProfile.allSkills', { count: skills.length })}
-                    </button>
-                  </div>
-                )}
-
-                {filteredSkills.length === 0 ? (
-                  <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-                    <p className="text-secondary">
-                      {filterMode === 'common' && skills.length > 0
-                        ? t('skillsProfile.noneInCommon')
-                        : t('skillsProfile.noneTracked')}
-                    </p>
-                    {!isOwnProfile && skills.length === 0 && <RequestAccessButton
-                      name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filteredSkills.map((skill) => {
-                      const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
-                      const content = <>
-                        <GrowthRing level={skill.level} size={48} />
-                        <div className="min-w-0 flex-1">
-                          <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-                          {tagsBySkill.get(skill.id)?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {tagsBySkill.get(skill.id).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {canRate && lastRatedAt && (
-                            <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
-                              {t('skillsProfile.lastRatedByYou', { when: formatRelativeDate(lastRatedAt) })}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                      return canRate ? (
-                        <button
-                          key={skill.id}
-                          type="button"
-                          onClick={() => setRatingSkill(skill)}
-                          className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
-                        >
-                          {content}
-                        </button>
-                      ) : (
-                        <div key={skill.id} className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center">
-                          {content}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {(growth.length > 0 || growthError) && (
-              <div>
-                <h2 className="font-display text-xl text-ink mb-6">{t('skillsProfile.recentGrowth')}</h2>
-                {growthError ? (
-                  <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
-                    <p className="text-sm text-secondary">{t('skillsProfile.growthError')}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {growth.map((row) => (
-                      <div
-                        key={`${row.skill_id}-${row.assessed_at}`}
-                        className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4"
-                      >
-                        <div className="flex items-center gap-2 shrink-0">
-                          <LevelChangeRings
-                            previousLevel={row.previous_level}
-                            level={row.level}
-                            targetLevel={row.target_level}
-                            previousSize={38}
-                            size={56}
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink truncate">{row.skill_name}</p>
-                          <p className="text-sm text-secondary">
-                            <LevelChangeText previousLevel={row.previous_level} level={row.level} emphasiseCurrent />
-                          </p>
-                          {row.target_level && (
-                            <p
-                              className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
-                              title={formatAbsoluteDate(row.target_date)}
-                            >
-                              {t('skillsProfile.target', { level: LEVEL_LABELS[row.target_level], when: formatRelativeDate(row.target_date) })}
-                            </p>
-                          )}
-                        </div>
-                        <p
-                          className="font-mono text-xs text-secondary shrink-0 self-start"
-                          title={formatAbsoluteDate(row.assessed_at)}
-                        >
-                          {formatRelativeDate(row.assessed_at)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {isOwnProfile ? <>{skillsSection}{growthSection}</> : (
+              <ConnectionPanel
+                userId={userId}
+                name={displayName}
+                skills={skillsSection}
+                growth={growthSection}
+                fallback={<>{skillsSection}{growthSection}</>}
+              />
             )}
           </>
         )}

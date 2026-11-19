@@ -15,7 +15,11 @@ import useAnchoredMenuPosition from '../lib/useAnchoredMenuPosition'
 //              `current` marks the item for the page being shown
 //   active  -- underline the button like a selected tab (one of its pages is open)
 //   align   -- which edge of the button the menu lines up with when there's room
-export default function DropdownNavMenu({ label, items, active = false, align = 'left', menuWidthClass = 'w-72' }) {
+//   variant -- 'tab' (default) for a nav bar; 'more' for a small "⋯" button
+//              holding a row's actions, with label as its accessible name
+// An item with keepFocus hands focus back to the button once it has run, for
+// an action that opens nothing (copying a link, say); `danger` colours it red.
+export default function DropdownNavMenu({ label, items, active = false, align = 'left', menuWidthClass = 'w-72', variant = 'tab' }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
   const buttonRef = useRef(null)
@@ -81,6 +85,8 @@ export default function DropdownNavMenu({ label, items, active = false, align = 
         ref={buttonRef}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={variant === 'more' ? label : undefined}
+        title={variant === 'more' ? label : undefined}
         onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
@@ -88,14 +94,26 @@ export default function DropdownNavMenu({ label, items, active = false, align = 
             setOpen(true)
           }
         }}
-        className={`flex items-center gap-1 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
-          active ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
-        }`}
+        className={variant === 'more'
+          ? 'inline-flex items-center justify-center w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:border-moss/50 focus:outline-none focus:ring-2 focus:ring-moss'
+          : `flex items-center gap-1 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
+            active ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+          }`}
       >
-        {label}
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
-          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-        </svg>
+        {variant === 'more' ? (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
+            <circle cx="4.5" cy="10" r="1.6" />
+            <circle cx="10" cy="10" r="1.6" />
+            <circle cx="15.5" cy="10" r="1.6" />
+          </svg>
+        ) : (
+          <>
+            {label}
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+            </svg>
+          </>
+        )}
       </button>
       {open && createPortal(
         <div
@@ -109,7 +127,7 @@ export default function DropdownNavMenu({ label, items, active = false, align = 
           {items.map((item, index) => {
             const content = (
               <>
-                <span className={`block text-sm text-ink ${item.current ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                <span className={`block text-sm ${item.danger ? 'text-red-700' : 'text-ink'} ${item.current ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
                 {item.description && <span className="mt-0.5 block text-xs text-secondary">{item.description}</span>}
               </>
             )
@@ -132,7 +150,7 @@ export default function DropdownNavMenu({ label, items, active = false, align = 
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  close({ restoreFocus: false })
+                  close({ restoreFocus: Boolean(item.keepFocus) })
                   item.onSelect?.()
                 }}
                 className={itemClass}

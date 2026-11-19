@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DropdownNavMenu from '../components/DropdownNavMenu'
 import PersonAvatar from '../components/PersonAvatar'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import InviteConnectModal from '../components/InviteConnectModal'
@@ -20,7 +21,7 @@ import {
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
-import { formatAbsoluteDate, formatFullDate, formatRelativeDate } from '../lib/dates'
+import { formatFullDate } from '../lib/dates'
 import {
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
@@ -473,26 +474,26 @@ export default function Connections() {
                       {resendError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{resendError.message}</p>}
                       {revokeError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleResend(invite)}
-                        disabled={resendingId === invite.id}
-                        className="text-sm text-moss font-medium hover:underline disabled:opacity-60"
-                      >
-                        {resendingId === invite.id ? 'Sending…' : resentId === invite.id ? 'Sent!' : 'Resend email'}
-                      </button>
-                      <button type="button" onClick={() => handleCopy(invite)} className="text-sm text-moss font-medium hover:underline">
-                        {copiedId === invite.id ? 'Copied!' : 'Copy link'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingRevoke(invite)}
-                        disabled={revokingId === invite.id}
-                        className="text-sm text-red-700 font-medium hover:underline disabled:opacity-60"
-                      >
-                        {revokingId === invite.id ? 'Revoking…' : 'Revoke'}
-                      </button>
+                    {/* One small button holds the actions; what just happened
+                        shows beside it, as the menu closes on choosing. */}
+                    <div className="flex items-center gap-3 self-end sm:self-auto sm:shrink-0">
+                      <span role="status" className="text-xs text-moss">
+                        {resendingId === invite.id ? 'Sending…'
+                          : resentId === invite.id ? 'Email sent'
+                            : copiedId === invite.id ? 'Link copied'
+                              : revokingId === invite.id ? 'Revoking…' : ''}
+                      </span>
+                      <DropdownNavMenu
+                        variant="more"
+                        align="right"
+                        menuWidthClass="w-44"
+                        label={`Options for the invite to ${invite.invitee_email}`}
+                        items={[
+                          { key: 'resend', label: 'Resend email', keepFocus: true, onSelect: () => handleResend(invite) },
+                          { key: 'copy', label: 'Copy link', keepFocus: true, onSelect: () => handleCopy(invite) },
+                          { key: 'revoke', label: 'Revoke', danger: true, onSelect: () => setPendingRevoke(invite) },
+                        ]}
+                      />
                     </div>
                   </li>
                 ))}
@@ -559,25 +560,28 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
             </span>
           </Link>
 
+          {/* Just the icons here; the words are their tooltip (and what a
+              screen reader hears), and in full on the person's page. */}
           {relationships.length > 0 && (
-            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-              {relationships.map((phrase) => (
-                <li key={phrase.key} className="flex items-center gap-1.5 text-sm text-ink font-medium">
-                  <TieIcon kind={tieKindOf(phrase.key)} />
-                  <span className="text-pretty">{t(`connections.relation.${phrase.key}`, phrase.params)}</span>
-                </li>
-              ))}
+            <ul className="mt-1.5 flex flex-wrap gap-1.5">
+              {relationships.map((phrase) => {
+                const text = t(`connections.relation.${phrase.key}`, phrase.params)
+                return (
+                  <li key={phrase.key} title={text} className="flex items-center">
+                    <TieIcon kind={tieKindOf(phrase.key)} />
+                    <span className="sr-only">{text}</span>
+                  </li>
+                )
+              })}
             </ul>
           )}
 
-          <p className={`mt-1.5 text-sm text-pretty ${parts.length > 0 ? 'text-ink' : 'text-secondary'}`}>
-            {parts.length > 0
-              ? parts.map((part) => summaryText(part, t)).join(' · ')
-              : c.latestAt
-                ? t('connections.noRecentUpdates')
-                : t('connections.connected')}
-            {more > 0 && <span className="text-secondary"> · {t('connectionsActivity.moreSkills', { count: more })}</span>}
-          </p>
+          {parts.length > 0 && (
+            <p className="mt-1.5 text-sm text-ink text-pretty">
+              {parts.map((part) => summaryText(part, t)).join(' · ')}
+              {more > 0 && <span className="text-secondary"> · {t('connectionsActivity.moreSkills', { count: more })}</span>}
+            </p>
+          )}
 
           {sharedSkills.length > 0 && (
             <p className="mt-1 text-xs text-secondary text-pretty">
@@ -587,21 +591,10 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
           )}
         </div>
 
-        {c.latestAt && (
-          <div className="flex items-center gap-2 shrink-0 pt-1.5">
-            {c.hasNew && (
-              <>
-                <span aria-hidden="true" className="w-2 h-2 rounded-full bg-moss" />
-                <span className="sr-only">{t('connectionsActivity.newLabel')}</span>
-              </>
-            )}
-            <time
-              dateTime={new Date(c.latestAt).toISOString()}
-              title={formatAbsoluteDate(new Date(c.latestAt).toISOString())}
-              className="text-xs text-secondary"
-            >
-              {formatRelativeDate(new Date(c.latestAt).toISOString())}
-            </time>
+        {c.hasNew && (
+          <div className="shrink-0 pt-2.5">
+            <span aria-hidden="true" className="block w-2 h-2 rounded-full bg-moss" />
+            <span className="sr-only">{t('connectionsActivity.newLabel')}</span>
           </div>
         )}
       </div>

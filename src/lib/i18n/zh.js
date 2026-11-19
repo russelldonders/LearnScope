@@ -601,6 +601,8 @@ export default {
       noTies: "你们还没有共同的团队或汇报关系。",
       youRated: "你对其 {skill} 的评分：{level}",
       theyRated: "对方对你的 {skill} 的评分：{level}",
+      tabs: { skills: "技能", activity: "动态" },
+      noActivity: "{name} 最近没有动态。",
     },
     filterBySkill: "按技能筛选",
     allSkills: "所有技能",

@@ -601,6 +601,8 @@ export default {
       noTies: "Non condividete ancora un team né una linea di riporto.",
       youRated: "Hai valutato la sua competenza {skill}: {level}",
       theyRated: "Ha valutato la tua competenza {skill}: {level}",
+      tabs: { skills: "Competenze", activity: "Attività" },
+      noActivity: "Niente di recente da {name}.",
     },
     filterBySkill: "Filtra per competenza",
     allSkills: "Tutte le competenze",

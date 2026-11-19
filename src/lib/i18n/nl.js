@@ -601,6 +601,8 @@ export default {
       noTies: "Jullie delen nog geen team of rapportagelijn.",
       youRated: "Jij beoordeelde hun {skill}: {level}",
       theyRated: "Beoordeelde jouw {skill}: {level}",
+      tabs: { skills: "Vaardigheden", activity: "Activiteit" },
+      noActivity: "Niets recents van {name}.",
     },
     filterBySkill: "Filteren op vaardigheid",
     allSkills: "Alle vaardigheden",

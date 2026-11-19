@@ -601,6 +601,8 @@ export default {
       noTies: "Ihr habt noch kein gemeinsames Team und keine Berichtslinie.",
       youRated: "Du hast {skill} mit {level} bewertet",
       theyRated: "Hat deine Fähigkeit {skill} mit {level} bewertet",
+      tabs: { skills: "Fähigkeiten", activity: "Aktivität" },
+      noActivity: "In letzter Zeit nichts Neues von {name}.",
     },
     filterBySkill: "Nach Fähigkeit filtern",
     allSkills: "Alle Fähigkeiten",
