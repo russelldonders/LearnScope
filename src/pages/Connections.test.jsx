@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Connections from './Connections'
 import * as connectionApi from '../lib/connections'
 import * as managerApi from '../lib/managerTeams'
+import * as employerApi from '../lib/employerManagement'
 
 const authState = { managerContexts: [] }
 vi.mock('../context/AuthContext', () => ({
@@ -33,9 +34,10 @@ vi.mock('../components/InviteConnectModal', () => ({
 }))
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
-  getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
+  getProfiles: vi.fn(), getSharedSkills: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
   disconnectConnection: vi.fn(),
 }))
+vi.mock('../lib/employerManagement', () => ({ listMyLineManagementWithConnections: vi.fn() }))
 vi.mock('../lib/managerTeams', () => ({
   listMyLedManagerTeams: vi.fn(), inviteConnectionToManagerTeam: vi.fn(),
   createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(),
@@ -54,7 +56,8 @@ beforeEach(() => {
   connectionApi.listConnectionsActivity.mockResolvedValue([])
   connectionApi.listSentInvites.mockResolvedValue([])
   connectionApi.getProfiles.mockResolvedValue({})
-  connectionApi.getSharedSkillCounts.mockResolvedValue({})
+  connectionApi.getSharedSkills.mockResolvedValue({})
+  employerApi.listMyLineManagementWithConnections.mockResolvedValue([])
   managerApi.listMyLedManagerTeams.mockResolvedValue([])
   managerApi.listMySharedTeamsByConnection.mockResolvedValue([])
   managerApi.inviteConnectionToManagerTeam.mockResolvedValue('invite')
@@ -81,7 +84,8 @@ describe('Connections sections', () => {
     connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
     managerApi.listMyLedManagerTeams.mockResolvedValue([{ id: 'team-1', name: 'Coaching', status: 'active' }])
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Add to team' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to team' }))
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
     expect(managerApi.inviteConnectionToManagerTeam).toHaveBeenCalledWith('team-1', 'alex')
     expect(await screen.findByText('Invitation sent to Coaching.')).toBeInTheDocument()
@@ -94,7 +98,8 @@ describe('Connections sections', () => {
     connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
     connectionApi.disconnectConnection.mockResolvedValue()
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect from Alex' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect from Alex' }))
     expect(screen.getByText(/^Disconnect from Alex\? You.ll both stop seeing/)).toBeInTheDocument()
     expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
@@ -107,7 +112,8 @@ describe('Connections sections', () => {
     connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
     connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect from Alex' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect from Alex' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Disconnect from Alex' })).toBeInTheDocument()
@@ -179,6 +185,28 @@ describe('Connections sections', () => {
     expect(details).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('region', { name: 'Recent activity' })).toBeInTheDocument()
     expect(screen.getByText('Data Basics')).toBeInTheDocument()
+  })
+
+  it('says how you relate and which skills you share, keeping the rest in the details', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
+    connectionApi.getSharedSkills.mockResolvedValue({ alex: ['Excel', 'Python', 'SQL', 'Writing'] })
+    employerApi.listMyLineManagementWithConnections.mockResolvedValue([
+      { connectionUserId: 'alex', direction: 'manages_me', relationshipType: 'primary', employerName: 'Acme' },
+    ])
+    managerApi.listMySharedTeamsByConnection.mockResolvedValue([
+      { connectionUserId: 'alex', teamId: 'team-1', teamName: 'Coaching', membershipStatus: 'active', myRole: 'member', theirRole: 'manager' },
+    ])
+    renderPage()
+    expect(await screen.findByText('Your line manager at Acme · Leads you in Coaching')).toBeInTheDocument()
+    expect(screen.getByText(/^Shared skills: Excel, Python, SQL/)).toHaveTextContent('Shared skills: Excel, Python, SQL +1 more')
+    expect(screen.queryByRole('button', { name: 'Disconnect from Alex' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+    expect(screen.getByRole('region', { name: 'Shared skills' })).toHaveTextContent('Excel, Python, SQL, Writing')
+    expect(screen.getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/connections?section=teams&team=team-1')
+    expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Disconnect from Alex' })).toBeInTheDocument()
   })
 
   it('shows ratings exchanged in a connection’s details', async () => {

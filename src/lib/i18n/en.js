@@ -596,6 +596,30 @@ export default {
     skillNoTarget: 'Now {level} · set a target to measure progress',
   },
   connections: {
+    sharedSkillsLine: "Shared skills: {skills}",
+    sharedSkills: "Shared skills",
+    sharedTeams: "Teams you share",
+    relation: {
+      managesMe: {
+        primary: "Your line manager at {organisation}",
+        functional: "Your functional manager at {organisation}",
+        project: "Your project manager at {organisation}",
+        delegate: "Manages you as a delegate at {organisation}",
+      },
+      managesThem: {
+        primary: "Reports to you at {organisation}",
+        functional: "You’re their functional manager at {organisation}",
+        project: "You’re their project manager at {organisation}",
+        delegate: "You manage them as a delegate at {organisation}",
+      },
+      team: {
+        leadsThem: "You lead them in {teams}",
+        leadsMe: "Leads you in {teams}",
+        coLead: "Co-leads {teams} with you",
+        teammates: "Teammates in {teams}",
+        invited: "Invited to {teams}",
+      },
+    },
     inviteSomeone: "Invite someone",
     activityError: "Couldn’t load what your connections have been up to.",
     retry: "Retry",

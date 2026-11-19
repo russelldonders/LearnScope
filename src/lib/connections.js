@@ -465,33 +465,27 @@ export async function listConnections(currentUserId) {
 // that skill visible_on_profile and opted skills_profile_visible on (see
 // "Connections can view visible skills profiles", 0051) -- so like
 // SkillsProfile.jsx, this only ever counts skills the other person has
-// chosen to show, never their private tracking list.
-export async function getSharedSkillCounts(userId, otherUserIds) {
+// chosen to show, never their private tracking list. Returns each connection's
+// shared skill names, alphabetically.
+export async function getSharedSkills(userId, otherUserIds) {
   const ids = [...new Set(otherUserIds)].filter((id) => id && id !== userId)
   if (ids.length === 0) return {}
 
   const [{ data: mine, error: mineError }, { data: theirs, error: theirsError }] = await Promise.all([
-    supabase.from('skills').select('library_skill_id').eq('user_id', userId).not('library_skill_id', 'is', null),
+    supabase.from('skills').select('library_skill_id, name').eq('user_id', userId).not('library_skill_id', 'is', null),
     supabase.from('skills').select('user_id, library_skill_id').in('user_id', ids).not('library_skill_id', 'is', null),
   ])
   if (mineError) throw mineError
   if (theirsError) throw theirsError
 
-  const mySkillIds = new Set((mine ?? []).map((s) => s.library_skill_id))
-  const theirSkillIdsByUser = new Map()
+  // Named as the learner's own skill is, since the match is on the library entry.
+  const myNames = new Map((mine ?? []).map((s) => [s.library_skill_id, s.name]))
+  const shared = {}
+  for (const id of ids) shared[id] = new Set()
   for (const row of theirs ?? []) {
-    if (!theirSkillIdsByUser.has(row.user_id)) theirSkillIdsByUser.set(row.user_id, new Set())
-    theirSkillIdsByUser.get(row.user_id).add(row.library_skill_id)
+    if (myNames.has(row.library_skill_id)) shared[row.user_id]?.add(myNames.get(row.library_skill_id))
   }
-
-  const counts = {}
-  for (const id of ids) counts[id] = 0
-  for (const [otherId, idSet] of theirSkillIdsByUser) {
-    let count = 0
-    for (const libId of idSet) if (mySkillIds.has(libId)) count++
-    counts[otherId] = count
-  }
-  return counts
+  return Object.fromEntries(Object.entries(shared).map(([id, names]) => [id, [...names].sort((x, y) => x.localeCompare(y))]))
 }
 
 // Recent milestones from connections who've opted into activity_feed_visible

@@ -596,6 +596,30 @@ export default {
     skillNoTarget: '当前 {level} · 设定目标以衡量进度',
   },
   connections: {
+    sharedSkillsLine: "共同技能：{skills}",
+    sharedSkills: "共同技能",
+    sharedTeams: "共同团队",
+    relation: {
+      managesMe: {
+        primary: "你在 {organisation} 的直属上级",
+        functional: "你在 {organisation} 的职能上级",
+        project: "你在 {organisation} 的项目负责人",
+        delegate: "在 {organisation} 代理管理你",
+      },
+      managesThem: {
+        primary: "在 {organisation} 向你汇报",
+        functional: "你是其在 {organisation} 的职能上级",
+        project: "你是其在 {organisation} 的项目负责人",
+        delegate: "你在 {organisation} 代理管理对方",
+      },
+      team: {
+        leadsThem: "你在 {teams} 中带领对方",
+        leadsMe: "在 {teams} 中带领你",
+        coLead: "与你共同带领 {teams}",
+        teammates: "{teams} 的队友",
+        invited: "已受邀加入 {teams}",
+      },
+    },
     inviteSomeone: "邀请他人",
     activityError: "无法加载你的连接人的近况。",
     retry: "重试",

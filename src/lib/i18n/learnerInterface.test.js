@@ -95,6 +95,7 @@ const dynamicKeys = [
   ...flatKeys(english.routeTitles, 'routeTitles.'),
   // Connections.jsx builds each summary phrase's key from summariseActivity.
   ...flatKeys(english.connectionsActivity.summary, 'connectionsActivity.summary.'),
+  ...flatKeys(english.connections.relation, 'connections.relation.'),
 ]
 
 function resolve(dictionary, key) {

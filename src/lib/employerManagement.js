@@ -141,6 +141,21 @@ export async function listMyEmployerManagementContexts() {
   }))
 }
 
+// Current, direct management at an employer between the learner and people
+// they're connected to, either way round (0321). direction is 'manages_me'
+// or 'manages_them'.
+export async function listMyLineManagementWithConnections() {
+  const { data, error } = await supabase.rpc('list_my_line_management_with_connections')
+  throwIfError(error)
+  return (data ?? []).map((row) => ({
+    connectionUserId: row.connection_user_id,
+    employerName: row.employer_name,
+    relationshipType: row.relationship_type,
+    isPrimary: row.is_primary,
+    direction: row.direction,
+  }))
+}
+
 export async function listMyEmployerTeam(employerId) {
   const { data, error } = await supabase.rpc('list_my_employer_team', {
     p_employer_id: employerId,

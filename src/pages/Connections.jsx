@@ -20,7 +20,7 @@ import {
   listConnectionsActivity,
   listSentInvites,
   getProfiles,
-  getSharedSkillCounts,
+  getSharedSkills,
   sendInviteEmail,
   revokeInvite,
   disconnectConnection,
@@ -33,6 +33,8 @@ import {
   listMyLedManagerTeams,
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
+import { listMyLineManagementWithConnections } from '../lib/employerManagement'
+import { describeRelationships } from '../lib/connectionRelationships'
 
 // Enough recent events to sum up each connection's last month, not just the
 // few most active people's.
@@ -75,7 +77,8 @@ export default function Connections() {
   const [allConnectionIds, setAllConnectionIds] = useState([])
   const [invites, setInvites] = useState([])
   const [profiles, setProfiles] = useState({})
-  const [sharedSkillCounts, setSharedSkillCounts] = useState({})
+  const [sharedSkills, setSharedSkills] = useState({})
+  const [linesByConnection, setLinesByConnection] = useState({})
   const [copiedId, setCopiedId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
   const [resentId, setResentId] = useState(null)
@@ -119,34 +122,33 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, connectionsData, invitesData, teamsData, sharedTeamsData] = await Promise.all([
+      const [ratingsData, connectionsData, invitesData, teamsData, sharedTeamsData, linesData] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
         listSentInvites(),
         listMyLedManagerTeams(),
         listMySharedTeamsByConnection(),
+        listMyLineManagementWithConnections(),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
       setLedTeams(teamsData.filter((team) => team.status === 'active'))
-      const sharedByConnection = {}
-      for (const row of sharedTeamsData) {
-        if (!sharedByConnection[row.connectionUserId]) {
-          sharedByConnection[row.connectionUserId] = { active: [], pending: [] }
-        }
-        const bucket = row.membershipStatus === 'pending' ? 'pending' : 'active'
-        sharedByConnection[row.connectionUserId][bucket].push({ id: row.teamId, name: row.teamName })
+      const byConnection = (rows) => {
+        const grouped = {}
+        for (const row of rows) (grouped[row.connectionUserId] ??= []).push(row)
+        return grouped
       }
-      setSharedTeamsByConnection(sharedByConnection)
+      setSharedTeamsByConnection(byConnection(sharedTeamsData))
+      setLinesByConnection(byConnection(linesData))
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
-      const [profilesData, sharedSkillCountsData] = await Promise.all([
+      const [profilesData, sharedSkillsData] = await Promise.all([
         getProfiles([...otherIds, ...connectionsData.map((c) => c.id), user.id]),
-        getSharedSkillCounts(user.id, connectionIds),
+        getSharedSkills(user.id, connectionIds),
       ])
       setProfiles(profilesData)
-      setSharedSkillCounts(sharedSkillCountsData)
+      setSharedSkills(sharedSkillsData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -402,8 +404,9 @@ export default function Connections() {
               <ConnectionCard
                 key={c.id}
                 connection={c}
-                sharedSkillCount={sharedSkillCounts[c.id] ?? 0}
-                sharedTeams={sharedTeamsByConnection[c.id]}
+                sharedSkills={sharedSkills[c.id] ?? []}
+                sharedTeams={sharedTeamsByConnection[c.id] ?? []}
+                lines={linesByConnection[c.id] ?? []}
                 showTeamInvite={allConnectionIds.includes(c.id)}
                 ledTeams={ledTeams}
                 onInviteToTeam={inviteConnectionToManagerTeam}
@@ -526,67 +529,44 @@ function summaryText(part, t) {
   return t(`connectionsActivity.summary.${part.key}`, params)
 }
 
-// One person: who they are and, in a line, what they've been up to lately.
-// The events behind that line and the ratings you've exchanged sit in the
-// details, opened per card.
-function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam, onDisconnect }) {
+// Shared skills named on the card itself; the rest are in the details.
+const SHOWN_SHARED_SKILLS = 3
+
+// One person, kept to a few short lines: how you relate (who manages whom at
+// an employer, which teams you share and who leads them), what they've been
+// up to lately, and the skills you share. Everything else -- the activity
+// behind the summary, ratings you've exchanged, every shared skill, adding
+// them to a team and disconnecting -- sits in the details, opened per card.
+function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam, onDisconnect }) {
   const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
-  const active = sharedTeams?.active ?? []
-  const pending = sharedTeams?.pending ?? []
+  const activeTeams = sharedTeams.filter((team) => team.membershipStatus !== 'pending')
+  const relationships = describeRelationships({ lines, teams: sharedTeams })
   const detailEvents = groupConnectionsActivity(c.activity ?? []).slice(0, DETAIL_EVENTS)
-  const hasDetails = detailEvents.length > 0 || c.events.length > 0
   const { parts, more } = c.summary ?? { parts: [], more: 0 }
   const detailsId = `connection-details-${c.id}`
   const lastSeenAt = c.lastSeenAt ?? null
+  const shownSkills = sharedSkills.slice(0, SHOWN_SHARED_SKILLS)
+  const moreSkills = sharedSkills.length - shownSkills.length
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-4">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
-              <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
-              <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
-                {c.name}
-              </span>
-            </Link>
-            {/* Purely informational facts about this connection (neutral) are
-                kept visually distinct from the pending-invite pill below, which
-                is something to act on -- previously all three badge types shared
-                the same low-contrast styling with nothing to tell them apart. */}
-            {sharedSkillCount > 0 && (
-              <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
-                {sharedSkillCount} shared skill{sharedSkillCount === 1 ? '' : 's'}
-              </span>
-            )}
-            {active.length === 1 && (
-              <Link
-                to={`/connections?section=teams&team=${active[0].id}`}
-                className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-              >
-                {active[0].name}
-              </Link>
-            )}
-            {active.length > 1 && (
-              <Link
-                to="/connections?section=teams"
-                className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-              >
-                {active.length} teams
-              </Link>
-            )}
-            {pending.length > 0 && (
-              <Link
-                to="/connections?section=teams"
-                className="font-mono text-xs text-gold border border-gold/40 bg-gold/10 rounded-full px-2 py-0.5 hover:underline"
-              >
-                Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
-              </Link>
-            )}
-            </div>
+          <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
+            <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
+            <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
+              {c.name}
+            </span>
+          </Link>
 
-          <p className={`mt-2 text-sm text-pretty ${parts.length > 0 ? 'text-ink' : 'text-secondary'}`}>
+          {relationships.length > 0 && (
+            <p className="mt-1.5 text-sm text-moss font-medium text-pretty">
+              {relationships.map((phrase) => t(`connections.relation.${phrase.key}`, phrase.params)).join(' · ')}
+            </p>
+          )}
+
+          <p className={`mt-1.5 text-sm text-pretty ${parts.length > 0 ? 'text-ink' : 'text-secondary'}`}>
             {parts.length > 0
               ? parts.map((part) => summaryText(part, t)).join(' · ')
               : c.latestAt
@@ -594,6 +574,13 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
                 : t('connections.connected')}
             {more > 0 && <span className="text-secondary"> · {t('connectionsActivity.moreSkills', { count: more })}</span>}
           </p>
+
+          {sharedSkills.length > 0 && (
+            <p className="mt-1 text-xs text-secondary text-pretty">
+              {t('connections.sharedSkillsLine', { skills: shownSkills.join(', ') })}
+              {moreSkills > 0 && ` ${t('connectionsActivity.moreSkills', { count: moreSkills })}`}
+            </p>
+          )}
         </div>
 
         {c.latestAt && (
@@ -615,20 +602,38 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
         )}
       </div>
 
-      {hasDetails && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={detailsId}
-          onClick={() => setExpanded((value) => !value)}
-          className="mt-2 text-sm text-moss font-medium hover:underline"
-        >
-          {expanded ? t('connections.hideDetails') : t('connections.showDetails')}
-        </button>
-      )}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => setExpanded((value) => !value)}
+        className="mt-2 text-sm text-moss font-medium hover:underline"
+      >
+        {expanded ? t('connections.hideDetails') : t('connections.showDetails')}
+      </button>
 
       {expanded && (
         <div id={detailsId} className="mt-3 space-y-4">
+          {sharedSkills.length > SHOWN_SHARED_SKILLS && (
+            <section aria-label={t('connections.sharedSkills')}>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.sharedSkills')}</h3>
+              <p className="text-sm text-ink text-pretty">{sharedSkills.join(', ')}</p>
+            </section>
+          )}
+          {sharedTeams.length > 0 && (
+            <section aria-label={t('connections.sharedTeams')}>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.sharedTeams')}</h3>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                {sharedTeams.map((team) => (
+                  <li key={team.teamId}>
+                    <Link to={`/connections?section=teams&team=${team.teamId}`} className="text-sm text-moss hover:underline">
+                      {team.teamName}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {detailEvents.length > 0 && (
             <section aria-label={t('connections.recentActivity')}>
               <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.recentActivity')}</h3>
@@ -674,26 +679,26 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
               </div>
             </section>
           )}
+          {showTeamInvite && activeTeams.length === 0 && (
+            <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
+          )}
+          {/* Kept apart from everything above, at the foot of the details, so
+              it's never mistaken for one of the everyday actions. */}
+          {onDisconnect && (
+            <div className="pt-3 border-t border-hairline flex justify-end">
+              <button
+                type="button"
+                onClick={onDisconnect}
+                aria-label={t('connections.disconnectFrom', { name: c.name })}
+                className="text-xs text-red-700 font-medium hover:underline"
+              >
+                {t('connections.disconnect')}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {showTeamInvite && active.length === 0 && (
-        <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
-      )}
-      {/* Kept apart from everything above, at the foot of the card, so it's
-          never mistaken for one of the everyday actions. */}
-      {onDisconnect && (
-        <div className="mt-3 pt-3 border-t border-hairline flex justify-end">
-          <button
-            type="button"
-            onClick={onDisconnect}
-            aria-label={t('connections.disconnectFrom', { name: c.name })}
-            className="text-xs text-red-700 font-medium hover:underline"
-          >
-            {t('connections.disconnect')}
-          </button>
-        </div>
-      )}
     </div>
   )
 }

@@ -596,6 +596,30 @@ export default {
     skillNoTarget: 'Actuellement {level} · définissez un objectif pour mesurer la progression',
   },
   connections: {
+    sharedSkillsLine: "Compétences en commun : {skills}",
+    sharedSkills: "Compétences en commun",
+    sharedTeams: "Équipes en commun",
+    relation: {
+      managesMe: {
+        primary: "Votre responsable hiérarchique chez {organisation}",
+        functional: "Votre responsable fonctionnel chez {organisation}",
+        project: "Votre chef de projet chez {organisation}",
+        delegate: "Vous encadre par délégation chez {organisation}",
+      },
+      managesThem: {
+        primary: "Vous est rattaché chez {organisation}",
+        functional: "Vous êtes son responsable fonctionnel chez {organisation}",
+        project: "Vous êtes son chef de projet chez {organisation}",
+        delegate: "Vous l’encadrez par délégation chez {organisation}",
+      },
+      team: {
+        leadsThem: "Vous l’encadrez dans {teams}",
+        leadsMe: "Vous encadre dans {teams}",
+        coLead: "Codirige {teams} avec vous",
+        teammates: "Coéquipiers dans {teams}",
+        invited: "Invité dans {teams}",
+      },
+    },
     inviteSomeone: "Inviter quelqu’un",
     activityError: "Impossible de charger les dernières nouvelles de vos connexions.",
     retry: "Réessayer",

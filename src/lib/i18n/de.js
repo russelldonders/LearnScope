@@ -596,6 +596,30 @@ export default {
     skillNoTarget: 'Jetzt {level} · lege ein Ziel fest, um den Fortschritt zu messen',
   },
   connections: {
+    sharedSkillsLine: "Gemeinsame Fähigkeiten: {skills}",
+    sharedSkills: "Gemeinsame Fähigkeiten",
+    sharedTeams: "Gemeinsame Teams",
+    relation: {
+      managesMe: {
+        primary: "Deine Führungskraft bei {organisation}",
+        functional: "Deine fachliche Führungskraft bei {organisation}",
+        project: "Deine Projektleitung bei {organisation}",
+        delegate: "Führt dich in Vertretung bei {organisation}",
+      },
+      managesThem: {
+        primary: "Berichtet an dich bei {organisation}",
+        functional: "Du bist die fachliche Führungskraft bei {organisation}",
+        project: "Du bist die Projektleitung bei {organisation}",
+        delegate: "Du führst in Vertretung bei {organisation}",
+      },
+      team: {
+        leadsThem: "Du leitest {teams}, in dem diese Person ist",
+        leadsMe: "Leitet dich in {teams}",
+        coLead: "Leitet {teams} gemeinsam mit dir",
+        teammates: "Im selben Team: {teams}",
+        invited: "Eingeladen zu {teams}",
+      },
+    },
     inviteSomeone: "Jemanden einladen",
     activityError: "Was deine Verbindungen zuletzt gemacht haben, konnte nicht geladen werden.",
     retry: "Erneut versuchen",

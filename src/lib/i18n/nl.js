@@ -596,6 +596,30 @@ export default {
     skillNoTarget: 'Nu {level} · stel een doel in om voortgang te meten',
   },
   connections: {
+    sharedSkillsLine: "Gedeelde vaardigheden: {skills}",
+    sharedSkills: "Gedeelde vaardigheden",
+    sharedTeams: "Gedeelde teams",
+    relation: {
+      managesMe: {
+        primary: "Je leidinggevende bij {organisation}",
+        functional: "Je functioneel leidinggevende bij {organisation}",
+        project: "Je projectleider bij {organisation}",
+        delegate: "Geeft je leiding als vervanger bij {organisation}",
+      },
+      managesThem: {
+        primary: "Rapporteert aan jou bij {organisation}",
+        functional: "Jij bent de functioneel leidinggevende bij {organisation}",
+        project: "Jij bent de projectleider bij {organisation}",
+        delegate: "Jij geeft leiding als vervanger bij {organisation}",
+      },
+      team: {
+        leadsThem: "Jij leidt diegene in {teams}",
+        leadsMe: "Leidt jou in {teams}",
+        coLead: "Leidt {teams} samen met jou",
+        teammates: "Teamgenoten in {teams}",
+        invited: "Uitgenodigd voor {teams}",
+      },
+    },
     inviteSomeone: "Iemand uitnodigen",
     activityError: "Kon niet laden waar je connecties mee bezig zijn geweest.",
     retry: "Opnieuw proberen",

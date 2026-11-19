@@ -83,6 +83,8 @@ export async function listMySharedTeamsByConnection() {
     teamName: row.team_name,
     teamStatus: row.team_status,
     membershipStatus: row.membership_status,
+    myRole: row.my_role,
+    theirRole: row.their_role,
   }))
 }
 
