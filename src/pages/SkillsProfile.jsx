@@ -180,17 +180,18 @@ export default function SkillsProfile() {
           const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
           const mine = isOwnProfile ? null : ownByLibraryId.get(skill.library_skill_id)
           const content = <>
-            <GrowthRing level={skill.level} size={48} />
+            <GrowthRing level={skill.level} size={56} />
             <div className="min-w-0 flex-1">
-              <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-              {/* Their level is the focus, beside its ring; yours and the
+              {/* Laid out like your own skill cards (SkillCard): name, then the
+                  level line. Their level stays the focus; yours and the
                   ratings are quieter, there to compare against. */}
-              {LEVEL_LABELS[skill.level] && (
-                <p className="text-base font-semibold text-ink leading-snug">{LEVEL_LABELS[skill.level]}</p>
-              )}
+              <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>
+              <p className="text-sm text-ink font-medium mt-1">
+                {LEVEL_LABELS[skill.level] ?? t('skillsProfile.noLevelYet')}
+              </p>
               {mine && (
-                <p className="text-xs text-secondary mt-1.5">
-                  {t('skillsProfile.yourLevel', { level: LEVEL_LABELS[mine.level] ?? '—' })}
+                <p className="text-xs text-secondary mt-1">
+                  {t('skillsProfile.yourLevel', { level: LEVEL_LABELS[mine.level] ?? t('skillsProfile.noLevelYetLower') })}
                 </p>
               )}
               {mine?.ratedByThem && (
@@ -210,7 +211,7 @@ export default function SkillsProfile() {
               key={skill.id}
               type="button"
               onClick={() => setRatingSkill(skill)}
-              className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
+              className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss transition-colors"
             >
               {content}
             </button>

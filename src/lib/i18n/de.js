@@ -2832,6 +2832,8 @@ export default {
     inCommon: 'Gemeinsam ({count})',
     skillsInCommon: "Gemeinsame Fähigkeiten",
     yourLevel: "Dein Niveau: {level}",
+    noLevelYet: "Noch kein Niveau",
+    noLevelYetLower: "noch kein Niveau",
     theyRatedYours: "{name} hat deine bewertet: {level}",
     allSkills: 'Alle Fähigkeiten ({count})',
     noneInCommon: 'Ihr habt noch keine gemeinsamen Fähigkeiten.',

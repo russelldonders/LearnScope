@@ -2830,6 +2830,8 @@ export default {
     inCommon: 'Gemeenschappelijk ({count})',
     skillsInCommon: "Gedeelde vaardigheden",
     yourLevel: "Jouw niveau: {level}",
+    noLevelYet: "Nog geen niveau",
+    noLevelYetLower: "nog geen niveau",
     theyRatedYours: "{name} beoordeelde de jouwe: {level}",
     allSkills: 'Alle vaardigheden ({count})',
     noneInCommon: 'Jullie hebben nog geen vaardigheden gemeen.',

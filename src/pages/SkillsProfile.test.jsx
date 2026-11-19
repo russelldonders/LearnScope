@@ -69,17 +69,24 @@ describe('SkillsProfile', () => {
       other: [
         { id: 'their-sql', name: 'SQL', level: 5, library_skill_id: 'lib-sql' },
         { id: 'their-go', name: 'Go', level: 2, library_skill_id: 'lib-go' },
+        { id: 'their-rust', name: 'Rust', level: null, library_skill_id: 'lib-rust' },
       ],
-      me: [{ id: 'my-sql', level: 1, library_skill_id: 'lib-sql' }],
+      me: [
+        { id: 'my-sql', level: 1, library_skill_id: 'lib-sql' },
+        { id: 'my-rust', level: null, library_skill_id: 'lib-rust' },
+      ],
     }
     renderProfile()
     expect(await screen.findByRole('heading', { name: 'SQL' })).toBeInTheDocument()
     expect(screen.getByText('Expert')).toBeInTheDocument()
     expect(screen.getByText('Your level: Beginner')).toBeInTheDocument()
     expect(screen.getByText('Alex rated yours: Capable')).toBeInTheDocument()
+    // Neither of you has a level for Rust yet, and it says so.
+    expect(screen.getByText('No level yet')).toBeInTheDocument()
+    expect(screen.getByText('Your level: no level yet')).toBeInTheDocument()
     // Go is filtered out as not in common; switch to all to see it without a comparison.
     screen.getByRole('button', { name: /^All skills/ }).click()
     expect(await screen.findByRole('heading', { name: 'Go' })).toBeInTheDocument()
-    expect(screen.getAllByText(/^Your level/)).toHaveLength(1)
+    expect(screen.getAllByText(/^Your level/)).toHaveLength(2)
   })
 })
