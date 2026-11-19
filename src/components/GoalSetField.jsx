@@ -11,7 +11,7 @@ export default function GoalSetField({ id, goal, number, value, onChange, onRemo
   const { t } = useLanguage()
   const isCount = goal.measure_kind === 'count'
   return (
-    <div className="min-w-[7rem] flex-1">
+    <div>
       <div className="flex items-baseline justify-between gap-1 mb-1">
         <label htmlFor={id} className="text-xs text-secondary">{t('quickLog.setLabel', { number })}</label>
         <button

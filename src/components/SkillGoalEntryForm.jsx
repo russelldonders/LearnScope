@@ -137,8 +137,8 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
       <div className="grid grid-cols-1 @xs:grid-cols-2 gap-2">
         {(kind === 'count' || kind === 'number') && (
           <div className={takesSets ? '@xs:col-span-2' : undefined}>
-            <div className={takesSets ? 'flex flex-wrap items-end gap-2' : undefined}>
-              <div className={takesSets ? 'min-w-[7rem] flex-1' : undefined}>
+            <div className={takesSets ? 'flex flex-col gap-2' : undefined}>
+              <div>
                 <label htmlFor={field('value')} className="block text-xs text-secondary mb-1">
                   {takesSets ? t('quickLog.setLabel', { number: 1 }) : goal.unit}
                 </label>
@@ -170,7 +170,7 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
                 <button
                   type="button"
                   onClick={() => setExtraSets((current) => [...current, ''])}
-                  className="text-xs font-medium text-moss hover:underline py-2"
+                  className="self-start text-xs font-medium text-moss hover:underline py-1"
                 >
                   {t('quickLog.addSet')}
                 </button>

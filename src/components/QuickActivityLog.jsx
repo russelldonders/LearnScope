@@ -449,7 +449,9 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
             return (
               <fieldset key={entry.goalId} className="rounded-md border border-hairline bg-paper p-2">
                 <legend className="px-1 text-xs text-secondary">{t('quickLog.countsTowards', { goal: goal.title })}</legend>
-                <div className="flex flex-wrap items-end gap-2">
+                {/* Sets go one per line; other values (a distance and a time,
+                    say) sit side by side. */}
+                <div className={goalTakesSets(goal) ? 'flex flex-col gap-2' : 'flex flex-wrap items-end gap-2'}>
                   <GoalValueFields
                     goal={goal}
                     entry={entry}
@@ -469,22 +471,24 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
                       onRemove={() => setGoalField(goal.id, 'extraSets', entry.extraSets.filter((_, i) => i !== index))}
                     />
                   ))}
-                  {goalTakesSets(goal) && (
+                  <div className="flex flex-wrap items-center gap-x-4">
+                    {goalTakesSets(goal) && (
+                      <button
+                        type="button"
+                        onClick={() => setGoalField(goal.id, 'extraSets', [...(entry.extraSets ?? []), ''])}
+                        className="text-xs font-medium text-moss hover:underline py-2"
+                      >
+                        {t('quickLog.addSet')}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setGoalField(goal.id, 'extraSets', [...(entry.extraSets ?? []), ''])}
-                      className="text-xs font-medium text-moss hover:underline py-2"
+                      onClick={() => onChange({ goalValues: card.goalValues.filter((other) => other.goalId !== goal.id) })}
+                      className="text-xs text-secondary hover:text-ink py-2"
                     >
-                      {t('quickLog.addSet')}
+                      {t('quickLog.notForGoal')}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onChange({ goalValues: card.goalValues.filter((other) => other.goalId !== goal.id) })}
-                    className="text-xs text-secondary hover:text-ink py-2"
-                  >
-                    {t('quickLog.notForGoal')}
-                  </button>
+                  </div>
                 </div>
               </fieldset>
             )
