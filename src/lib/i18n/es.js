@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Ahora {level} · fija un objetivo para medir el progreso',
   },
   connections: {
+    filterBySkill: "Filtrar por habilidad",
+    allSkills: "Todas las habilidades",
+    filterByTeam: "Filtrar por equipo",
+    allTeams: "Todos los equipos",
+    clearFilters: "Quitar filtros",
+    noFilterMatches: "Ninguna conexión coincide con estos filtros.",
     sharedSkillsLine: "Habilidades en común: {skills}",
     sharedSkills: "Habilidades en común",
     sharedTeams: "Equipos en común",

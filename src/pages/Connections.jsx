@@ -20,7 +20,7 @@ import {
   listConnectionsActivity,
   listSentInvites,
   getProfiles,
-  getSharedSkills,
+  getConnectionSkills,
   sendInviteEmail,
   revokeInvite,
   disconnectConnection,
@@ -77,7 +77,7 @@ export default function Connections() {
   const [allConnectionIds, setAllConnectionIds] = useState([])
   const [invites, setInvites] = useState([])
   const [profiles, setProfiles] = useState({})
-  const [sharedSkills, setSharedSkills] = useState({})
+  const [connectionSkills, setConnectionSkills] = useState({})
   const [linesByConnection, setLinesByConnection] = useState({})
   const [copiedId, setCopiedId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
@@ -143,12 +143,12 @@ export default function Connections() {
       setLinesByConnection(byConnection(linesData))
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
-      const [profilesData, sharedSkillsData] = await Promise.all([
+      const [profilesData, connectionSkillsData] = await Promise.all([
         getProfiles([...otherIds, ...connectionsData.map((c) => c.id), user.id]),
-        getSharedSkills(user.id, connectionIds),
+        getConnectionSkills(user.id, connectionIds),
       ])
       setProfiles(profilesData)
-      setSharedSkills(sharedSkillsData)
+      setConnectionSkills(connectionSkillsData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -213,15 +213,47 @@ export default function Connections() {
   )
 
   const [connectionQuery, setConnectionQuery] = useState('')
+  const [skillFilter, setSkillFilter] = useState('')
+  const [teamFilter, setTeamFilter] = useState('')
+
+  // What there is to filter by: every skill a connection shows on their
+  // profile, and every team you share with one.
+  const skillOptions = useMemo(() => {
+    const byId = new Map()
+    for (const skills of Object.values(connectionSkills)) {
+      for (const skill of skills) if (!byId.has(skill.libraryId)) byId.set(skill.libraryId, skill.name)
+    }
+    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [connectionSkills])
+  const teamOptions = useMemo(() => {
+    const byId = new Map()
+    for (const teams of Object.values(sharedTeamsByConnection)) {
+      for (const team of teams) if (team.membershipStatus !== 'pending') byId.set(team.teamId, team.teamName)
+    }
+    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [sharedTeamsByConnection])
+
+  // A filter whose option has gone (after a disconnect, say) stops applying.
+  const activeSkillFilter = skillOptions.some((o) => o.value === skillFilter) ? skillFilter : ''
+  const activeTeamFilter = teamOptions.some((o) => o.value === teamFilter) ? teamFilter : ''
+  const filtering = Boolean(activeSkillFilter || activeTeamFilter)
+
   const filteredConnections = useMemo(() => {
     const q = connectionQuery.trim().toLowerCase()
-    return q ? connections.filter((c) => c.name?.toLowerCase().includes(q)) : connections
-  }, [connections, connectionQuery])
+    return connections.filter((c) =>
+      (!q || c.name?.toLowerCase().includes(q))
+      && (!activeSkillFilter || (connectionSkills[c.id] ?? []).some((skill) => skill.libraryId === activeSkillFilter))
+      && (!activeTeamFilter || (sharedTeamsByConnection[c.id] ?? []).some((team) =>
+        team.teamId === activeTeamFilter && team.membershipStatus !== 'pending')))
+  }, [connections, connectionQuery, activeSkillFilter, activeTeamFilter, connectionSkills, sharedTeamsByConnection])
 
+  // Invitations aren't about a skill or team you share, so a filter on either
+  // leaves them out; the search still finds them by email.
   const filteredInvites = useMemo(() => {
+    if (filtering) return []
     const q = connectionQuery.trim().toLowerCase()
     return q ? pendingInvites.filter((i) => i.invitee_email?.toLowerCase().includes(q)) : pendingInvites
-  }, [pendingInvites, connectionQuery])
+  }, [pendingInvites, connectionQuery, filtering])
 
   function handleCopy(invite) {
     navigator.clipboard.writeText(invite.url)
@@ -349,16 +381,6 @@ export default function Connections() {
           <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-display text-xl text-ink">{t('connections.yourConnections')}</h2>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              {!loading && connections.length > 0 && (
-                <input
-                  type="search"
-                  aria-label="Search connections"
-                  value={connectionQuery}
-                  onChange={(e) => setConnectionQuery(e.target.value)}
-                  placeholder="Search by name…"
-                  className="w-full sm:w-56 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              )}
               <button
                 type="button"
                 onClick={() => setInviteOpen(true)}
@@ -368,6 +390,50 @@ export default function Connections() {
               </button>
             </div>
           </div>
+
+          {!loading && connections.length > 0 && (
+            <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:flex-wrap sm:items-center">
+              <input
+                type="search"
+                aria-label="Search connections"
+                value={connectionQuery}
+                onChange={(e) => setConnectionQuery(e.target.value)}
+                placeholder="Search by name…"
+                className="w-full sm:w-56 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              {skillOptions.length > 0 && (
+                <select
+                  aria-label={t('connections.filterBySkill')}
+                  value={activeSkillFilter}
+                  onChange={(e) => setSkillFilter(e.target.value)}
+                  className="w-full sm:w-48 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  <option value="">{t('connections.allSkills')}</option>
+                  {skillOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              )}
+              {teamOptions.length > 0 && (
+                <select
+                  aria-label={t('connections.filterByTeam')}
+                  value={activeTeamFilter}
+                  onChange={(e) => setTeamFilter(e.target.value)}
+                  className="w-full sm:w-48 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  <option value="">{t('connections.allTeams')}</option>
+                  {teamOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              )}
+              {filtering && (
+                <button
+                  type="button"
+                  onClick={() => { setSkillFilter(''); setTeamFilter('') }}
+                  className="text-sm text-moss font-medium hover:underline sm:ml-1"
+                >
+                  {t('connections.clearFilters')}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* The activity behind each summary is loaded on its own -- it's the
               one query here that reads other people's records -- so a failure
@@ -399,7 +465,9 @@ export default function Connections() {
 
           {!loading && connections.length > 0 && filteredConnections.length === 0 && filteredInvites.length === 0 && (
             <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-              <p className="text-sm text-secondary">No connections match "{connectionQuery}".</p>
+              <p className="text-sm text-secondary">
+                {filtering ? t('connections.noFilterMatches') : `No connections match "${connectionQuery}".`}
+              </p>
             </div>
           )}
 
@@ -408,7 +476,7 @@ export default function Connections() {
               <ConnectionCard
                 key={c.id}
                 connection={c}
-                sharedSkills={sharedSkills[c.id] ?? []}
+                sharedSkills={(connectionSkills[c.id] ?? []).filter((skill) => skill.shared).map((skill) => skill.name)}
                 sharedTeams={sharedTeamsByConnection[c.id] ?? []}
                 lines={linesByConnection[c.id] ?? []}
                 showTeamInvite={allConnectionIds.includes(c.id)}

@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Nu {level} · stel een doel in om voortgang te meten',
   },
   connections: {
+    filterBySkill: "Filteren op vaardigheid",
+    allSkills: "Alle vaardigheden",
+    filterByTeam: "Filteren op team",
+    allTeams: "Alle teams",
+    clearFilters: "Filters wissen",
+    noFilterMatches: "Geen connecties komen overeen met deze filters.",
     sharedSkillsLine: "Gedeelde vaardigheden: {skills}",
     sharedSkills: "Gedeelde vaardigheden",
     sharedTeams: "Gedeelde teams",

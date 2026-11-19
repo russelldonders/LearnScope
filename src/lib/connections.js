@@ -465,27 +465,40 @@ export async function listConnections(currentUserId) {
 // that skill visible_on_profile and opted skills_profile_visible on (see
 // "Connections can view visible skills profiles", 0051) -- so like
 // SkillsProfile.jsx, this only ever counts skills the other person has
-// chosen to show, never their private tracking list. Returns each connection's
-// shared skill names, alphabetically.
-export async function getSharedSkills(userId, otherUserIds) {
+// chosen to show, never their private tracking list. Returns, per
+// connection, the skills they show -- { libraryId, name, shared } sorted by
+// name -- where shared means the learner tracks it too.
+export async function getConnectionSkills(userId, otherUserIds) {
   const ids = [...new Set(otherUserIds)].filter((id) => id && id !== userId)
   if (ids.length === 0) return {}
 
   const [{ data: mine, error: mineError }, { data: theirs, error: theirsError }] = await Promise.all([
     supabase.from('skills').select('library_skill_id, name').eq('user_id', userId).not('library_skill_id', 'is', null),
-    supabase.from('skills').select('user_id, library_skill_id').in('user_id', ids).not('library_skill_id', 'is', null),
+    supabase.from('skills').select('user_id, library_skill_id, name').in('user_id', ids).not('library_skill_id', 'is', null),
   ])
   if (mineError) throw mineError
   if (theirsError) throw theirsError
 
-  // Named as the learner's own skill is, since the match is on the library entry.
-  const myNames = new Map((mine ?? []).map((s) => [s.library_skill_id, s.name]))
-  const shared = {}
-  for (const id of ids) shared[id] = new Set()
+  // A shared skill is named as the learner's own is, since the match is on
+  // the library entry; otherwise as the first connection named it, so one
+  // catalogue skill always reads the same across the page.
+  const names = new Map((mine ?? []).map((s) => [s.library_skill_id, s.name]))
+  const myLibraryIds = new Set(names.keys())
+  for (const row of theirs ?? []) if (!names.has(row.library_skill_id)) names.set(row.library_skill_id, row.name)
+
+  const byConnection = {}
+  for (const id of ids) byConnection[id] = new Map()
   for (const row of theirs ?? []) {
-    if (myNames.has(row.library_skill_id)) shared[row.user_id]?.add(myNames.get(row.library_skill_id))
+    byConnection[row.user_id]?.set(row.library_skill_id, {
+      libraryId: row.library_skill_id,
+      name: names.get(row.library_skill_id),
+      shared: myLibraryIds.has(row.library_skill_id),
+    })
   }
-  return Object.fromEntries(Object.entries(shared).map(([id, names]) => [id, [...names].sort((x, y) => x.localeCompare(y))]))
+  return Object.fromEntries(Object.entries(byConnection).map(([id, skills]) => [
+    id,
+    [...skills.values()].sort((x, y) => x.name.localeCompare(y.name)),
+  ]))
 }
 
 // Recent milestones from connections who've opted into activity_feed_visible

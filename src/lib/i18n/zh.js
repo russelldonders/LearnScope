@@ -596,6 +596,12 @@ export default {
     skillNoTarget: '当前 {level} · 设定目标以衡量进度',
   },
   connections: {
+    filterBySkill: "按技能筛选",
+    allSkills: "所有技能",
+    filterByTeam: "按团队筛选",
+    allTeams: "所有团队",
+    clearFilters: "清除筛选",
+    noFilterMatches: "没有符合这些筛选条件的连接。",
     sharedSkillsLine: "共同技能：{skills}",
     sharedSkills: "共同技能",
     sharedTeams: "共同团队",

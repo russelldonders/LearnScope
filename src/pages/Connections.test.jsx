@@ -34,7 +34,7 @@ vi.mock('../components/InviteConnectModal', () => ({
 }))
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
-  getProfiles: vi.fn(), getSharedSkills: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
+  getProfiles: vi.fn(), getConnectionSkills: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
   disconnectConnection: vi.fn(),
 }))
 vi.mock('../lib/employerManagement', () => ({ listMyLineManagementWithConnections: vi.fn() }))
@@ -56,7 +56,7 @@ beforeEach(() => {
   connectionApi.listConnectionsActivity.mockResolvedValue([])
   connectionApi.listSentInvites.mockResolvedValue([])
   connectionApi.getProfiles.mockResolvedValue({})
-  connectionApi.getSharedSkills.mockResolvedValue({})
+  connectionApi.getConnectionSkills.mockResolvedValue({})
   employerApi.listMyLineManagementWithConnections.mockResolvedValue([])
   managerApi.listMyLedManagerTeams.mockResolvedValue([])
   managerApi.listMySharedTeamsByConnection.mockResolvedValue([])
@@ -190,10 +190,50 @@ describe('Connections sections', () => {
     expect(screen.getByText('Data Basics')).toBeInTheDocument()
   })
 
+  it('filters connections by a skill they show and by a team you share', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' }, sam: { name: 'Sam' } })
+    connectionApi.getConnectionSkills.mockResolvedValue({
+      alex: [{ libraryId: 'lib-py', name: 'Python', shared: false }],
+      sam: [{ libraryId: 'lib-sql', name: 'SQL', shared: true }],
+    })
+    connectionApi.listSentInvites.mockResolvedValue([
+      { id: 'invite-1', status: 'pending', invite_type: 'connect', invitee_email: 'new@example.com', created_at: '2026-11-01T00:00:00Z' },
+    ])
+    managerApi.listMySharedTeamsByConnection.mockResolvedValue([
+      { connectionUserId: 'sam', teamId: 'team-1', teamName: 'Coaching', membershipStatus: 'active', myRole: 'manager', theirRole: 'member' },
+      { connectionUserId: 'alex', teamId: 'team-2', teamName: 'Sales', membershipStatus: 'pending', myRole: 'manager', theirRole: 'member' },
+    ])
+    renderPage()
+    const profileLinks = () => screen.queryAllByRole('link').map((link) => link.getAttribute('href')).filter((href) => href.startsWith('/skills-profile/'))
+    const skillFilter = await screen.findByRole('combobox', { name: 'Filter by skill' })
+    expect([...skillFilter.options].map((o) => o.textContent)).toEqual(['All skills', 'Python', 'SQL'])
+    const teamFilter = screen.getByRole('combobox', { name: 'Filter by team' })
+    // A team they've only been invited to isn't one you share yet.
+    expect([...teamFilter.options].map((o) => o.textContent)).toEqual(['All teams', 'Coaching'])
+
+    fireEvent.change(skillFilter, { target: { value: 'lib-py' } })
+    expect(profileLinks()).toEqual(['/skills-profile/alex'])
+    expect(screen.queryByRole('region', { name: /^Pending invites/ })).not.toBeInTheDocument()
+
+    fireEvent.change(teamFilter, { target: { value: 'team-1' } })
+    expect(profileLinks()).toEqual([])
+    expect(screen.getByText('No connections match these filters.')).toBeInTheDocument()
+
+    fireEvent.change(skillFilter, { target: { value: '' } })
+    expect(profileLinks()).toEqual(['/skills-profile/sam'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(profileLinks()).toHaveLength(2)
+    expect(screen.getByRole('region', { name: /^Pending invites/ })).toBeInTheDocument()
+  })
+
   it('says how you relate and which skills you share, keeping the rest in the details', async () => {
     connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
     connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
-    connectionApi.getSharedSkills.mockResolvedValue({ alex: ['Excel', 'Python', 'SQL', 'Writing'] })
+    connectionApi.getConnectionSkills.mockResolvedValue({
+      alex: ['Excel', 'Python', 'SQL', 'Writing'].map((name) => ({ libraryId: name, name, shared: true })),
+    })
     employerApi.listMyLineManagementWithConnections.mockResolvedValue([
       { connectionUserId: 'alex', direction: 'manages_me', relationshipType: 'primary', employerName: 'Acme' },
     ])

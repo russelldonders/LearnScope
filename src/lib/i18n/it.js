@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Ora {level} · imposta un obiettivo per misurare i progressi',
   },
   connections: {
+    filterBySkill: "Filtra per competenza",
+    allSkills: "Tutte le competenze",
+    filterByTeam: "Filtra per team",
+    allTeams: "Tutti i team",
+    clearFilters: "Rimuovi filtri",
+    noFilterMatches: "Nessuna connessione corrisponde a questi filtri.",
     sharedSkillsLine: "Competenze in comune: {skills}",
     sharedSkills: "Competenze in comune",
     sharedTeams: "Team in comune",
