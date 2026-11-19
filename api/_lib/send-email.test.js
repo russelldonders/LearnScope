@@ -60,6 +60,15 @@ describe('connectionInviteEmail', () => {
     const theirs = { ...rows, skills: { ...rows.skills, user_id: 'someone-else' } }
     expect(await connectionInviteEmail(fakeAdmin(theirs), 'me', url, 'rate')).toBeNull()
   })
+
+  it('sends a connect invite, which has no skill, only to the address on the sender’s own waiting invite', async () => {
+    const connect = { connection_invites: { ...rows.connection_invites, invite_type: 'connect', skill_id: null } }
+    const connectUrl = 'https://learnscope.example.com/connect/abc'
+    expect(await connectionInviteEmail(fakeAdmin(connect), 'me', connectUrl, 'connect')).toEqual({ toEmail: 'cat@example.com', title: '' })
+    expect(await connectionInviteEmail(fakeAdmin(connect), 'someone-else', connectUrl, 'connect')).toBeNull()
+    expect(await connectionInviteEmail(fakeAdmin(connect), 'me', connectUrl, 'rate')).toBeNull()
+    expect(await connectionInviteEmail(fakeAdmin(rows), 'me', url, 'connect')).toBeNull()
+  })
 })
 
 describe('validationRequestEmail', () => {
@@ -93,6 +102,8 @@ describe('isAppLink', () => {
     expect(isAppLink(`https://${HOST}/recommend/abc-123_x`, 'recommend', HOST)).toBe(true)
     expect(isAppLink(`https://${HOST}/validate-request/${REQUEST_ID}`, 'validation_request', HOST)).toBe(true)
     expect(isAppLink(`https://${HOST}/plan-invite/abc123`, 'plan_invite', HOST)).toBe(true)
+    expect(isAppLink(`https://${HOST}/connect/abc123`, 'connect', HOST)).toBe(true)
+    expect(isAppLink(`https://${HOST}/rate/abc123`, 'connect', HOST)).toBe(false)
   })
 
   it('only accepts a plan invitation page for a plan invitation email', () => {

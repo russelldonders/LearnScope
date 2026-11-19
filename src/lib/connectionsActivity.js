@@ -1,4 +1,4 @@
-// Shaping list_connections_activity (0063/0102) rows for the Connections feed.
+// Shaping list_connections_activity (0063/0102) rows for the People page.
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -29,30 +29,99 @@ export function groupConnectionsActivity(events) {
   return groups
 }
 
-function sectionFor(eventAt, now) {
-  const age = now - new Date(eventAt).getTime()
-  if (age < 7 * DAY_MS) return 'thisWeek'
-  if (age < 30 * DAY_MS) return 'thisMonth'
-  return 'earlier'
+// "employment at Continental: Tire kicking" -> organisation and title.
+export function parseExperience(detail) {
+  const match = /^[^ ]+ at (.+?): (.+)$/.exec(detail ?? '')
+  return match ? { organisation: match[1], title: match[2] } : { organisation: null, title: detail }
 }
 
-// Time sections, newest first, each holding one block per person (in order of
-// their newest event) so several updates from one person read as one story.
-export function sectionedActivity(events, now = Date.now()) {
-  const sections = []
-  for (const event of events) {
-    const key = sectionFor(event.event_at, now)
-    let section = sections.find((s) => s.key === key)
-    if (!section) {
-      section = { key, people: [] }
-      sections.push(section)
+// "Course name · Provider".
+export function parseCourse(detail) {
+  const [name, ...provider] = (detail ?? '').split(' · ')
+  return { name, provider: provider.join(' · ') || null }
+}
+
+export const RECENT_DAYS = 30
+
+export function isRecent(eventAt, now = Date.now()) {
+  return now - new Date(eventAt).getTime() < RECENT_DAYS * DAY_MS
+}
+
+// What a person's been doing, most telling first: a validated or confirmed
+// level, then finished courses and new roles, then what they've started,
+// aimed for, added or planned. A cancelled course isn't news worth leading
+// with, so it stays in the details only.
+const SUMMARY_ORDER = [
+  'skill_validated',
+  'skill_confirmed',
+  'course_completed',
+  'experience_added',
+  'course_started',
+  'target_set',
+  'skill_added',
+  'course_planned',
+]
+
+// The thing each event is about, so the same skill or course counts once.
+function subjectOf(event) {
+  if (event.event_type.startsWith('course_')) return parseCourse(event.detail).name
+  if (event.event_type === 'experience_added') return event.detail
+  return event.skill_name
+}
+
+function summaryPart(type, events) {
+  const first = events[0]
+  const count = events.length
+  const one = count === 1
+  switch (type) {
+    case 'skill_validated':
+      return one
+        ? { key: 'validatedOne', params: { skill: first.skill_name, level: first.level } }
+        : { key: 'validatedMany', params: { count } }
+    case 'skill_confirmed':
+      return one
+        ? { key: 'reachedOne', params: { skill: first.skill_name, level: first.level } }
+        : { key: 'reachedMany', params: { count } }
+    case 'course_completed':
+      return one ? { key: 'completedOne', params: { name: parseCourse(first.detail).name } } : { key: 'completedMany', params: { count } }
+    case 'experience_added': {
+      if (!one) return { key: 'rolesMany', params: { count } }
+      const { organisation, title } = parseExperience(first.detail)
+      return organisation
+        ? { key: 'roleAt', params: { title, organisation } }
+        : { key: 'roleOne', params: { title } }
     }
-    let person = section.people.find((p) => p.actorId === event.actor_id)
-    if (!person) {
-      person = { actorId: event.actor_id, name: event.full_name, avatarUrl: event.avatar_url, events: [] }
-      section.people.push(person)
-    }
-    person.events.push(event)
+    case 'course_started':
+      return one ? { key: 'startedOne', params: { name: parseCourse(first.detail).name } } : { key: 'startedMany', params: { count } }
+    case 'target_set':
+      return one && first.level
+        ? { key: 'aimingOne', params: { skill: first.skill_name, level: first.level } }
+        : { key: 'targetsMany', params: { count } }
+    case 'skill_added':
+      return one ? { key: 'addedOne', params: { skill: first.skill_name } } : { key: 'addedMany', params: { count } }
+    case 'course_planned':
+      return one ? { key: 'plannedOne', params: { name: parseCourse(first.detail).name } } : { key: 'plannedMany', params: { count } }
+    default:
+      return null
   }
-  return sections
+}
+
+// One person's recent events (newest first) as a short list of phrases --
+// { key, params } for connectionsActivity.summary.* -- most telling first,
+// each kind of thing once. Levels arrive as numbers for the caller to label.
+export function summariseActivity(events, max = 3) {
+  const byType = new Map()
+  for (const event of events) {
+    if (!SUMMARY_ORDER.includes(event.event_type)) continue
+    const subject = subjectOf(event)
+    const list = byType.get(event.event_type) ?? []
+    // Newest first, so the first time a subject appears is its latest news.
+    if (!list.some((e) => subjectOf(e) === subject)) list.push(event)
+    byType.set(event.event_type, list)
+  }
+  const parts = SUMMARY_ORDER
+    .filter((type) => byType.has(type))
+    .map((type) => summaryPart(type, byType.get(type)))
+    .filter(Boolean)
+  return { parts: parts.slice(0, max), more: Math.max(0, parts.length - max) }
 }

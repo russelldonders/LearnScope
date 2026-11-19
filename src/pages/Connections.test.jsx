@@ -28,6 +28,9 @@ vi.mock('../context/LanguageContext', async () => {
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
 vi.mock('./MyTeam', () => ({ EmployerTeamPanel: () => <section>Employer team list</section> }))
+vi.mock('../components/InviteConnectModal', () => ({
+  default: ({ onClose }) => <div role="dialog" aria-label="Invite someone to connect"><button type="button" onClick={onClose}>Done</button></div>,
+}))
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
   getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
@@ -153,32 +156,76 @@ describe('Connections sections', () => {
     expect(await screen.findByText(/sent to friend@example.com/)).toBeInTheDocument()
   })
 
-  it('shows what connections are up to on the People tab only', async () => {
+  it('shows each connection once, summing up their last month, most recently active first', async () => {
+    const recent = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }, { id: 'kim', name: 'Kim' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' }, sam: { name: 'Sam' }, kim: { name: 'Kim' } })
     connectionApi.listConnectionsActivity.mockResolvedValue([
-      { event_type: 'skill_added', actor_id: 'alex', full_name: 'Alex', skill_name: 'SQL', event_at: '2026-11-01T10:00:00Z' },
+      { event_type: 'skill_confirmed', actor_id: 'sam', full_name: 'Sam', skill_name: 'Python', level: 4, event_at: recent(1) },
+      { event_type: 'course_completed', actor_id: 'sam', full_name: 'Sam', skill_name: null, detail: 'Data Basics · OpenLearn', event_at: recent(2) },
+      { event_type: 'skill_added', actor_id: 'alex', full_name: 'Alex', skill_name: 'SQL', event_at: recent(60) },
     ])
     renderPage()
-    expect(await screen.findByRole('heading', { name: 'What your connections are up to' })).toBeInTheDocument()
-    expect(screen.getByText('Alex')).toBeInTheDocument()
-    expect(connectionApi.listConnectionsActivity).toHaveBeenCalledWith(30)
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Teams' }))
+    expect(await screen.findByText('Reached Skilled in Python · Completed “Data Basics”')).toBeInTheDocument()
+    expect(screen.getByText('No updates in the last month')).toBeInTheDocument()
+    expect(screen.getByText('Connected')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'What your connections are up to' })).not.toBeInTheDocument()
+    const profiles = screen.getAllByRole('link').map((link) => link.getAttribute('href')).filter((href) => href.startsWith('/skills-profile/'))
+    expect(profiles).toEqual(['/skills-profile/sam', '/skills-profile/alex', '/skills-profile/kim'])
+    expect(connectionApi.listConnectionsActivity).toHaveBeenCalledWith(300)
+
+    const [details] = screen.getAllByRole('button', { name: 'Show details' })
+    fireEvent.click(details)
+    expect(details).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('region', { name: 'Recent activity' })).toBeInTheDocument()
+    expect(screen.getByText('Data Basics')).toBeInTheDocument()
   })
 
-  it('leaves the activity heading out when there is nothing to show', async () => {
+  it('shows ratings exchanged in a connection’s details', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
+    connectionApi.listMyPeerRatings.mockResolvedValue([
+      { rater_id: 'me', skill_owner_id: 'alex', skill_name: 'SQL', level: 3, rated_at: '2026-09-01T00:00:00Z' },
+    ])
     renderPage()
-    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'What your connections are up to' })).not.toBeInTheDocument()
+    expect(await screen.findByText('No updates in the last month')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+    expect(screen.getByRole('region', { name: 'Ratings between you' })).toBeInTheDocument()
+    expect(screen.getByText(/You rated their/)).toBeInTheDocument()
   })
 
-  it('keeps the connection list when the activity feed fails, and can retry', async () => {
+  it('offers to invite someone to connect from the People tab', async () => {
+    renderPage()
+    expect(await screen.findByText(/Invite someone to connect — they don’t need to be on LearnScope yet/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Invite someone' }))
+    expect(screen.getByRole('dialog', { name: 'Invite someone to connect' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('lists an invitation to connect with the other pending invites, and resends it as one', async () => {
+    connectionApi.listSentInvites.mockResolvedValue([
+      {
+        id: 'invite-2', status: 'pending', invite_type: 'connect', invitee_email: 'new@example.com',
+        created_at: '2026-11-01T00:00:00Z', skills: null, url: 'https://app.example/connect/abc',
+      },
+    ])
+    connectionApi.sendInviteEmail.mockResolvedValue()
+    renderPage('/connections?section=invites')
+    expect(await screen.findByText('Invitation to connect — sent to new@example.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resend email' }))
+    await waitFor(() => expect(connectionApi.sendInviteEmail).toHaveBeenCalledWith(expect.objectContaining({
+      toEmail: 'new@example.com', shareUrl: 'https://app.example/connect/abc', emailType: 'connect',
+    })))
+  })
+
+  it('keeps the connection list when the activity fails to load, and can retry', async () => {
     connectionApi.listConnectionsActivity.mockRejectedValueOnce(new Error('boom'))
     renderPage()
-    expect(await screen.findByText("Couldn't load your connections' activity.")).toBeInTheDocument()
+    expect(await screen.findByText('Couldn’t load what your connections have been up to.')).toBeInTheDocument()
     expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    await waitFor(() => expect(screen.queryByText("Couldn't load your connections' activity.")).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('Couldn’t load what your connections have been up to.')).not.toBeInTheDocument())
     expect(connectionApi.listConnectionsActivity).toHaveBeenCalledTimes(2)
   })
 

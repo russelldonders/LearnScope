@@ -19,6 +19,7 @@ describe('anonymiseRoute', () => {
     expect(anonymiseRoute('/recommend/qwerty')).toBe('/recommend/:code')
     expect(anonymiseRoute('/shared/sometoken')).toBe('/shared/:code')
     expect(anonymiseRoute('/plan-invite/abcdef')).toBe('/plan-invite/:code')
+    expect(anonymiseRoute('/connect/abcdef')).toBe('/connect/:code')
   })
 })
 

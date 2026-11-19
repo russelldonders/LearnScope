@@ -9,6 +9,9 @@ const SOURCES = Object.values(import.meta.glob([
   '../../components/ConnectionsTeams.jsx',
   '../../components/ConnectionTeamInviteControl.jsx',
   '../../components/ConnectionsActivityFeed.jsx',
+  '../../components/InviteConnectModal.jsx',
+  '../../pages/Connections.jsx',
+  '../../pages/Connect.jsx',
   '../../components/ActivityRow.jsx',
   '../../components/ActivityTimeline.jsx',
   '../../components/EvidenceThumbnail.jsx',
@@ -90,6 +93,8 @@ const dynamicKeys = [
   ...flatKeys(english.skillGoals, 'skillGoals.'),
   // RouteTitle.jsx builds every key from its route list.
   ...flatKeys(english.routeTitles, 'routeTitles.'),
+  // Connections.jsx builds each summary phrase's key from summariseActivity.
+  ...flatKeys(english.connectionsActivity.summary, 'connectionsActivity.summary.'),
 ]
 
 function resolve(dictionary, key) {

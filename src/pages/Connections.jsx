@@ -9,7 +9,9 @@ import PersonAvatar from '../components/PersonAvatar'
 import { EmployerTeamPanel } from './MyTeam'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import ConnectionTeamInviteControl from '../components/ConnectionTeamInviteControl'
-import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
+import { EventRow } from '../components/ConnectionsActivityFeed'
+import InviteConnectModal from '../components/InviteConnectModal'
+import { groupConnectionsActivity, isRecent, summariseActivity } from '../lib/connectionsActivity'
 import { LEVEL_LABELS } from '../lib/levels'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
@@ -23,7 +25,7 @@ import {
   revokeInvite,
   disconnectConnection,
 } from '../lib/connections'
-import { formatFullDate } from '../lib/dates'
+import { formatAbsoluteDate, formatFullDate, formatRelativeDate } from '../lib/dates'
 import {
   createManagerTeam,
   createManagerWorkspace,
@@ -31,6 +33,10 @@ import {
   listMyLedManagerTeams,
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
+
+// Enough recent events to sum up each connection's last month, not just the
+// few most active people's.
+const ACTIVITY_LIMIT = 300
 
 const activitySeenKey = (userId) => `learnscope:connectionsActivitySeen:${userId}`
 
@@ -84,6 +90,7 @@ export default function Connections() {
   const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
   const [activity, setActivity] = useState([])
   const [activityError, setActivityError] = useState(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
   // When the learner last saw the feed on this device, to mark what's new.
   // Kept in the browser only: it's a convenience, not part of their record.
   const [activityLastSeen] = useState(() => readActivitySeen(user.id))
@@ -99,9 +106,7 @@ export default function Connections() {
   // the feed rather than hiding the connection list.
   async function loadActivity() {
     try {
-      // Fetch beyond the five visible rows so several related skill events can
-      // collapse without leaving the feed unexpectedly sparse.
-      setActivity(await listConnectionsActivity(30))
+      setActivity(await listConnectionsActivity(ACTIVITY_LIMIT))
       setActivityError(null)
       writeActivitySeen(user.id)
     } catch (err) {
@@ -178,11 +183,27 @@ export default function Connections() {
       })
     }
 
+    // What each person has been up to, from the activity feed (newest first).
+    const activityByPerson = new Map()
+    for (const event of activity) {
+      if (!activityByPerson.has(event.actor_id)) activityByPerson.set(event.actor_id, [])
+      activityByPerson.get(event.actor_id).push(event)
+    }
+
     const list = Array.from(map.values())
-    for (const c of list) c.events.sort((a, b) => new Date(b.date) - new Date(a.date))
-    list.sort((a, b) => new Date(b.events[0]?.date ?? 0) - new Date(a.events[0]?.date ?? 0))
+    for (const c of list) {
+      c.events.sort((a, b) => new Date(b.date) - new Date(a.date))
+      c.activity = activityByPerson.get(c.id) ?? []
+      c.summary = summariseActivity(c.activity.filter((event) => isRecent(event.event_at)))
+      c.lastSeenAt = activityLastSeen
+      c.hasNew = activityLastSeen != null && c.activity.some((event) => new Date(event.event_at) > activityLastSeen)
+      const latest = [c.activity[0]?.event_at, c.events[0]?.date].filter(Boolean).map((date) => new Date(date).getTime())
+      c.latestAt = latest.length > 0 ? Math.max(...latest) : null
+    }
+    // Whoever's been up to something most recently first; the rest by name.
+    list.sort((a, b) => (b.latestAt ?? 0) - (a.latestAt ?? 0) || (a.name ?? '').localeCompare(b.name ?? ''))
     return list
-  }, [ratings, allConnectionIds, profiles, user.id])
+  }, [ratings, allConnectionIds, profiles, user.id, activity, activityLastSeen])
 
   const pendingInvites = useMemo(
     () => invites.filter((i) => i.status === 'pending' && i.invitee_email),
@@ -210,7 +231,7 @@ export default function Connections() {
         inviterName: profiles[user.id]?.name || user.email,
         skillName: invite.skills?.name,
         shareUrl: invite.url,
-        emailType: invite.invite_type === 'recommend' ? 'recommend' : 'invite',
+        emailType: { recommend: 'recommend', connect: 'connect' }[invite.invite_type] ?? 'invite',
       })
       setResentId(invite.id)
       setTimeout(() => setResentId(null), 2000)
@@ -319,39 +340,44 @@ export default function Connections() {
           />
         )}
         {activeSection === 'people' && <div>
-          {(activity.length > 0 || activityError) && (
-            <section aria-labelledby="connections-activity-heading" className="mb-10">
-              <h2 id="connections-activity-heading" className="font-display text-xl text-ink mb-6">{t('connections.activityHeading')}</h2>
-              {activityError ? (
-                <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
-                  <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>
-                  <button
-                    type="button"
-                    onClick={loadActivity}
-                    className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <ConnectionsActivityFeed events={activity} lastSeenAt={activityLastSeen} />
-              )}
-            </section>
-          )}
-
           <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-display text-xl text-ink">{t('connections.yourConnections')}</h2>
-            {!loading && connections.length > 0 && (
-              <input
-                type="search"
-                aria-label="Search connections"
-                value={connectionQuery}
-                onChange={(e) => setConnectionQuery(e.target.value)}
-                placeholder="Search by name…"
-                className="w-full sm:w-64 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            )}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {!loading && connections.length > 0 && (
+                <input
+                  type="search"
+                  aria-label="Search connections"
+                  value={connectionQuery}
+                  onChange={(e) => setConnectionQuery(e.target.value)}
+                  placeholder="Search by name…"
+                  className="w-full sm:w-56 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                className="shrink-0 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+              >
+                {t('connections.inviteSomeone')}
+              </button>
+            </div>
           </div>
+
+          {/* The activity behind each summary is loaded on its own -- it's the
+              one query here that reads other people's records -- so a failure
+              only costs the summaries, never the list. */}
+          {activityError && (
+            <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 mb-4">
+              <p className="text-sm text-secondary">{t('connections.activityError')}</p>
+              <button
+                type="button"
+                onClick={loadActivity}
+                className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
+              >
+                {t('connections.retry')}
+              </button>
+            </div>
+          )}
 
           {loading && <p className="text-secondary">Loading…</p>}
           {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
@@ -405,8 +431,14 @@ export default function Connections() {
                 >
                   <div className="min-w-0">
                     <p className="text-sm text-ink">
-                      {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
-                      <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
+                      {invite.invite_type === 'connect' ? (
+                        t('connections.connectInviteSentTo', { email: invite.invitee_email })
+                      ) : (
+                        <>
+                          {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
+                          <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
+                        </>
+                      )}
                     </p>
                     <p className="font-mono text-xs text-secondary mt-0.5">
                       Sent {formatFullDate(invite.created_at)}
@@ -465,6 +497,13 @@ export default function Connections() {
         />
       )}
 
+      {inviteOpen && (
+        <InviteConnectModal
+          onClose={() => setInviteOpen(false)}
+          onSent={(invite) => setInvites((current) => [invite, ...current])}
+        />
+      )}
+
       {pendingRevoke && (
         <ConfirmDialog
           message={`Revoke the invite to ${pendingRevoke.invitee_email}? They'll no longer be able to use this link.`}
@@ -477,106 +516,167 @@ export default function Connections() {
   )
 }
 
-const VISIBLE_EVENTS = 1
+// How many of a person's recent events the details show.
+const DETAIL_EVENTS = 10
 
-// One connection's card -- broken out from the list above so its "show
-// more history" state is scoped per-card instead of one shared array of
-// expanded ids the parent would otherwise have to track.
+// The level in a summary phrase arrives as a number (see summariseActivity).
+function summaryText(part, t) {
+  const params = { ...part.params }
+  if (params.level != null) params.level = LEVEL_LABELS[params.level] ?? params.level
+  return t(`connectionsActivity.summary.${part.key}`, params)
+}
+
+// One person: who they are and, in a line, what they've been up to lately.
+// The events behind that line and the ratings you've exchanged sit in the
+// details, opened per card.
 function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam, onDisconnect }) {
   const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
   const active = sharedTeams?.active ?? []
   const pending = sharedTeams?.pending ?? []
-  const visibleEvents = expanded ? c.events : c.events.slice(0, VISIBLE_EVENTS)
-  const hiddenCount = c.events.length - visibleEvents.length
+  const detailEvents = groupConnectionsActivity(c.activity ?? []).slice(0, DETAIL_EVENTS)
+  const hasDetails = detailEvents.length > 0 || c.events.length > 0
+  const { parts, more } = c.summary ?? { parts: [], more: 0 }
+  const detailsId = `connection-details-${c.id}`
+  const lastSeenAt = c.lastSeenAt ?? null
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
-          <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
-          <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
-            {c.name}
-          </span>
-        </Link>
-        {/* Purely informational facts about this connection (neutral) are
-            kept visually distinct from the pending-invite pill below, which
-            is something to act on -- previously all three badge types shared
-            the same low-contrast styling with nothing to tell them apart. */}
-        {sharedSkillCount > 0 && (
-          <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
-            {sharedSkillCount} shared skill{sharedSkillCount === 1 ? '' : 's'}
-          </span>
-        )}
-        {active.length === 1 && (
-          <Link
-            to={`/connections?section=teams&team=${active[0].id}`}
-            className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-          >
-            {active[0].name}
-          </Link>
-        )}
-        {active.length > 1 && (
-          <Link
-            to="/connections?section=teams"
-            className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-          >
-            {active.length} teams
-          </Link>
-        )}
-        {pending.length > 0 && (
-          <Link
-            to="/connections?section=teams"
-            className="font-mono text-xs text-gold border border-gold/40 bg-gold/10 rounded-full px-2 py-0.5 hover:underline"
-          >
-            Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
-          </Link>
-        )}
-      </div>
-      <div className="space-y-3">
-        {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}
-        {visibleEvents.map((e, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <GrowthRing level={e.level} size={28} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-ink">
-                {e.direction === 'given' ? (
-                  <>
-                    You rated their <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                  </>
-                ) : (
-                  <>
-                    They rated your <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                  </>
-                )}
-              </p>
-              <p className="font-mono text-xs text-secondary">
-                {formatFullDate(e.date)}
-                {e.skillCategory ? ` · ${e.skillCategory}` : ''}
-              </p>
-              {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
+              <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
+              <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
+                {c.name}
+              </span>
+            </Link>
+            {/* Purely informational facts about this connection (neutral) are
+                kept visually distinct from the pending-invite pill below, which
+                is something to act on -- previously all three badge types shared
+                the same low-contrast styling with nothing to tell them apart. */}
+            {sharedSkillCount > 0 && (
+              <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
+                {sharedSkillCount} shared skill{sharedSkillCount === 1 ? '' : 's'}
+              </span>
+            )}
+            {active.length === 1 && (
+              <Link
+                to={`/connections?section=teams&team=${active[0].id}`}
+                className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+              >
+                {active[0].name}
+              </Link>
+            )}
+            {active.length > 1 && (
+              <Link
+                to="/connections?section=teams"
+                className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+              >
+                {active.length} teams
+              </Link>
+            )}
+            {pending.length > 0 && (
+              <Link
+                to="/connections?section=teams"
+                className="font-mono text-xs text-gold border border-gold/40 bg-gold/10 rounded-full px-2 py-0.5 hover:underline"
+              >
+                Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
+              </Link>
+            )}
             </div>
+
+          <p className={`mt-2 text-sm text-pretty ${parts.length > 0 ? 'text-ink' : 'text-secondary'}`}>
+            {parts.length > 0
+              ? parts.map((part) => summaryText(part, t)).join(' · ')
+              : c.latestAt
+                ? t('connections.noRecentUpdates')
+                : t('connections.connected')}
+            {more > 0 && <span className="text-secondary"> · {t('connectionsActivity.moreSkills', { count: more })}</span>}
+          </p>
+        </div>
+
+        {c.latestAt && (
+          <div className="flex items-center gap-2 shrink-0 pt-1.5">
+            {c.hasNew && (
+              <>
+                <span aria-hidden="true" className="w-2 h-2 rounded-full bg-moss" />
+                <span className="sr-only">{t('connectionsActivity.newLabel')}</span>
+              </>
+            )}
+            <time
+              dateTime={new Date(c.latestAt).toISOString()}
+              title={formatAbsoluteDate(new Date(c.latestAt).toISOString())}
+              className="text-xs text-secondary"
+            >
+              {formatRelativeDate(new Date(c.latestAt).toISOString())}
+            </time>
           </div>
-        ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="text-sm text-secondary hover:text-ink hover:underline"
-          >
-            Show all ({hiddenCount} more)
-          </button>
-        )}
-        {expanded && c.events.length > VISIBLE_EVENTS && (
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="text-sm text-secondary hover:text-ink hover:underline"
-          >
-            Show less
-          </button>
         )}
       </div>
+
+      {hasDetails && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-2 text-sm text-moss font-medium hover:underline"
+        >
+          {expanded ? t('connections.hideDetails') : t('connections.showDetails')}
+        </button>
+      )}
+
+      {expanded && (
+        <div id={detailsId} className="mt-3 space-y-4">
+          {detailEvents.length > 0 && (
+            <section aria-label={t('connections.recentActivity')}>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.recentActivity')}</h3>
+              <ul className="divide-y divide-hairline/40">
+                {detailEvents.map((event, i) => (
+                  <EventRow
+                    key={`${event.event_type}-${event.event_at}-${i}`}
+                    event={event}
+                    name={c.name}
+                    isNew={lastSeenAt != null && new Date(event.event_at) > lastSeenAt}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+          {c.events.length > 0 && (
+            <section aria-label={t('connections.ratingsBetweenYou')}>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">{t('connections.ratingsBetweenYou')}</h3>
+              <div className="space-y-3">
+                {c.events.map((e, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <GrowthRing level={e.level} size={28} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-ink">
+                        {e.direction === 'given' ? (
+                          <>
+                            You rated their <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
+                          </>
+                        ) : (
+                          <>
+                            They rated your <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
+                          </>
+                        )}
+                      </p>
+                      <p className="font-mono text-xs text-secondary">
+                        {formatFullDate(e.date)}
+                        {e.skillCategory ? ` · ${e.skillCategory}` : ''}
+                      </p>
+                      {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
       {showTeamInvite && active.length === 0 && (
         <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
       )}

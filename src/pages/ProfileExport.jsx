@@ -273,7 +273,7 @@ export default function ProfileExport() {
             <Section title={t('profileExport.connections', { count: data.connections.length })}>
               {data.connections.map((c) => (
                 <p key={c.id} className="text-sm text-ink mb-1">
-                  {t(c.source === 'peer_rating' ? 'profileExport.connectedViaRating' : 'profileExport.connectedViaRequest', { date: fmtDate(c.created_at) })}
+                  {t({ peer_rating: 'profileExport.connectedViaRating', invite: 'profileExport.connectedViaInvite' }[c.source] ?? 'profileExport.connectedViaRequest', { date: fmtDate(c.created_at) })}
                 </p>
               ))}
               {data.connections.length === 0 && <Empty />}

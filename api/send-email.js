@@ -47,6 +47,15 @@ const DEFAULT_TEMPLATES = {
     <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
   `,
   },
+  connection_invite: {
+    subject_template: '{{fromName}} invited you to connect on LearnScope',
+    body_template: `
+    <p>{{fromName}} would like to connect with you on LearnScope, where people record and develop their skills and learning over time.</p>
+    <p>Once you're connected you can follow each other's progress, as far as each of you chooses to share, and ask each other for ratings and recommendations.</p>
+    <p><a href="{{url}}">Accept the invitation</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `,
+  },
   skill_validation_request: {
     subject_template: '{{fromName}} asked you to validate "{{skillName}}"',
     body_template: `
@@ -106,6 +115,7 @@ const LINK_PATHS = {
   recommend: /^\/recommend\/[A-Za-z0-9_-]+$/,
   validation_request: /^\/validate-request\/[0-9a-f-]{36}$/i,
   plan_invite: /^\/plan-invite\/[A-Za-z0-9_-]+$/,
+  connect: /^\/connect\/[A-Za-z0-9_-]+$/,
 }
 
 // The client builds links from window.location.origin, and the API is only
@@ -183,7 +193,8 @@ export async function planInviteEmail(admin, userId, url) {
 
 // The same rule for the other emails: a rating or recommendation invite goes
 // only to the address on a waiting invite the sender made, for their own
-// skill, with that skill's real name; a validation request only to the
+// skill, with that skill's real name (a connect invite has no skill, so no
+// name); a validation request only to the
 // validator the sender asked, for a request still waiting. Null if it
 // doesn't check out.
 async function ownSkillName(admin, userId, skillId) {
@@ -204,6 +215,7 @@ export async function connectionInviteEmail(admin, userId, url, inviteType) {
   ) {
     return null
   }
+  if (inviteType === 'connect') return { toEmail: invite.invitee_email, title: '' }
   const title = await ownSkillName(admin, userId, invite.skill_id)
   return title ? { toEmail: invite.invitee_email, title } : null
 }
@@ -228,6 +240,7 @@ export async function validationRequestEmail(admin, userId, url) {
 function verifiedEmail(admin, userId, type, url) {
   if (type === 'plan_invite') return planInviteEmail(admin, userId, url)
   if (type === 'validation_request') return validationRequestEmail(admin, userId, url)
+  if (type === 'connect') return connectionInviteEmail(admin, userId, url, 'connect')
   return connectionInviteEmail(admin, userId, url, type === 'recommend' ? 'recommend' : 'rate')
 }
 
@@ -236,6 +249,7 @@ const EMAIL_TYPES = {
   recommend: { templateKey: 'skill_recommend', urlField: 'shareUrl' },
   validation_request: { templateKey: 'skill_validation_request', urlField: 'reviewUrl' },
   plan_invite: { templateKey: 'plan_invite', urlField: 'shareUrl' },
+  connect: { templateKey: 'connection_invite', urlField: 'shareUrl' },
 }
 
 export default async function handler(req, res) {

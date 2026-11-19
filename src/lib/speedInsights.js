@@ -5,9 +5,9 @@
 // and every id or code replaced by a placeholder.
 
 // Path segments that are always followed by a private code or token (the
-// /rate/:code, /recommend/:code, /plan-invite/:code, /shared/:token and
-// /validate-request/:requestId routes in App.jsx).
-const CODE_PREFIXES = new Set(['rate', 'recommend', 'plan-invite', 'shared', 'validate-request'])
+// /rate/:code, /recommend/:code, /plan-invite/:code, /connect/:code,
+// /shared/:token and /validate-request/:requestId routes in App.jsx).
+const CODE_PREFIXES = new Set(['rate', 'recommend', 'plan-invite', 'connect', 'shared', 'validate-request'])
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

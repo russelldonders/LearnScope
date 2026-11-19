@@ -33,12 +33,23 @@ export function planPendingInviteCode(code) {
   return `${PLAN_INVITE_PREFIX}${code}`
 }
 
+// The same for an invitation to connect (see Connect.jsx).
+const CONNECT_INVITE_PREFIX = 'connect:'
+
+export function connectPendingInviteCode(code) {
+  return `${CONNECT_INVITE_PREFIX}${code}`
+}
+
 // Where a stored invite code (from the ?invite= query or localStorage)
 // should take someone once they're signed in.
 export function pendingInvitePath(pendingCode) {
-  return pendingCode.startsWith(PLAN_INVITE_PREFIX)
-    ? `/plan-invite/${encodeURIComponent(pendingCode.slice(PLAN_INVITE_PREFIX.length))}`
-    : `/rate/${pendingCode}`
+  if (pendingCode.startsWith(PLAN_INVITE_PREFIX)) {
+    return `/plan-invite/${encodeURIComponent(pendingCode.slice(PLAN_INVITE_PREFIX.length))}`
+  }
+  if (pendingCode.startsWith(CONNECT_INVITE_PREFIX)) {
+    return `/connect/${encodeURIComponent(pendingCode.slice(CONNECT_INVITE_PREFIX.length))}`
+  }
+  return `/rate/${pendingCode}`
 }
 
 // Opens WhatsApp (the app on mobile, web/desktop WhatsApp otherwise) with a
@@ -55,8 +66,64 @@ export function duplicatePendingInviteMessage(email) {
   return `You already have a pending invite out to ${email} for this skill.`
 }
 
+const INVITE_PATHS = { rate: 'rate', recommend: 'recommend', connect: 'connect' }
+
 function inviteUrl(shareCode, inviteType) {
-  return `${window.location.origin}/${inviteType === 'recommend' ? 'recommend' : 'rate'}/${shareCode}`
+  return `${window.location.origin}/${INVITE_PATHS[inviteType] ?? 'rate'}/${shareCode}`
+}
+
+// An invitation to connect, not about any skill (connect invites in
+// 20261119090000_0320_connect_invites.sql). With an email it's sent to that
+// person; without, it's a link to share however the learner likes.
+export async function createConnectInvite(email, inviterId) {
+  const { data, error } = await supabase
+    .from('connection_invites')
+    .insert({ skill_id: null, invitee_email: email || null, inviter_id: inviterId, invite_type: 'connect' })
+    .select('id, share_code, invite_type')
+    .single()
+  if (error) throw error
+  return { ...data, url: inviteUrl(data.share_code, data.invite_type) }
+}
+
+// A shared link works for 14 days (connect_invite_expired, 0320); one is
+// reused only while it has at least a week left, so a link handed out from
+// the dialog never runs out soon after.
+const CONNECT_LINK_REUSE_MS = 7 * 24 * 60 * 60 * 1000
+
+// Reuses a waiting link-only connect invite, as getOrCreateShareLink does for
+// a skill, so opening the invite dialog repeatedly doesn't leave a trail.
+export async function getOrCreateConnectShareLink(inviterId) {
+  const { data: existing, error: selectError } = await supabase
+    .from('connection_invites')
+    .select('id, share_code, invite_type')
+    .eq('inviter_id', inviterId)
+    .eq('status', 'pending')
+    .eq('invite_type', 'connect')
+    .is('invitee_email', null)
+    .gt('created_at', new Date(Date.now() - CONNECT_LINK_REUSE_MS).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (selectError) throw selectError
+  if (existing) return { ...existing, url: inviteUrl(existing.share_code, existing.invite_type) }
+  return createConnectInvite(null, inviterId)
+}
+
+export function isDuplicatePendingConnectInviteError(error) {
+  return error?.code === '23505' && error?.message?.includes('connection_invites_unique_pending_connect_idx')
+}
+
+export async function getConnectInvitePreview(code) {
+  const { data, error } = await supabase.rpc('get_connect_invite_preview', { p_code: code })
+  if (error) throw error
+  return data?.[0] ?? null
+}
+
+// Connects the visitor with whoever sent the invite; returns that person's id.
+export async function acceptConnectInvite(code) {
+  const { data, error } = await supabase.rpc('accept_connect_invite', { p_code: code })
+  if (error) throw error
+  return data
 }
 
 export async function createInvite(skillId, email, inviterId, inviteType = 'rate') {
