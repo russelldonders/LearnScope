@@ -6,7 +6,8 @@ import ConfirmDialog from './ConfirmDialog'
 import ConnectionTeamInviteControl from './ConnectionTeamInviteControl'
 import GrowthRing from './GrowthRing'
 import { EventRow } from './ConnectionsActivityFeed'
-import { describeRelationships } from '../lib/connectionRelationships'
+import { describeRelationships, tieKindOf } from '../lib/connectionRelationships'
+import TieIcon from './TieIcon'
 import { groupConnectionsActivity } from '../lib/connectionsActivity'
 import { disconnectConnection, listConnections, listConnectionsActivity, listMyPeerRatings } from '../lib/connections'
 import { listMyLineManagementWithConnections } from '../lib/employerManagement'
@@ -107,9 +108,12 @@ export default function ConnectionPanel({ userId, name }) {
 
       <div>
         {relationships.length > 0 ? (
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {relationships.map((phrase) => (
-              <li key={phrase.key} className="text-sm text-ink">{t(`connections.relation.${phrase.key}`, phrase.params)}</li>
+              <li key={phrase.key} className="flex items-center gap-2 text-sm text-ink">
+                <TieIcon kind={tieKindOf(phrase.key)} />
+                {t(`connections.relation.${phrase.key}`, phrase.params)}
+              </li>
             ))}
           </ul>
         ) : (

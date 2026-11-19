@@ -190,7 +190,8 @@ describe('Connections sections', () => {
       { connectionUserId: 'alex', teamId: 'team-1', teamName: 'Coaching', membershipStatus: 'active', myRole: 'member', theirRole: 'manager' },
     ])
     renderPage()
-    expect(await screen.findByText('Your line manager at Acme · Leads you in Coaching')).toBeInTheDocument()
+    expect(await screen.findByText('Your line manager at Acme')).toBeInTheDocument()
+    expect(screen.getByText('Leads you in Coaching')).toBeInTheDocument()
     expect(screen.getByText(/^Shared skills: Excel, Python, SQL/)).toHaveTextContent('Shared skills: Excel, Python, SQL +1 more')
     expect(screen.queryByRole('button', { name: 'Disconnect from Alex' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()

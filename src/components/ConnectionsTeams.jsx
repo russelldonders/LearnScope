@@ -26,6 +26,7 @@ import ManagerLearningPanel from '../pages/manager/ManagerLearningPanel'
 import ManagerCollaborationPanel from '../pages/manager/ManagerCollaborationPanel'
 import ManagerTeamSharingPanel from '../pages/manager/learner/ManagerTeamSharingPanel'
 import { EmployerTeamPanel } from '../pages/MyTeam'
+import TieIcon from './TieIcon'
 import { useLanguage } from '../context/LanguageContext'
 
 const fieldClass = 'mt-1 block w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink'
@@ -894,6 +895,12 @@ function TeamSwitcher({ options, selectedKey, onSelect }) {
   const items = options.map((team) => ({
     id: team.key,
     name: team.name,
+    icon: (size) => {
+      const kind = team.role === 'organisation' ? 'organisation' : team.role === 'leader' ? 'teamLead' : 'team'
+      // An archived team keeps its kind but steps back.
+      const icon = <TieIcon kind={kind} size={size === 'sm' ? 'list' : 'md'} />
+      return team.teamStatus === 'archived' ? <span className="opacity-50">{icon}</span> : icon
+    },
     detail: team.role === 'organisation'
       ? t('teams.list.peopleYouManage')
       : [

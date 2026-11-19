@@ -25,7 +25,8 @@ import {
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
 import { listMyLineManagementWithConnections } from '../lib/employerManagement'
-import { describeRelationships } from '../lib/connectionRelationships'
+import { describeRelationships, tieKindOf } from '../lib/connectionRelationships'
+import TieIcon from '../components/TieIcon'
 
 // Enough recent events to sum up each connection's last month, not just the
 // few most active people's.
@@ -559,9 +560,14 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
           </Link>
 
           {relationships.length > 0 && (
-            <p className="mt-1.5 text-sm text-moss font-medium text-pretty">
-              {relationships.map((phrase) => t(`connections.relation.${phrase.key}`, phrase.params)).join(' · ')}
-            </p>
+            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+              {relationships.map((phrase) => (
+                <li key={phrase.key} className="flex items-center gap-1.5 text-sm text-ink font-medium">
+                  <TieIcon kind={tieKindOf(phrase.key)} />
+                  <span className="text-pretty">{t(`connections.relation.${phrase.key}`, phrase.params)}</span>
+                </li>
+              ))}
+            </ul>
           )}
 
           <p className={`mt-1.5 text-sm text-pretty ${parts.length > 0 ? 'text-ink' : 'text-secondary'}`}>

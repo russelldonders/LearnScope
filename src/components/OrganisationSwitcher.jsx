@@ -9,7 +9,10 @@ function initials(name = '') {
   return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase()
 }
 
+// An item may bring its own icon -- icon(size) -- in place of a logo or
+// initials (the Teams switcher marks each kind of team that way).
 function OrganisationAvatar({ organisation, size = 'md' }) {
+  if (typeof organisation.icon === 'function') return organisation.icon(size)
   const sizeClass = size === 'sm' ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-xs'
   if (organisation.logo_url) {
     return (
@@ -38,7 +41,7 @@ function OrganisationAvatar({ organisation, size = 'md' }) {
 // focus returns to the button. onChange(organisationId) is only called for a
 // different organisation than the current one. Also used for other single
 // choices of the same shape (the Teams tab's team): an item may carry a short
-// detail line, shown under its name in the list, and noMatchesText replaces
+// detail line, shown under its name in the list, and its own icon; noMatchesText replaces
 // the empty-filter message.
 export default function OrganisationSwitcher({
   organisations, selectedId, onChange, label = 'Organisation', noMatchesText = 'No matching organisations.',

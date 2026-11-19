@@ -36,3 +36,11 @@ export function describeRelationships({ lines = [], teams = [] }) {
 
   return phrases
 }
+
+// Which kind of tie a phrase from describeRelationships is, for TieIcon.
+export function tieKindOf(phraseKey) {
+  if (phraseKey.startsWith('managesMe.') || phraseKey.startsWith('managesThem.')) return 'organisation'
+  if (phraseKey === 'team.invited') return 'invited'
+  if (phraseKey === 'team.leadsThem' || phraseKey === 'team.coLead') return 'teamLead'
+  return 'team'
+}

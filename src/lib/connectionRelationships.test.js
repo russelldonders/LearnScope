@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeRelationships } from './connectionRelationships'
+import { describeRelationships, tieKindOf } from './connectionRelationships'
 
 const team = (teamName, myRole, theirRole, membershipStatus = 'active') => ({ teamId: teamName, teamName, myRole, theirRole, membershipStatus })
 
@@ -42,5 +42,17 @@ describe('describeRelationships', () => {
     })
     expect(phrases.map((p) => p.key)).toEqual(['managesMe.primary', 'team.leadsMe'])
     expect(describeRelationships({})).toEqual([])
+  })
+})
+
+describe('tieKindOf', () => {
+  it('marks an organisation, a team you lead, a team you are in and an invitation differently', () => {
+    expect(tieKindOf('managesMe.primary')).toBe('organisation')
+    expect(tieKindOf('managesThem.project')).toBe('organisation')
+    expect(tieKindOf('team.leadsThem')).toBe('teamLead')
+    expect(tieKindOf('team.coLead')).toBe('teamLead')
+    expect(tieKindOf('team.leadsMe')).toBe('team')
+    expect(tieKindOf('team.teammates')).toBe('team')
+    expect(tieKindOf('team.invited')).toBe('invited')
   })
 })
