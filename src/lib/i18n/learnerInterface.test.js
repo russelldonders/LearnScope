@@ -10,6 +10,7 @@ const SOURCES = Object.values(import.meta.glob([
   '../../components/ConnectionTeamInviteControl.jsx',
   '../../components/ConnectionsActivityFeed.jsx',
   '../../components/InviteConnectModal.jsx',
+  '../../components/ConnectionPanel.jsx',
   '../../pages/Connections.jsx',
   '../../pages/Connect.jsx',
   '../../components/ActivityRow.jsx',

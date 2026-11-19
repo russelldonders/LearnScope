@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
-import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PersonAvatar from '../components/PersonAvatar'
 import { EmployerTeamPanel } from './MyTeam'
 import ConnectionsTeams from '../components/ConnectionsTeams'
-import ConnectionTeamInviteControl from '../components/ConnectionTeamInviteControl'
-import { EventRow } from '../components/ConnectionsActivityFeed'
 import InviteConnectModal from '../components/InviteConnectModal'
-import { groupConnectionsActivity, isRecent, summariseActivity } from '../lib/connectionsActivity'
+import { isRecent, summariseActivity } from '../lib/connectionsActivity'
 import { LEVEL_LABELS } from '../lib/levels'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
@@ -23,14 +20,9 @@ import {
   getConnectionSkills,
   sendInviteEmail,
   revokeInvite,
-  disconnectConnection,
 } from '../lib/connections'
 import { formatAbsoluteDate, formatFullDate, formatRelativeDate } from '../lib/dates'
 import {
-  createManagerTeam,
-  createManagerWorkspace,
-  inviteConnectionToManagerTeam,
-  listMyLedManagerTeams,
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
 import { listMyLineManagementWithConnections } from '../lib/employerManagement'
@@ -61,7 +53,7 @@ function writeActivitySeen(userId) {
 }
 
 export default function Connections() {
-  const { user, refreshWorkspaces, managerContexts } = useAuth()
+  const { user, managerContexts } = useAuth()
   const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
   // People this learner manages at an employer get their own tab -- only
@@ -86,10 +78,10 @@ export default function Connections() {
   const [revokingId, setRevokingId] = useState(null)
   const [revokeError, setRevokeError] = useState(null)
   const [pendingRevoke, setPendingRevoke] = useState(null)
-  const [pendingDisconnect, setPendingDisconnect] = useState(null)
-  const [disconnecting, setDisconnecting] = useState(false)
-  const [disconnectNotice, setDisconnectNotice] = useState(null)
-  const [ledTeams, setLedTeams] = useState([])
+  // Disconnecting happens on the person's own page (ConnectionPanel), which
+  // comes back here saying so.
+  const location = useLocation()
+  const disconnectedName = location.state?.disconnectedName ?? null
   const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
   const [activity, setActivity] = useState([])
   const [activityError, setActivityError] = useState(null)
@@ -122,18 +114,16 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, connectionsData, invitesData, teamsData, sharedTeamsData, linesData] = await Promise.all([
+      const [ratingsData, connectionsData, invitesData, sharedTeamsData, linesData] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
         listSentInvites(),
-        listMyLedManagerTeams(),
         listMySharedTeamsByConnection(),
         listMyLineManagementWithConnections(),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
-      setLedTeams(teamsData.filter((team) => team.status === 'active'))
       const byConnection = (rows) => {
         const grouped = {}
         for (const row of rows) (grouped[row.connectionUserId] ??= []).push(row)
@@ -295,30 +285,6 @@ export default function Connections() {
     }
   }
 
-  async function handleDisconnect(connection) {
-    setDisconnecting(true)
-    setError(null)
-    try {
-      await disconnectConnection(connection.id)
-      setDisconnectNotice(t('connections.disconnected', { name: connection.name }))
-      await Promise.all([load(), loadActivity()])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setDisconnecting(false)
-      setPendingDisconnect(null)
-    }
-  }
-
-  async function handleCreateTeam(name) {
-    const workspaceId = await createManagerWorkspace()
-    const id = await createManagerTeam(workspaceId, { name })
-    const team = { id, name, status: 'active' }
-    setLedTeams((current) => [...current, team])
-    await refreshWorkspaces?.().catch(() => {})
-    return team
-  }
-
   function selectSection(section) {
     // Each tab starts from its own defaults rather than inheriting another
     // tab's selection (a team id, an employer) from the URL.
@@ -453,7 +419,9 @@ export default function Connections() {
 
           {loading && <p className="text-secondary">Loading…</p>}
           {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
-          {disconnectNotice && <p role="status" className="text-sm text-moss mb-4">{disconnectNotice}</p>}
+          {disconnectedName && (
+            <p role="status" className="text-sm text-moss mb-4">{t('connections.disconnected', { name: disconnectedName })}</p>
+          )}
 
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 px-4 border border-dashed border-hairline rounded-lg">
@@ -479,11 +447,6 @@ export default function Connections() {
                 sharedSkills={(connectionSkills[c.id] ?? []).filter((skill) => skill.shared).map((skill) => skill.name)}
                 sharedTeams={sharedTeamsByConnection[c.id] ?? []}
                 lines={linesByConnection[c.id] ?? []}
-                showTeamInvite={allConnectionIds.includes(c.id)}
-                ledTeams={ledTeams}
-                onInviteToTeam={inviteConnectionToManagerTeam}
-                onCreateTeam={handleCreateTeam}
-                onDisconnect={() => setPendingDisconnect(c)}
               />
             ))}
           </div>
@@ -545,16 +508,6 @@ export default function Connections() {
         </div>
       </main>
 
-      {pendingDisconnect && (
-        <ConfirmDialog
-          message={t('connections.disconnectConfirm', { name: pendingDisconnect.name })}
-          confirmLabel={t('connections.disconnect')}
-          onConfirm={() => handleDisconnect(pendingDisconnect)}
-          onCancel={() => setPendingDisconnect(null)}
-          confirming={disconnecting}
-        />
-      )}
-
       {inviteOpen && (
         <InviteConnectModal
           onClose={() => setInviteOpen(false)}
@@ -574,9 +527,6 @@ export default function Connections() {
   )
 }
 
-// How many of a person's recent events the details show.
-const DETAIL_EVENTS = 10
-
 // The level in a summary phrase arrives as a number (see summariseActivity).
 function summaryText(part, t) {
   const params = { ...part.params }
@@ -584,31 +534,29 @@ function summaryText(part, t) {
   return t(`connectionsActivity.summary.${part.key}`, params)
 }
 
-// Shared skills named on the card itself; the rest are in the details.
+// Shared skills named on the card; every skill is on their page.
 const SHOWN_SHARED_SKILLS = 3
 
 // One person, kept to a few short lines: how you relate (who manages whom at
 // an employer, which teams you share and who leads them), what they've been
-// up to lately, and the skills you share. Everything else -- the activity
-// behind the summary, ratings you've exchanged, every shared skill, adding
-// them to a team and disconnecting -- sits in the details, opened per card.
-function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam, onDisconnect }) {
+// up to lately, and the skills you share. The whole card opens their page,
+// where everything else about the connection lives (ConnectionPanel).
+function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
   const { t } = useLanguage()
-  const [expanded, setExpanded] = useState(false)
-  const activeTeams = sharedTeams.filter((team) => team.membershipStatus !== 'pending')
   const relationships = describeRelationships({ lines, teams: sharedTeams })
-  const detailEvents = groupConnectionsActivity(c.activity ?? []).slice(0, DETAIL_EVENTS)
   const { parts, more } = c.summary ?? { parts: [], more: 0 }
-  const detailsId = `connection-details-${c.id}`
-  const lastSeenAt = c.lastSeenAt ?? null
   const shownSkills = sharedSkills.slice(0, SHOWN_SHARED_SKILLS)
   const moreSkills = sharedSkills.length - shownSkills.length
 
   return (
-    <div className="bg-card border border-hairline rounded-lg p-4">
+    <div className="relative bg-card border border-hairline rounded-lg p-4 hover:border-moss/50 focus-within:ring-2 focus-within:ring-moss">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
+          {/* Stretched over the whole card, so anywhere on it opens their page. */}
+          <Link
+            to={`/skills-profile/${c.id}`}
+            className="flex items-center gap-2 group w-fit focus:outline-none after:absolute after:inset-0 after:rounded-lg"
+          >
             <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
             <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
               {c.name}
@@ -656,104 +604,6 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines, showT
           </div>
         )}
       </div>
-
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => setExpanded((value) => !value)}
-        className="mt-2 text-sm text-moss font-medium hover:underline"
-      >
-        {expanded ? t('connections.hideDetails') : t('connections.showDetails')}
-      </button>
-
-      {expanded && (
-        <div id={detailsId} className="mt-3 space-y-4">
-          {sharedSkills.length > SHOWN_SHARED_SKILLS && (
-            <section aria-label={t('connections.sharedSkills')}>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.sharedSkills')}</h3>
-              <p className="text-sm text-ink text-pretty">{sharedSkills.join(', ')}</p>
-            </section>
-          )}
-          {sharedTeams.length > 0 && (
-            <section aria-label={t('connections.sharedTeams')}>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.sharedTeams')}</h3>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                {sharedTeams.map((team) => (
-                  <li key={team.teamId}>
-                    <Link to={`/connections?section=teams&team=${team.teamId}`} className="text-sm text-moss hover:underline">
-                      {team.teamName}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {detailEvents.length > 0 && (
-            <section aria-label={t('connections.recentActivity')}>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-1">{t('connections.recentActivity')}</h3>
-              <ul className="divide-y divide-hairline/40">
-                {detailEvents.map((event, i) => (
-                  <EventRow
-                    key={`${event.event_type}-${event.event_at}-${i}`}
-                    event={event}
-                    name={c.name}
-                    isNew={lastSeenAt != null && new Date(event.event_at) > lastSeenAt}
-                  />
-                ))}
-              </ul>
-            </section>
-          )}
-          {c.events.length > 0 && (
-            <section aria-label={t('connections.ratingsBetweenYou')}>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">{t('connections.ratingsBetweenYou')}</h3>
-              <div className="space-y-3">
-                {c.events.map((e, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <GrowthRing level={e.level} size={28} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-ink">
-                        {e.direction === 'given' ? (
-                          <>
-                            You rated their <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                          </>
-                        ) : (
-                          <>
-                            They rated your <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                          </>
-                        )}
-                      </p>
-                      <p className="font-mono text-xs text-secondary">
-                        {formatFullDate(e.date)}
-                        {e.skillCategory ? ` · ${e.skillCategory}` : ''}
-                      </p>
-                      {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-          {showTeamInvite && activeTeams.length === 0 && (
-            <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
-          )}
-          {/* Kept apart from everything above, at the foot of the details, so
-              it's never mistaken for one of the everyday actions. */}
-          {onDisconnect && (
-            <div className="pt-3 border-t border-hairline flex justify-end">
-              <button
-                type="button"
-                onClick={onDisconnect}
-                aria-label={t('connections.disconnectFrom', { name: c.name })}
-                className="text-xs text-red-700 font-medium hover:underline"
-              >
-                {t('connections.disconnect')}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
     </div>
   )
 }

@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Nu {level} · stel een doel in om voortgang te meten',
   },
   connections: {
+    panel: {
+      heading: "Jij en {name}",
+      noTies: "Jullie delen nog geen team of rapportagelijn.",
+      youRated: "Jij beoordeelde hun {skill}: {level}",
+      theyRated: "Beoordeelde jouw {skill}: {level}",
+    },
     filterBySkill: "Filteren op vaardigheid",
     allSkills: "Alle vaardigheden",
     filterByTeam: "Filteren op team",
@@ -2200,6 +2206,8 @@ export default {
     revoke: 'Intrekken',
     list: {
       label: 'Je teams',
+      switcherLabel: "Team",
+      noMatches: "Geen overeenkomende teams.",
       youLead: 'Jij leidt',
       ledBy: 'Geleid door {name}',
       archived: 'Gearchiveerd',

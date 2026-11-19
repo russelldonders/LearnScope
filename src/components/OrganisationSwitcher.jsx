@@ -36,8 +36,13 @@ function OrganisationAvatar({ organisation, size = 'md' }) {
 // phone. Follows the ARIA listbox pattern: arrow keys/Home/End move the
 // highlight, Enter/Space chooses, Escape or clicking outside closes, and
 // focus returns to the button. onChange(organisationId) is only called for a
-// different organisation than the current one.
-export default function OrganisationSwitcher({ organisations, selectedId, onChange, label = 'Organisation' }) {
+// different organisation than the current one. Also used for other single
+// choices of the same shape (the Teams tab's team): an item may carry a short
+// detail line, shown under its name in the list, and noMatchesText replaces
+// the empty-filter message.
+export default function OrganisationSwitcher({
+  organisations, selectedId, onChange, label = 'Organisation', noMatchesText = 'No matching organisations.',
+}) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -207,7 +212,7 @@ export default function OrganisationSwitcher({ organisations, selectedId, onChan
             className="max-h-72 overflow-y-auto py-1 focus:outline-none"
           >
             {visible.length === 0 && (
-              <li className="px-3 py-2 text-sm text-secondary">No matching organisations.</li>
+              <li className="px-3 py-2 text-sm text-secondary">{noMatchesText}</li>
             )}
             {visible.map((organisation, index) => {
               const isSelected = organisation.id === selected.id
@@ -224,8 +229,11 @@ export default function OrganisationSwitcher({ organisations, selectedId, onChan
                   className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${isActive ? 'bg-paper' : ''}`}
                 >
                   <OrganisationAvatar organisation={organisation} size="sm" />
-                  <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-medium text-ink' : 'text-ink'}`}>
-                    {organisation.name}
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm ${isSelected ? 'font-medium text-ink' : 'text-ink'}`}>
+                      {organisation.name}
+                    </span>
+                    {organisation.detail && <span className="block truncate text-xs text-secondary">{organisation.detail}</span>}
                   </span>
                   {isSelected && (
                     <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="w-4 h-4 shrink-0 text-moss">

@@ -79,46 +79,6 @@ describe('Connections sections', () => {
     expect(screen.queryByText(/No connections yet/)).not.toBeInTheDocument()
   })
 
-  it('offers an add-to-team action for each connection', async () => {
-    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
-    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
-    managerApi.listMyLedManagerTeams.mockResolvedValue([{ id: 'team-1', name: 'Coaching', status: 'active' }])
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add to team' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
-    expect(managerApi.inviteConnectionToManagerTeam).toHaveBeenCalledWith('team-1', 'alex')
-    expect(await screen.findByText('Invitation sent to Coaching.')).toBeInTheDocument()
-  })
-
-  it('disconnects from a connection only after confirming, then refreshes the list', async () => {
-    connectionApi.listConnections
-      .mockResolvedValueOnce([{ id: 'alex', name: 'Alex' }])
-      .mockResolvedValue([])
-    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
-    connectionApi.disconnectConnection.mockResolvedValue()
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect from Alex' }))
-    expect(screen.getByText(/^Disconnect from Alex\? You.ll both stop seeing/)).toBeInTheDocument()
-    expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
-    await waitFor(() => expect(connectionApi.disconnectConnection).toHaveBeenCalledWith('alex'))
-    expect(await screen.findByText('You’re no longer connected to Alex.')).toBeInTheDocument()
-    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
-  })
-
-  it('keeps the connection when cancelling the disconnect', async () => {
-    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
-    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect from Alex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Disconnect from Alex' })).toBeInTheDocument()
-  })
-
   it('opens the teams tab directly and supports arrow-key tab navigation', () => {
     renderPage('/connections?section=teams')
     const teamsTab = screen.getByRole('tab', { name: 'Teams' })
@@ -182,12 +142,8 @@ describe('Connections sections', () => {
     const profiles = screen.getAllByRole('link').map((link) => link.getAttribute('href')).filter((href) => href.startsWith('/skills-profile/'))
     expect(profiles).toEqual(['/skills-profile/sam', '/skills-profile/alex', '/skills-profile/kim'])
     expect(connectionApi.listConnectionsActivity).toHaveBeenCalledWith(300)
-
-    const [details] = screen.getAllByRole('button', { name: 'Show details' })
-    fireEvent.click(details)
-    expect(details).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('region', { name: 'Recent activity' })).toBeInTheDocument()
-    expect(screen.getByText('Data Basics')).toBeInTheDocument()
+    // Details live on the person's own page, not in the list.
+    expect(screen.queryByRole('button', { name: 'Show details' })).not.toBeInTheDocument()
   })
 
   it('filters connections by a skill they show and by a team you share', async () => {
@@ -228,7 +184,7 @@ describe('Connections sections', () => {
     expect(screen.getByRole('region', { name: /^Pending invites/ })).toBeInTheDocument()
   })
 
-  it('says how you relate and which skills you share, keeping the rest in the details', async () => {
+  it('says how you relate and which skills you share, and opens their page for the rest', async () => {
     connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
     connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
     connectionApi.getConnectionSkills.mockResolvedValue({
@@ -244,25 +200,17 @@ describe('Connections sections', () => {
     expect(await screen.findByText('Your line manager at Acme · Leads you in Coaching')).toBeInTheDocument()
     expect(screen.getByText(/^Shared skills: Excel, Python, SQL/)).toHaveTextContent('Shared skills: Excel, Python, SQL +1 more')
     expect(screen.queryByRole('button', { name: 'Disconnect from Alex' })).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
-    expect(screen.getByRole('region', { name: 'Shared skills' })).toHaveTextContent('Excel, Python, SQL, Writing')
-    expect(screen.getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/connections?section=teams&team=team-1')
     expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Disconnect from Alex' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Alex/ })).toHaveAttribute('href', '/skills-profile/alex')
   })
 
-  it('shows ratings exchanged in a connection’s details', async () => {
-    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
-    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
-    connectionApi.listMyPeerRatings.mockResolvedValue([
-      { rater_id: 'me', skill_owner_id: 'alex', skill_name: 'SQL', level: 3, rated_at: '2026-09-01T00:00:00Z' },
-    ])
-    renderPage()
-    expect(await screen.findByText('No updates in the last month')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
-    expect(screen.getByRole('region', { name: 'Ratings between you' })).toBeInTheDocument()
-    expect(screen.getByText(/You rated their/)).toBeInTheDocument()
+  it('says so after disconnecting from someone on their page', async () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/connections', state: { disconnectedName: 'Alex' } }]}>
+        <Connections />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('You’re no longer connected to Alex.')).toBeInTheDocument()
   })
 
   it('offers to invite someone to connect from the People tab', async () => {

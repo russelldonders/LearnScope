@@ -82,6 +82,14 @@ async function inviteConnection(name) {
   fireEvent.click(within(dialog).getByRole('button', { name: 'Send invite' }))
 }
 
+// The Teams tab picks a team with the same switcher as the employer console's
+// organisation: a button naming the current team, opening a list of options.
+const teamSwitcher = () => screen.getByRole('button', { name: /^Team / })
+function chooseTeam(name) {
+  fireEvent.click(teamSwitcher())
+  fireEvent.click(screen.getByRole('option', { name: new RegExp(name) }))
+}
+
 describe('Connections teams', () => {
   it('lets a user without a manager workspace create a team and invite a connection', async () => {
     renderTeams()
@@ -90,9 +98,9 @@ describe('Connections teams', () => {
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Coaching circle' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create team', exact: true }))
     await screen.findByText('Team created. Invite people to get started.')
-    // Even a single team shows as a card in the list, plus a heading for the open one.
+    // A single team needs no switcher, just a heading for the open one.
     expect(screen.getByRole('heading', { name: 'Coaching circle' })).toBeInTheDocument()
-    expect(within(screen.getByRole('list', { name: 'Your teams' })).getByRole('button', { name: /Coaching circle/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: /^Team / })).not.toBeInTheDocument()
     // A brand-new team with nobody in it lands on Members, where inviting happens.
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Members' })).toHaveAttribute('aria-selected', 'true'))
     expect(screen.getByText('Getting your team started')).toBeInTheDocument()
@@ -145,12 +153,12 @@ describe('Connections teams', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Learning' }))
     expect(screen.getByText(/Courses and sessions your team has done together/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Second team/ }))
+    chooseTeam('Second team')
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
     // A team not visited yet opens on Skills...
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true'))
     // ...and going back returns to the tab last used there.
-    fireEvent.click(screen.getByRole('button', { name: /First team/ }))
+    chooseTeam('First team')
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Learning' })).toHaveAttribute('aria-selected', 'true'))
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledTimes(3))
   })
@@ -159,7 +167,7 @@ describe('Connections teams', () => {
     teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }, { id: 'two', name: 'Second team', status: 'active' }])
     renderTeams({ initialTeamId: 'two' }, { initialEntries: ['/connections?section=teams&team=two&tab=collaboration'] })
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
-    expect(screen.getByRole('button', { name: /Second team/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(teamSwitcher()).toHaveAccessibleName('Team Second team')
     // An explicit ?tab= wins over steering an empty team to Members.
     await waitFor(() => expect(teams.listManagerTeamSkills).toHaveBeenCalledWith('two'))
     expect(screen.getByRole('tab', { name: 'Collaboration' })).toHaveAttribute('aria-selected', 'true')
@@ -202,14 +210,15 @@ describe('Connections teams', () => {
     renderTeams()
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('one'))
     // The unified selector lists all three teams the user leads or has joined...
-    const list = screen.getByRole('list', { name: 'Your teams' })
-    expect(within(list).getByRole('button', { name: /Book group.*Led by Pat/ })).toBeInTheDocument()
+    fireEvent.click(teamSwitcher())
+    const list = screen.getByRole('listbox')
+    expect(within(list).getByRole('option', { name: /Book group.*Led by Pat/ })).toBeInTheDocument()
     expect(within(list).getAllByText('You lead')).toHaveLength(2)
     // ...while a merely-pending invitation stays in its own separate list, not selectable.
     expect(within(list).queryByText(/Study group/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Accept invitation to Study group' })).toBeInTheDocument()
 
-    fireEvent.click(within(list).getByRole('button', { name: /Second team/ }))
+    fireEvent.click(within(list).getByRole('option', { name: /Second team/ }))
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
     const summariesCallsBeforeInvite = teams.listManagerTeamMemberSummaries.mock.calls.length
     await inviteConnection('Sam')
@@ -343,7 +352,7 @@ describe('Connections teams', () => {
       : Promise.resolve([{ id: 'm2', name: 'Bea', sharedSkills: [] }]))
     renderTeams()
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('one'))
-    fireEvent.click(screen.getByRole('button', { name: /Second team/ }))
+    chooseTeam('Second team')
     await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }))
     expect(await screen.findByText('Bea')).toBeInTheDocument()

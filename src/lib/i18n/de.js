@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Jetzt {level} · lege ein Ziel fest, um den Fortschritt zu messen',
   },
   connections: {
+    panel: {
+      heading: "Du und {name}",
+      noTies: "Ihr habt noch kein gemeinsames Team und keine Berichtslinie.",
+      youRated: "Du hast {skill} mit {level} bewertet",
+      theyRated: "Hat deine Fähigkeit {skill} mit {level} bewertet",
+    },
     filterBySkill: "Nach Fähigkeit filtern",
     allSkills: "Alle Fähigkeiten",
     filterByTeam: "Nach Team filtern",
@@ -2202,6 +2208,8 @@ export default {
     revoke: 'Widerrufen',
     list: {
       label: 'Deine Teams',
+      switcherLabel: "Team",
+      noMatches: "Keine passenden Teams.",
       youLead: 'Von dir geleitet',
       ledBy: 'Geleitet von {name}',
       archived: 'Archiviert',

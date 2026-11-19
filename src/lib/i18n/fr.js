@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Actuellement {level} · définissez un objectif pour mesurer la progression',
   },
   connections: {
+    panel: {
+      heading: "Vous et {name}",
+      noTies: "Vous ne partagez pas encore d’équipe ni de lien hiérarchique.",
+      youRated: "Vous avez évalué sa compétence {skill} : {level}",
+      theyRated: "A évalué votre compétence {skill} : {level}",
+    },
     filterBySkill: "Filtrer par compétence",
     allSkills: "Toutes les compétences",
     filterByTeam: "Filtrer par équipe",
@@ -2202,6 +2208,8 @@ export default {
     revoke: 'Révoquer',
     list: {
       label: 'Vos équipes',
+      switcherLabel: "Équipe",
+      noMatches: "Aucune équipe correspondante.",
       youLead: 'Vous animez',
       ledBy: 'Animée par {name}',
       archived: 'Archivée',

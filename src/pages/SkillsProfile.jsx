@@ -11,6 +11,7 @@ import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import { LevelChangeRings, LevelChangeText } from '../components/LevelChange'
 import PersonAvatar from '../components/PersonAvatar'
+import ConnectionPanel from '../components/ConnectionPanel'
 import { useLanguage } from '../context/LanguageContext'
 
 const EXPERT_LEVEL = 5
@@ -207,6 +208,8 @@ export default function SkillsProfile() {
                 </p>
               </div>
             </div>
+
+            {!isOwnProfile && <ConnectionPanel userId={userId} name={displayName} />}
 
             {!visible ? (
               <div className="text-center py-16 border border-dashed border-hairline rounded-lg">

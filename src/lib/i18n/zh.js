@@ -596,6 +596,12 @@ export default {
     skillNoTarget: '当前 {level} · 设定目标以衡量进度',
   },
   connections: {
+    panel: {
+      heading: "你和 {name}",
+      noTies: "你们还没有共同的团队或汇报关系。",
+      youRated: "你对其 {skill} 的评分：{level}",
+      theyRated: "对方对你的 {skill} 的评分：{level}",
+    },
     filterBySkill: "按技能筛选",
     allSkills: "所有技能",
     filterByTeam: "按团队筛选",
@@ -2181,6 +2187,8 @@ export default {
     revoke: '撤销',
     list: {
       label: '你的团队',
+      switcherLabel: "团队",
+      noMatches: "没有匹配的团队。",
       youLead: '由你负责',
       ledBy: '负责人：{name}',
       archived: '已归档',

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import OrganisationSwitcher from './OrganisationSwitcher'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
@@ -644,7 +645,9 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     )}
 
     {teamOptions.length > 0 && <div className="space-y-4">
-      <TeamList options={teamOptions} selectedKey={selectedKey} disabled={busy} onSelect={selectTeam} />
+      {teamOptions.length > 1 && (
+        <TeamSwitcher options={teamOptions} selectedKey={selectedKey} onSelect={selectTeam} />
+      )}
       {selected && (
         <div>
           <h3 className="font-display text-lg text-ink">
@@ -839,28 +842,29 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 // console vs. one sharing panel), so the role needs to be readable before
 // choosing, not buried in an option's trailing text. Shown even for a
 // single team so the layout doesn't change shape once a second one appears.
-function TeamList({ options, selectedKey, disabled, onSelect }) {
+// Which team the tab shows, picked the same way as an organisation in the
+// employer console: one compact button that opens a list, rather than a grid
+// of team cards. Each team says whether you lead it or who does, and whether
+// it's archived. Only offered when there's more than one team to choose from.
+function TeamSwitcher({ options, selectedKey, onSelect }) {
   const { t } = useLanguage()
-  return <ul aria-label={t('teams.list.label')} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-    {options.map((team) => {
-      const isSelected = team.key === selectedKey
-      const isArchived = team.teamStatus === 'archived'
-      return <li key={team.key}>
-        <button type="button" disabled={disabled} aria-pressed={isSelected} onClick={() => onSelect(team.key)}
-          className={`w-full h-full rounded-lg border px-4 py-3 text-left disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-moss ${isSelected
-            ? 'border-moss bg-moss/10'
-            : 'border-hairline bg-card hover:bg-paper'}`}>
-          <span className="block text-sm font-medium text-ink">{team.name}</span>
-          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-secondary">
-            <span className={`rounded-full border px-2 py-0.5 ${team.role === 'leader' ? 'border-moss/40 text-ink' : 'border-hairline'}`}>
-              {team.role === 'leader' ? t('teams.list.youLead') : t('teams.list.ledBy', { name: team.membership.managerName })}
-            </span>
-            {isArchived && <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-ink">{t('teams.list.archived')}</span>}
-          </span>
-        </button>
-      </li>
-    })}
-  </ul>
+  const items = options.map((team) => ({
+    id: team.key,
+    name: team.name,
+    detail: [
+      team.role === 'leader' ? t('teams.list.youLead') : t('teams.list.ledBy', { name: team.membership.managerName }),
+      team.teamStatus === 'archived' ? t('teams.list.archived') : null,
+    ].filter(Boolean).join(' · '),
+  }))
+  return (
+    <OrganisationSwitcher
+      organisations={items}
+      selectedId={selectedKey}
+      onChange={onSelect}
+      label={t('teams.list.switcherLabel')}
+      noMatchesText={t('teams.list.noMatches')}
+    />
+  )
 }
 
 // Getting a team going takes three steps, and until the third happens every

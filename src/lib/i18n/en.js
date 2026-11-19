@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Now {level} · set a target to measure progress',
   },
   connections: {
+    panel: {
+      heading: "You and {name}",
+      noTies: "You don’t share a team or a reporting line yet.",
+      youRated: "You rated their {skill}: {level}",
+      theyRated: "They rated your {skill}: {level}",
+    },
     filterBySkill: "Filter by skill",
     allSkills: "All skills",
     filterByTeam: "Filter by team",
@@ -2199,6 +2205,8 @@ export default {
     revoke: 'Revoke',
     list: {
       label: 'Your teams',
+      switcherLabel: "Team",
+      noMatches: "No matching teams.",
       youLead: 'You lead',
       ledBy: 'Led by {name}',
       archived: 'Archived',

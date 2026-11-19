@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Ora {level} · imposta un obiettivo per misurare i progressi',
   },
   connections: {
+    panel: {
+      heading: "Tu e {name}",
+      noTies: "Non condividete ancora un team né una linea di riporto.",
+      youRated: "Hai valutato la sua competenza {skill}: {level}",
+      theyRated: "Ha valutato la tua competenza {skill}: {level}",
+    },
     filterBySkill: "Filtra per competenza",
     allSkills: "Tutte le competenze",
     filterByTeam: "Filtra per team",
@@ -2202,6 +2208,8 @@ export default {
     revoke: 'Revoca',
     list: {
       label: 'I tuoi team',
+      switcherLabel: "Team",
+      noMatches: "Nessun team corrispondente.",
       youLead: 'Lo guidi tu',
       ledBy: 'Guidato da {name}',
       archived: 'Archiviato',

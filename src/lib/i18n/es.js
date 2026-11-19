@@ -596,6 +596,12 @@ export default {
     skillNoTarget: 'Ahora {level} · fija un objetivo para medir el progreso',
   },
   connections: {
+    panel: {
+      heading: "Tú y {name}",
+      noTies: "Todavía no compartís un equipo ni una línea jerárquica.",
+      youRated: "Valoraste su {skill}: {level}",
+      theyRated: "Valoró tu {skill}: {level}",
+    },
     filterBySkill: "Filtrar por habilidad",
     allSkills: "Todas las habilidades",
     filterByTeam: "Filtrar por equipo",
@@ -2201,6 +2207,8 @@ export default {
     revoke: 'Revocar',
     list: {
       label: 'Tus equipos',
+      switcherLabel: "Equipo",
+      noMatches: "No hay equipos que coincidan.",
       youLead: 'Lo diriges tú',
       ledBy: 'Dirigido por {name}',
       archived: 'Archivado',
