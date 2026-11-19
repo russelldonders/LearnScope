@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import SkillPickerModal from './SkillPickerModal'
 import ActivityReflection from './ActivityReflection'
 import VoiceInputButton from './VoiceInputButton'
+import GoalSetField from './GoalSetField'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
@@ -458,7 +459,7 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
                   />
                   {/* Each further set is saved as its own activity. */}
                   {(entry.extraSets ?? []).map((set, index) => (
-                    <SetField
+                    <GoalSetField
                       key={index}
                       id={id(`goal-${goal.id}-set-${index + 2}`)}
                       goal={goal}
@@ -538,36 +539,6 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
         />
       )}
     </article>
-  )
-}
-
-function SetField({ id, goal, number, value, onChange, onRemove }) {
-  const { t } = useLanguage()
-  const isCount = goal.measure_kind === 'count'
-  return (
-    <div className="min-w-[7rem] flex-1">
-      <div className="flex items-baseline justify-between gap-1 mb-1">
-        <label htmlFor={id} className="text-xs text-secondary">{t('quickLog.setLabel', { number })}</label>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={t('quickLog.removeSet', { number })}
-          className="text-xs text-secondary hover:text-ink leading-none"
-        >
-          ×
-        </button>
-      </div>
-      <input
-        id={id}
-        type="number"
-        inputMode={isCount ? 'numeric' : 'decimal'}
-        min="0"
-        step={isCount ? '1' : 'any'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={INPUT_CLASS}
-      />
-    </div>
   )
 }
 

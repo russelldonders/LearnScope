@@ -658,6 +658,21 @@ export function SkillGoalTile({
         activityTitle: values.activityTitle,
         evidence: values.evidence,
       })
+      // Further sets are an entry each, as in the quick log; the note and any
+      // evidence stay with the first.
+      for (const setInput of values.extraSets ?? []) {
+        await logGoalEntry({
+          goal,
+          skill,
+          userId: user.id,
+          actor,
+          input: setInput,
+          date: values.date,
+          note: '',
+          activityTitle: values.activityTitle,
+          evidence: { evidenceUrl: '', files: [] },
+        })
+      }
     } catch (err) {
       // The activity is saved before its files upload, so it may exist even
       // though this failed. Reloading shows it, so a retry isn't a duplicate.

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import EvidenceFields from './EvidenceFields'
+import GoalSetField from './GoalSetField'
 import { useLanguage } from '../context/LanguageContext'
 import { activityName, formatClock, measurementsFromStatement } from '../lib/xapiStatement'
 import {
@@ -11,6 +12,7 @@ import {
   parseClock,
   validateEntryInput,
 } from '../lib/skillGoalProgress'
+import { goalTakesSets } from '../lib/quickActivityLog'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
@@ -51,6 +53,9 @@ function initialFields(goal, row, statements, prefillFrom = null) {
 // Both the card's quick entry and correcting an existing entry. It asks only
 // for what this goal measures, and hands back parsed values; saving is up to
 // the caller. A correction leaves evidence alone, since it isn't changing that.
+// For a goal done in sets, a new entry's value is Set 1, and "+ Add a set"
+// adds more, as in the quick log: each further set comes back in extraSets
+// (an input apiece) for the caller to save as its own entry.
 export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = null, statements, idPrefix, submitLabel, onSubmit, onCancel }) {
   const { t } = useLanguage()
   const today = localDateString()
@@ -61,9 +66,11 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
   const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [extraSets, setExtraSets] = useState([])
 
   const set = (key) => (e) => setFields((current) => ({ ...current, [key]: e.target.value }))
   const kind = goal.measure_kind
+  const takesSets = !row && goalTakesSets(goal)
   // Which set this is today, for a goal done in sets ("Set 2 of 3 today").
   const sessions = goal.aggregation === 'total' && !row ? computeGoalProgress(goal, statements).sessions : null
   // Once today's sets are done, a further one is an extra, not "Set 4 of 3".
@@ -89,6 +96,12 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
       setError(t(problem))
       return
     }
+    const extraInputs = takesSets ? extraSets.map((value) => ({ ...input, value: value.trim() })) : []
+    const setProblem = extraInputs.map((setInput) => validateEntryInput(goal, setInput)).find(Boolean)
+    if (setProblem) {
+      setError(t(setProblem))
+      return
+    }
     if (!date || date > today) {
       setError(t('skillGoals.errorDate'))
       return
@@ -101,11 +114,13 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
         note: fields.note.trim(),
         activityTitle: kind === 'activities' ? fields.title.trim() : '',
         evidence: { evidenceUrl: evidenceUrl.trim(), files: evidenceFiles },
+        extraSets: extraInputs,
       })
       if (!row) {
         setFields(initialFieldsAfterSave(fields))
         setEvidenceUrl('')
         setEvidenceFiles([])
+        setExtraSets([])
         setDate(today)
       }
     } catch (err) {
@@ -121,19 +136,46 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
     <form onSubmit={handleSubmit} className="@container space-y-2">
       <div className="grid grid-cols-1 @xs:grid-cols-2 gap-2">
         {(kind === 'count' || kind === 'number') && (
-          <div>
-            <label htmlFor={field('value')} className="block text-xs text-secondary mb-1">{goal.unit}</label>
-            <input
-              id={field('value')}
-              type="number"
-              inputMode={kind === 'count' ? 'numeric' : 'decimal'}
-              min="0"
-              step={kind === 'count' ? '1' : 'any'}
-              value={fields.value}
-              onChange={set('value')}
-              aria-describedby={entryHint ? field('each-entry-hint') : undefined}
-              className={INPUT_CLASS}
-            />
+          <div className={takesSets ? '@xs:col-span-2' : undefined}>
+            <div className={takesSets ? 'flex flex-wrap items-end gap-2' : undefined}>
+              <div className={takesSets ? 'min-w-[7rem] flex-1' : undefined}>
+                <label htmlFor={field('value')} className="block text-xs text-secondary mb-1">
+                  {takesSets ? t('quickLog.setLabel', { number: 1 }) : goal.unit}
+                </label>
+                <input
+                  id={field('value')}
+                  type="number"
+                  inputMode={kind === 'count' ? 'numeric' : 'decimal'}
+                  min="0"
+                  step={kind === 'count' ? '1' : 'any'}
+                  value={fields.value}
+                  onChange={set('value')}
+                  aria-describedby={entryHint ? field('each-entry-hint') : undefined}
+                  className={INPUT_CLASS}
+                />
+              </div>
+              {/* Each further set is saved as its own entry. */}
+              {extraSets.map((value, index) => (
+                <GoalSetField
+                  key={index}
+                  id={field(`set-${index + 2}`)}
+                  goal={goal}
+                  number={index + 2}
+                  value={value}
+                  onChange={(next) => setExtraSets((current) => current.map((other, i) => (i === index ? next : other)))}
+                  onRemove={() => setExtraSets((current) => current.filter((_, i) => i !== index))}
+                />
+              ))}
+              {takesSets && (
+                <button
+                  type="button"
+                  onClick={() => setExtraSets((current) => [...current, ''])}
+                  className="text-xs font-medium text-moss hover:underline py-2"
+                >
+                  {t('quickLog.addSet')}
+                </button>
+              )}
+            </div>
             {/* A total is built from entries, so one set is one entry, not the
                 day's total across sets. */}
             {entryHint && (
