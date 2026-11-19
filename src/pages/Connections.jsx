@@ -5,7 +5,6 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PersonAvatar from '../components/PersonAvatar'
-import { EmployerTeamPanel } from './MyTeam'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import InviteConnectModal from '../components/InviteConnectModal'
 import { isRecent, summariseActivity } from '../lib/connectionsActivity'
@@ -53,14 +52,13 @@ function writeActivitySeen(userId) {
 }
 
 export default function Connections() {
-  const { user, managerContexts } = useAuth()
+  const { user } = useAuth()
   const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
-  // People this learner manages at an employer get their own tab -- only
-  // offered to someone who actually manages anyone there.
-  const managesEmployerTeam = (managerContexts?.length ?? 0) > 0
-  const sectionKeys = managesEmployerTeam ? ['people', 'teams', 'team'] : ['people', 'teams']
-  const sectionParam = searchParams.get('section')
+  // People this learner manages at an organisation are on the Teams tab,
+  // chosen in its switcher; the old ?section=team (My team) opens it there.
+  const sectionKeys = ['people', 'teams']
+  const sectionParam = searchParams.get('section') === 'team' ? 'teams' : searchParams.get('section')
   const activeSection = sectionKeys.includes(sectionParam) ? sectionParam : 'people'
   const tabRefs = useRef({})
   const [loading, setLoading] = useState(true)
@@ -290,15 +288,13 @@ export default function Connections() {
     // tab's selection (a team id, an employer) from the URL.
     const next = new URLSearchParams()
     if (section !== 'people') next.set('section', section)
-    if (section === 'team' && searchParams.get('employer')) next.set('employer', searchParams.get('employer'))
     setSearchParams(next)
   }
 
   const sections = [
     { key: 'people', label: t('connections.tabs.connections'), count: loading ? null : connections.length || null },
     { key: 'teams', label: t('connections.tabs.teams') },
-    managesEmployerTeam && { key: 'team', label: t('connections.tabs.myTeam') },
-  ].filter(Boolean)
+  ]
 
   return (
     <div className="min-h-screen bg-paper">
@@ -335,7 +331,6 @@ export default function Connections() {
 
         <div id={`connections-panel-${activeSection}`} role="tabpanel"
           aria-labelledby={`connections-tab-${activeSection}`} tabIndex={0}>
-        {activeSection === 'team' && <EmployerTeamPanel />}
         {activeSection === 'teams' && (
           <ConnectionsTeams
             connections={connections.filter((connection) => allConnectionIds.includes(connection.id))}

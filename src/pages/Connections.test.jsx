@@ -28,7 +28,6 @@ vi.mock('../context/LanguageContext', async () => {
 })
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
-vi.mock('./MyTeam', () => ({ EmployerTeamPanel: () => <section>Employer team list</section> }))
 vi.mock('../components/InviteConnectModal', () => ({
   default: ({ onClose }) => <div role="dialog" aria-label="Invite someone to connect"><button type="button" onClick={onClose}>Done</button></div>,
 }))
@@ -88,18 +87,12 @@ describe('Connections sections', () => {
     expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveFocus()
   })
 
-  it('offers a My team tab only to someone who manages people at an employer', async () => {
-    renderPage('/connections?section=team')
-    expect(screen.queryByRole('tab', { name: 'My team' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByText('Employer team list')).not.toBeInTheDocument()
-    cleanup()
-
+  it('has no separate My team tab: people you manage are on Teams, where old My team links now open', async () => {
     authState.managerContexts = [{ employerId: 'employer-1', employerName: 'Acme' }]
-    renderPage('/connections?section=team')
-    expect(screen.getByRole('tab', { name: 'My team' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText('Employer team list')).toBeInTheDocument()
-    expect(screen.queryByText(/No connections yet/)).not.toBeInTheDocument()
+    renderPage('/connections?section=team&employer=employer-1')
+    expect(screen.queryByRole('tab', { name: 'My team' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Teams' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Team controls')).toBeInTheDocument()
     await screen.findByRole('tab', { name: /^Connections/ })
   })
 

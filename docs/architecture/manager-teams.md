@@ -89,3 +89,14 @@ Open follow-ups, not yet decided:
   B, but a "not working towards this" option may be wanted.
 - Records from an earlier membership of the same team stay visible to that
   team's current leader (decision C keeps them as history).
+
+## One place in the interface (2026-11-19)
+
+The owner chose to show both kinds of management in one place: People →
+Teams. Its team switcher lists the learner's teams and, after them, each
+organisation where they manage people (`ConnectionsTeams.jsx`, reusing
+`EmployerTeamPanel` from `MyTeam.jsx`). This is interface only: the two
+relationship models, their access rules and decision A above are unchanged,
+and an organisation entry is labelled "People you manage at …" so it is not
+mistaken for a team someone joined. The separate My team tab is gone; old
+`/team` and `?section=team` links open the organisation on the Teams tab.

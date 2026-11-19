@@ -2209,6 +2209,8 @@ export default {
     list: {
       label: 'Vos équipes',
       switcherLabel: "Équipe",
+      peopleYouManage: "Personnes que vous encadrez",
+      peopleYouManageAt: "Personnes que vous encadrez chez {organisation}",
       noMatches: "Aucune équipe correspondante.",
       youLead: 'Vous animez',
       ledBy: 'Animée par {name}',

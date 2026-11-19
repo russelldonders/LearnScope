@@ -2188,6 +2188,8 @@ export default {
     list: {
       label: '你的团队',
       switcherLabel: "团队",
+      peopleYouManage: "你管理的人",
+      peopleYouManageAt: "你在 {organisation} 管理的人",
       noMatches: "没有匹配的团队。",
       youLead: '由你负责',
       ledBy: '负责人：{name}',

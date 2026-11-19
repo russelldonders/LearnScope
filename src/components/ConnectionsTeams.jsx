@@ -25,6 +25,7 @@ import ManagerTeamPanel from '../pages/manager/ManagerTeamPanel'
 import ManagerLearningPanel from '../pages/manager/ManagerLearningPanel'
 import ManagerCollaborationPanel from '../pages/manager/ManagerCollaborationPanel'
 import ManagerTeamSharingPanel from '../pages/manager/learner/ManagerTeamSharingPanel'
+import { EmployerTeamPanel } from '../pages/MyTeam'
 import { useLanguage } from '../context/LanguageContext'
 
 const fieldClass = 'mt-1 block w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink'
@@ -83,7 +84,7 @@ function pickDefaultKey(options) {
 }
 
 export default function ConnectionsTeams({ connections = [], currentUserName = '', initialTeamId = null }) {
-  const { user, refreshWorkspaces } = useAuth()
+  const { user, refreshWorkspaces, managerContexts, managerContextsError } = useAuth()
   const { t } = useLanguage()
   const [ledTeams, setLedTeams] = useState([])
   const [archivedLedTeams, setArchivedLedTeams] = useState([])
@@ -168,6 +169,9 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         setSelectedKey((previous) => {
           if (options.some((t) => t.key === previous)) return previous
           const fromUrl = initialTeamId && options.find((t) => t.id === initialTeamId)
+          // A link to an organisation's people (?employer=, no ?team=) is
+          // settled once those load -- see the effect after organisationOptions.
+          if (!fromUrl && searchParams.get('employer')) return previous
           return fromUrl?.key ?? pickDefaultKey(options)
         })
       })
@@ -182,6 +186,30 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     [ledTeams, archivedLedTeams, relationships]
   )
   const pendingInvites = relationships.filter((r) => r.status === 'pending')
+
+  // The people the learner manages at an organisation sit in the same
+  // switcher as their teams, but stay a different thing: an organisation's
+  // reporting line, with its access rules, not a team anyone joined (see
+  // docs/architecture/manager-teams.md). Choosing one shows that list.
+  const organisationOptions = useMemo(
+    () => (managerContexts ?? []).map((context) => ({
+      key: `org:${context.employerId}`, id: context.employerId, name: context.employerName, role: 'organisation', context,
+    })),
+    [managerContexts]
+  )
+  const switcherOptions = useMemo(() => [...teamOptions, ...organisationOptions], [teamOptions, organisationOptions])
+  const selectedOrganisation = organisationOptions.find((o) => o.key === selectedKey) ?? null
+  const organisationsKnown = managerContexts != null || Boolean(managerContextsError)
+
+  // Settles the selection once both lists are in: an ?employer= link opens
+  // that organisation; with nothing valid chosen, the default team, or else
+  // the first organisation.
+  useEffect(() => {
+    if (loading || !organisationsKnown) return
+    if (switcherOptions.some((o) => o.key === selectedKey)) return
+    const requested = organisationOptions.find((o) => o.id === searchParams.get('employer'))
+    setSelectedKey(requested?.key || pickDefaultKey(teamOptions) || organisationOptions[0]?.key || '')
+  }, [loading, organisationsKnown, switcherOptions, selectedKey, organisationOptions, teamOptions, searchParams])
 
   const selected = teamOptions.find((t) => t.key === selectedKey) ?? null
   const teamId = selected?.role === 'leader' ? selected.id : ''
@@ -254,11 +282,17 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   // through one click at a time.
   const selectedTeamId = selected?.id ?? ''
   const urlTab = selected?.role === 'leader' ? activePanel : ''
+  const selectedOrganisationId = selectedOrganisation?.id ?? ''
   useEffect(() => {
+    if (selectedOrganisationId) {
+      if (searchParams.get('employer') === selectedOrganisationId && !searchParams.get('team')) return
+      writeUrlParams(searchParams, setSearchParams, { employer: selectedOrganisationId, team: null, tab: null })
+      return
+    }
     if (!selectedTeamId) return
-    if (searchParams.get('team') === selectedTeamId && (searchParams.get('tab') ?? '') === urlTab) return
-    writeUrlParams(searchParams, setSearchParams, { team: selectedTeamId, tab: urlTab })
-  }, [selectedTeamId, urlTab, searchParams, setSearchParams])
+    if (searchParams.get('team') === selectedTeamId && (searchParams.get('tab') ?? '') === urlTab && !searchParams.get('employer')) return
+    writeUrlParams(searchParams, setSearchParams, { team: selectedTeamId, tab: urlTab, employer: null })
+  }, [selectedOrganisationId, selectedTeamId, urlTab, searchParams, setSearchParams])
 
   // Seeds Settings' "Team details" form from whichever led team is open --
   // and re-seeds after a save, so the form always shows what's stored.
@@ -640,13 +674,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim()} className={buttonClass}>{busy ? t('teams.createForm.creating') : t('teams.createForm.create')}</button>
         <button type="button" disabled={busy} className={buttonClass} onClick={() => setCreating(false)}>{t('teams.createForm.cancel')}</button></div>
     </form>}
-    {!loading && teamOptions.length === 0 && pendingInvites.length === 0 && !creating && !error && (
+    {!loading && switcherOptions.length === 0 && pendingInvites.length === 0 && !creating && !error && (
       <p className="text-sm text-secondary">{t('teams.empty')}</p>
     )}
 
-    {teamOptions.length > 0 && <div className="space-y-4">
-      {teamOptions.length > 1 && (
-        <TeamSwitcher options={teamOptions} selectedKey={selectedKey} onSelect={selectTeam} />
+    {switcherOptions.length > 0 && <div className="space-y-4">
+      {switcherOptions.length > 1 && (
+        <TeamSwitcher options={switcherOptions} selectedKey={selectedKey} onSelect={selectTeam} />
+      )}
+      {selectedOrganisation && (
+        <div>
+          <h3 className="font-display text-lg text-ink">{t('teams.list.peopleYouManageAt', { organisation: selectedOrganisation.name })}</h3>
+          <div className="mt-3">
+            <EmployerTeamPanel employerId={selectedOrganisation.id} showEmployerSelect={false} />
+          </div>
+        </div>
       )}
       {selected && (
         <div>
@@ -842,19 +884,22 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 // console vs. one sharing panel), so the role needs to be readable before
 // choosing, not buried in an option's trailing text. Shown even for a
 // single team so the layout doesn't change shape once a second one appears.
-// Which team the tab shows, picked the same way as an organisation in the
-// employer console: one compact button that opens a list, rather than a grid
-// of team cards. Each team says whether you lead it or who does, and whether
-// it's archived. Only offered when there's more than one team to choose from.
+// What the tab shows, picked the same way as an organisation in the employer
+// console: one compact button that opens a list. It holds the learner's teams
+// -- each saying whether you lead it or who does, and whether it's archived --
+// and, after them, each organisation where they manage people. Only offered
+// when there's more than one thing to choose from.
 function TeamSwitcher({ options, selectedKey, onSelect }) {
   const { t } = useLanguage()
   const items = options.map((team) => ({
     id: team.key,
     name: team.name,
-    detail: [
-      team.role === 'leader' ? t('teams.list.youLead') : t('teams.list.ledBy', { name: team.membership.managerName }),
-      team.teamStatus === 'archived' ? t('teams.list.archived') : null,
-    ].filter(Boolean).join(' · '),
+    detail: team.role === 'organisation'
+      ? t('teams.list.peopleYouManage')
+      : [
+        team.role === 'leader' ? t('teams.list.youLead') : t('teams.list.ledBy', { name: team.membership.managerName }),
+        team.teamStatus === 'archived' ? t('teams.list.archived') : null,
+      ].filter(Boolean).join(' · '),
   }))
   return (
     <OrganisationSwitcher

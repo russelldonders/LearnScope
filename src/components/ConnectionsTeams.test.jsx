@@ -5,7 +5,16 @@ import ConnectionsTeams from './ConnectionsTeams'
 import * as teams from '../lib/managerTeams'
 import { LanguageProvider } from '../context/LanguageContext'
 
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' }, workspaces: [], refreshWorkspaces: async () => {} }) }))
+const auth = vi.hoisted(() => ({ managerContexts: [] }))
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'me' }, workspaces: [], refreshWorkspaces: async () => {}, managerContexts: auth.managerContexts, managerContextsError: null }),
+}))
+// The people you manage at an organisation have their own tests (MyTeam.test.jsx).
+vi.mock('../pages/MyTeam', () => ({
+  EmployerTeamPanel: ({ employerId, showEmployerSelect }) => (
+    <section>People list for {employerId}{showEmployerSelect ? ' with its own selector' : ''}</section>
+  ),
+}))
 vi.mock('../context/PendingActionsContext', () => ({ usePendingActions: () => ({ refreshPendingActionCount: vi.fn() }) }))
 vi.mock('../lib/skillEvidence', () => ({ uploadEvidenceFiles: vi.fn() }))
 vi.mock('../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
@@ -33,6 +42,7 @@ function renderTeams(props = {}, { initialEntries = ['/connections?section=teams
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  auth.managerContexts = []
   teams.listMyLedManagerTeams.mockResolvedValue([])
   teams.listMyArchivedManagerTeams.mockResolvedValue([])
   teams.listMyManagerTeamRelationships.mockResolvedValue([])
@@ -91,6 +101,46 @@ function chooseTeam(name) {
 }
 
 describe('Connections teams', () => {
+  it('lists the organisations where you manage people after your teams, and shows those people when chosen', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
+    auth.managerContexts = [{ employerId: 'acme', employerName: 'Acme' }, { employerId: 'leeds', employerName: 'Leeds United' }]
+    renderTeams()
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('one'))
+    expect(teamSwitcher()).toHaveAccessibleName('Team First team')
+
+    fireEvent.click(teamSwitcher())
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      expect.stringMatching(/First team.*You lead/),
+      expect.stringMatching(/Acme.*People you manage/),
+      expect.stringMatching(/Leeds United.*People you manage/),
+    ])
+    fireEvent.click(screen.getByRole('option', { name: /Leeds United/ }))
+    expect(screen.getByRole('heading', { name: 'People you manage at Leeds United' })).toBeInTheDocument()
+    expect(screen.getByText('People list for leeds')).toBeInTheDocument()
+    // The team's own console steps aside.
+    expect(screen.queryByRole('tab', { name: 'Members' })).not.toBeInTheDocument()
+
+    chooseTeam('First team')
+    expect(await screen.findByRole('tab', { name: 'Members' })).toBeInTheDocument()
+    expect(screen.queryByText(/People list for/)).not.toBeInTheDocument()
+  })
+
+  it('opens the organisation an old My team link names', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
+    auth.managerContexts = [{ employerId: 'acme', employerName: 'Acme' }, { employerId: 'leeds', employerName: 'Leeds United' }]
+    renderTeams({}, { initialEntries: ['/connections?section=teams&employer=leeds'] })
+    expect(await screen.findByText('People list for leeds')).toBeInTheDocument()
+    expect(teamSwitcher()).toHaveAccessibleName('Team Leeds United')
+  })
+
+  it('shows the people you manage straight away when that is all there is', async () => {
+    auth.managerContexts = [{ employerId: 'acme', employerName: 'Acme' }]
+    renderTeams()
+    expect(await screen.findByText('People list for acme')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Team / })).not.toBeInTheDocument()
+    expect(screen.queryByText(/No teams yet/)).not.toBeInTheDocument()
+  })
+
   it('lets a user without a manager workspace create a team and invite a connection', async () => {
     renderTeams()
     await screen.findByText(/No teams yet/)

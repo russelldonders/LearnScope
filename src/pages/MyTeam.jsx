@@ -84,11 +84,15 @@ function LoadingRows() {
 // People page (Connections.jsx), alongside their own connections and teams.
 // The list used to be a page of its own at /team; that route now redirects
 // here, while a team member's snapshot still opens at /team/:employeeMemberId.
-export function EmployerTeamPanel({ services = DEFAULT_SERVICES }) {
+// The people the learner manages at one organisation. On the Teams tab the
+// organisation is chosen in the team switcher and passed in as employerId,
+// with this panel's own employer selector hidden; otherwise it reads
+// ?employer= and offers its own selector.
+export function EmployerTeamPanel({ services = DEFAULT_SERVICES, employerId = null, showEmployerSelect = true }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const { managerContexts, managerContextsError, refreshManagerContexts } = useAuth()
   const contexts = managerContexts ?? []
-  const requestedEmployerId = searchParams.get('employer')
+  const requestedEmployerId = employerId ?? searchParams.get('employer')
   const activeContext = contexts.find((context) => context.employerId === requestedEmployerId) ?? contexts[0]
   const [team, setTeam] = useState([])
   const [loading, setLoading] = useState(true)
@@ -160,7 +164,7 @@ export function EmployerTeamPanel({ services = DEFAULT_SERVICES }) {
         <p className="text-sm text-secondary max-w-xl text-pretty">
           People you manage at {activeContext.employerName}. You see employer-owned development activity, and only what each person has chosen to share with {activeContext.employerName}.
         </p>
-        {contexts.length > 1 && (
+        {showEmployerSelect && contexts.length > 1 && (
           <label className="text-sm text-secondary shrink-0">
             Employer
             <select
@@ -261,7 +265,7 @@ export function EmployerTeamPanel({ services = DEFAULT_SERVICES }) {
 }
 
 // /team keeps working for bookmarks and old links: the list now lives on
-// the People page, and /team/:employeeMemberId still opens one person.
+// the People page's Teams tab, and /team/:employeeMemberId still opens one person.
 export default function MyTeam({ services = DEFAULT_SERVICES }) {
   const { employeeMemberId } = useParams()
   const [searchParams] = useSearchParams()
@@ -272,7 +276,7 @@ export default function MyTeam({ services = DEFAULT_SERVICES }) {
 
   if (!employeeMemberId) {
     const employer = activeContext ? `&employer=${encodeURIComponent(activeContext.employerId)}` : ''
-    return <Navigate to={`/connections?section=team${employer}`} replace />
+    return <Navigate to={`/connections?section=teams${employer}`} replace />
   }
 
   if (!activeContext) {
@@ -394,7 +398,7 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
       <div className="min-h-screen bg-paper">
         <AppHeader />
         <main id="main-content" className="mx-auto max-w-4xl px-4 py-10">
-          <Link to={`/connections?section=team&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
+          <Link to={`/connections?section=teams&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to your team</Link>
           <p role="alert" className="mt-8 text-sm text-red-700">{error || 'This team member is not available.'}</p>
         </main>
       </div>
@@ -420,7 +424,7 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-8 sm:py-10">
-        <Link to={`/connections?section=team&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to My team</Link>
+        <Link to={`/connections?section=teams&employer=${encodeURIComponent(context.employerId)}`} className="text-sm text-secondary hover:text-ink">← Back to your team</Link>
 
         <header className="mt-6 flex flex-col gap-4 border-b border-hairline pb-6 sm:flex-row sm:items-center">
           <PersonAvatar name={snapshot.fullName} avatarUrl={snapshot.avatarUrl} size={14} />

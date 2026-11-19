@@ -2208,6 +2208,8 @@ export default {
     list: {
       label: 'Tus equipos',
       switcherLabel: "Equipo",
+      peopleYouManage: "Personas a tu cargo",
+      peopleYouManageAt: "Personas a tu cargo en {organisation}",
       noMatches: "No hay equipos que coincidan.",
       youLead: 'Lo diriges tú',
       ledBy: 'Dirigido por {name}',

@@ -92,7 +92,7 @@ afterEach(cleanup)
 describe('My Team', () => {
   it('shows direct and indirect reports without presenting a learner profile', async () => {
     const services = buildServices()
-    renderRoute('/connections?section=team&employer=employer-1', services)
+    renderRoute('/connections?section=teams&employer=employer-1', services)
 
     expect(await screen.findByText('Alex Morgan')).toBeInTheDocument()
     expect(screen.getByText(/People you manage at Acme/)).toBeInTheDocument()
@@ -110,17 +110,17 @@ describe('My Team', () => {
     expect(services.listMyEmployerTeam).toHaveBeenCalledWith('employer-1')
   })
 
-  it('links each person to their snapshot and back to the My team tab', async () => {
-    renderRoute('/connections?section=team&employer=employer-1', buildServices())
+  it('links each person to their snapshot and back to the Teams tab', async () => {
+    renderRoute('/connections?section=teams&employer=employer-1', buildServices())
     expect(await screen.findByRole('link', { name: /Alex Morgan/ }))
       .toHaveAttribute('href', '/team/member-1?employer=employer-1')
     fireEvent.click(screen.getByRole('link', { name: /Alex Morgan/ }))
-    expect(await screen.findByRole('link', { name: '← Back to My team' }))
-      .toHaveAttribute('href', '/connections?section=team&employer=employer-1')
+    expect(await screen.findByRole('link', { name: '← Back to your team' }))
+      .toHaveAttribute('href', '/connections?section=teams&employer=employer-1')
   })
 
   it('filters the team between direct and indirect reports', async () => {
-    renderRoute('/connections?section=team&employer=employer-1', buildServices())
+    renderRoute('/connections?section=teams&employer=employer-1', buildServices())
     await screen.findByText('Alex Morgan')
 
     fireEvent.click(screen.getByRole('button', { name: /^Indirect/ }))

@@ -2209,6 +2209,8 @@ export default {
     list: {
       label: 'Deine Teams',
       switcherLabel: "Team",
+      peopleYouManage: "Personen, die du führst",
+      peopleYouManageAt: "Personen, die du bei {organisation} führst",
       noMatches: "Keine passenden Teams.",
       youLead: 'Von dir geleitet',
       ledBy: 'Geleitet von {name}',
