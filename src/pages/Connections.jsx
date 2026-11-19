@@ -458,8 +458,8 @@ export default function Connections() {
               </h2>
               <ul className="bg-card border border-hairline rounded-lg divide-y divide-hairline/40">
                 {filteredInvites.map((invite) => (
-                  <li key={invite.id} className="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
+                  <li key={invite.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink break-words">
                         {invite.invite_type === 'connect' ? (
                           t('connections.connectInviteSentTo', { email: invite.invitee_email })
@@ -470,19 +470,21 @@ export default function Connections() {
                           </>
                         )}
                       </p>
-                      <p className="text-xs text-secondary mt-0.5">Sent {formatFullDate(invite.created_at)}</p>
+                      <p className="text-xs text-secondary mt-0.5">
+                        Sent {formatFullDate(invite.created_at)}
+                        {/* What just happened, as the menu closes on choosing. */}
+                        <span role="status" className="text-moss">
+                          {resendingId === invite.id ? ' · Sending…'
+                            : resentId === invite.id ? ' · Email sent'
+                              : copiedId === invite.id ? ' · Link copied'
+                                : revokingId === invite.id ? ' · Revoking…' : ''}
+                        </span>
+                      </p>
                       {resendError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{resendError.message}</p>}
                       {revokeError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>}
                     </div>
-                    {/* One small button holds the actions; what just happened
-                        shows beside it, as the menu closes on choosing. */}
-                    <div className="flex items-center gap-3 self-end sm:self-auto sm:shrink-0">
-                      <span role="status" className="text-xs text-moss">
-                        {resendingId === invite.id ? 'Sending…'
-                          : resentId === invite.id ? 'Email sent'
-                            : copiedId === invite.id ? 'Link copied'
-                              : revokingId === invite.id ? 'Revoking…' : ''}
-                      </span>
+                    {/* One small button, top right, holds the actions. */}
+                    <div className="shrink-0 -mt-1 -mr-1">
                       <DropdownNavMenu
                         variant="more"
                         align="right"
@@ -560,22 +562,6 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
             </span>
           </Link>
 
-          {/* Just the icons here; the words are their tooltip (and what a
-              screen reader hears), and in full on the person's page. */}
-          {relationships.length > 0 && (
-            <ul className="mt-1.5 flex flex-wrap gap-1.5">
-              {relationships.map((phrase) => {
-                const text = t(`connections.relation.${phrase.key}`, phrase.params)
-                return (
-                  <li key={phrase.key} title={text} className="flex items-center">
-                    <TieIcon kind={tieKindOf(phrase.key)} />
-                    <span className="sr-only">{text}</span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
           {parts.length > 0 && (
             <p className="mt-1.5 text-sm text-ink text-pretty">
               {parts.map((part) => summaryText(part, t)).join(' · ')}
@@ -591,10 +577,31 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
           )}
         </div>
 
-        {c.hasNew && (
-          <div className="shrink-0 pt-2.5">
-            <span aria-hidden="true" className="block w-2 h-2 rounded-full bg-moss" />
-            <span className="sr-only">{t('connectionsActivity.newLabel')}</span>
+        {/* Top right: just the icons for how you relate; the words are their
+            tooltip (and what a screen reader hears), and in full on the
+            person's page. Raised above the card's stretched link so the
+            tooltips show on hover. */}
+        {(relationships.length > 0 || c.hasNew) && (
+          <div className="shrink-0 flex items-center gap-1.5">
+            {relationships.length > 0 && (
+              <ul className="relative z-10 flex flex-wrap justify-end gap-1.5">
+                {relationships.map((phrase) => {
+                  const text = t(`connections.relation.${phrase.key}`, phrase.params)
+                  return (
+                    <li key={phrase.key} title={text} className="flex items-center">
+                      <TieIcon kind={tieKindOf(phrase.key)} />
+                      <span className="sr-only">{text}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {c.hasNew && (
+              <>
+                <span aria-hidden="true" className="block w-2 h-2 rounded-full bg-moss" />
+                <span className="sr-only">{t('connectionsActivity.newLabel')}</span>
+              </>
+            )}
           </div>
         )}
       </div>

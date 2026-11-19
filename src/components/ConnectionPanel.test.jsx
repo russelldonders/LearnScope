@@ -66,13 +66,22 @@ afterEach(() => {
 })
 
 describe('ConnectionPanel', () => {
-  it('puts how you relate and your ratings first, then their skills and activity in tabs', async () => {
-    renderPanel({ skills: <p>Their skills</p>, growth: <p>Their growth</p> })
+  it('puts how you relate in the profile box, then skills in common and ratings, skills and activity in tabs', async () => {
+    renderPanel({
+      header: (ties) => <div data-testid="profile-box">Profile box{ties}</div>,
+      commonSkills: <p>Skills you share</p>,
+      skills: <p>Their skills</p>,
+      growth: <p>Their growth</p>,
+    })
     expect(await screen.findByRole('tab', { name: 'You and Alex' })).toHaveAttribute('aria-selected', 'true')
-    expect(await screen.findByRole('heading', { name: 'You and Alex' })).toBeInTheDocument()
-    expect(screen.getByText('Your line manager at Acme')).toBeInTheDocument()
-    expect(screen.getByText('Leads you in Coaching')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/connections?section=teams&team=team-1')
+    expect(screen.getByRole('heading', { name: 'You and Alex' })).toBeInTheDocument()
+    const box = screen.getByTestId('profile-box')
+    expect(box).toHaveTextContent('Your line manager at Acme')
+    expect(box).toHaveTextContent('Leads you in Coaching')
+    // The teams are named there already, so no separate links to them.
+    expect(screen.queryByRole('link', { name: 'Coaching' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Skills in common' })).toBeInTheDocument()
+    expect(screen.getByText('Skills you share')).toBeInTheDocument()
     // Already in a team together, so no add-to-team.
     expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument()
     expect(screen.getByText('They rated your SQL: Capable')).toBeInTheDocument()
@@ -82,6 +91,8 @@ describe('ConnectionPanel', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Skills' }))
     expect(screen.getByText('Their skills')).toBeInTheDocument()
+    expect(screen.queryByText('Skills you share')).not.toBeInTheDocument()
+    expect(screen.getByTestId('profile-box')).toBeInTheDocument()
     expect(screen.queryByText('They rated your SQL: Capable')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
@@ -121,8 +132,9 @@ describe('ConnectionPanel', () => {
 
   it('shows the page untabbed for someone you aren’t connected to', async () => {
     connections.listConnections.mockResolvedValue([{ id: 'sam', name: 'Sam' }])
-    renderPanel({ fallback: <p>Untabbed profile</p> })
+    renderPanel({ fallback: <p>Untabbed profile</p>, header: (ties) => <div>Profile box{ties ? ' with ties' : ''}</div> })
     expect(await screen.findByText('Untabbed profile')).toBeInTheDocument()
+    expect(screen.getByText('Profile box')).toBeInTheDocument()
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
   })
 

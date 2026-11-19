@@ -2826,6 +2826,7 @@ export default {
     notVisible: "{name} hasn't made their skills profile visible.",
     filterLabel: 'Filter skills',
     inCommon: 'In common ({count})',
+    skillsInCommon: "Skills in common",
     allSkills: 'All skills ({count})',
     noneInCommon: "You don't share any skills in common yet.",
     noneTracked: 'No skills tracked yet.',

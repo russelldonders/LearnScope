@@ -2829,6 +2829,7 @@ export default {
     notVisible: '{name} non ha reso visibile il proprio profilo delle competenze.',
     filterLabel: 'Filtra competenze',
     inCommon: 'In comune ({count})',
+    skillsInCommon: "Competenze in comune",
     allSkills: 'Tutte le competenze ({count})',
     noneInCommon: 'Non avete ancora competenze in comune.',
     noneTracked: 'Nessuna competenza seguita.',

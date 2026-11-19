@@ -2829,6 +2829,7 @@ export default {
     notVisible: '{name} hat das Fähigkeitsprofil nicht sichtbar gemacht.',
     filterLabel: 'Fähigkeiten filtern',
     inCommon: 'Gemeinsam ({count})',
+    skillsInCommon: "Gemeinsame Fähigkeiten",
     allSkills: 'Alle Fähigkeiten ({count})',
     noneInCommon: 'Ihr habt noch keine gemeinsamen Fähigkeiten.',
     noneTracked: 'Noch keine Fähigkeiten erfasst.',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import ConfirmDialog from './ConfirmDialog'
@@ -31,17 +31,23 @@ const SHOWN_HERE = (event) => event.event_type !== 'skill_confirmed'
 const TAB_KEYS = ['you', 'skills', 'activity']
 
 // A connection's profile page, in three tabs:
-//   You and {name} -- how the two of you relate (management at an employer,
-//                     teams you share and who leads them), the ratings you've
-//                     exchanged, and the actions on the connection itself --
-//                     adding them to a team, disconnecting
+//   You and {name} -- the skills you have in common (commonSkills, from the
+//                     profile page), the ratings you've exchanged, and the
+//                     actions on the connection itself -- adding them to a
+//                     team, disconnecting
 //   Skills         -- the skills they share (skills, from the profile page)
 //   Activity       -- what they've been up to, then their recent growth
 //                     (growth, from the profile page)
+// How the two of you relate (management at an employer, teams you share and
+// who leads them) goes in the page's top profile box: header(ties) renders
+// that box, given the ties once they're known (null until then, or for
+// someone you aren't connected to).
 // The People list only sums these up; this is where they live in full. For
 // someone you aren't connected to there's no "you and them", so the page
 // shows its own skills and growth untabbed (fallback).
-export default function ConnectionPanel({ userId, name, skills = null, growth = null, fallback = null }) {
+export default function ConnectionPanel({
+  userId, name, header = () => null, commonSkills = null, skills = null, growth = null, fallback = null,
+}) {
   const { user, refreshWorkspaces } = useAuth()
   const { t } = useLanguage()
   const navigate = useNavigate()
@@ -83,8 +89,8 @@ export default function ConnectionPanel({ userId, name, skills = null, growth = 
     return () => { active = false }
   }, [user.id, userId])
 
-  if (!state) return null
-  if (!state.connected) return fallback
+  if (!state) return header(null)
+  if (!state.connected) return <>{header(null)}{fallback}</>
 
   const relationships = describeRelationships({ lines: state.lines, teams: state.teams })
   const activeTeams = state.teams.filter((team) => team.membershipStatus !== 'pending')
@@ -118,8 +124,21 @@ export default function ConnectionPanel({ userId, name, skills = null, growth = 
     { key: 'activity', label: t('connections.panel.tabs.activity') },
   ]
 
+  const ties = relationships.length > 0 ? (
+    <ul className="mt-3 space-y-1.5" aria-label={t('connections.panel.heading', { name })}>
+      {relationships.map((phrase) => (
+        <li key={phrase.key} className="flex items-center gap-2 text-sm text-ink">
+          <TieIcon kind={tieKindOf(phrase.key)} />
+          {t(`connections.relation.${phrase.key}`, phrase.params)}
+        </li>
+      ))}
+    </ul>
+  ) : null
+
   return (
     <div>
+      {header(ties)}
+
       <div role="tablist" aria-label={name} className="flex items-center gap-1 mb-6 border-b border-hairline overflow-x-auto">
         {tabs.map((tab) => (
           <button key={tab.key} type="button" role="tab"
@@ -146,39 +165,26 @@ export default function ConnectionPanel({ userId, name, skills = null, growth = 
           <section aria-labelledby="connection-panel-heading" className="bg-card border border-hairline rounded-lg p-6 mb-6 space-y-6">
             <h2 id="connection-panel-heading" className="sr-only">{t('connections.panel.heading', { name })}</h2>
 
-            <div>
-              {relationships.length > 0 ? (
-                <ul className="space-y-1.5">
-                  {relationships.map((phrase) => (
-                    <li key={phrase.key} className="flex items-center gap-2 text-sm text-ink">
-                      <TieIcon kind={tieKindOf(phrase.key)} />
-                      {t(`connections.relation.${phrase.key}`, phrase.params)}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-secondary">{t('connections.panel.noTies')}</p>
-              )}
-              {state.teams.length > 0 && (
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1" aria-label={t('connections.sharedTeams')}>
-                  {state.teams.map((team) => (
-                    <li key={team.teamId}>
-                      <Link to={`/connections?section=teams&team=${team.teamId}`} className="text-sm text-moss font-medium hover:underline">
-                        {team.teamName}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {activeTeams.length === 0 && (
-                <ConnectionTeamInviteControl
-                  connection={{ id: userId, name }}
-                  teams={state.ledTeams}
-                  onInvite={inviteConnectionToManagerTeam}
-                  onCreateTeam={handleCreateTeam}
-                />
-              )}
-            </div>
+            {(relationships.length === 0 || activeTeams.length === 0) && (
+              <div>
+                {relationships.length === 0 && <p className="text-sm text-secondary">{t('connections.panel.noTies')}</p>}
+                {activeTeams.length === 0 && (
+                  <ConnectionTeamInviteControl
+                    connection={{ id: userId, name }}
+                    teams={state.ledTeams}
+                    onInvite={inviteConnectionToManagerTeam}
+                    onCreateTeam={handleCreateTeam}
+                  />
+                )}
+              </div>
+            )}
+
+            {commonSkills && (
+              <div>
+                <h3 className={heading}>{t('skillsProfile.skillsInCommon')}</h3>
+                {commonSkills}
+              </div>
+            )}
 
             {state.ratings.length > 0 && (
               <div>

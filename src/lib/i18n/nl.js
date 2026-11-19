@@ -2827,6 +2827,7 @@ export default {
     notVisible: '{name} heeft het vaardigheidsprofiel niet zichtbaar gemaakt.',
     filterLabel: 'Vaardigheden filteren',
     inCommon: 'Gemeenschappelijk ({count})',
+    skillsInCommon: "Gedeelde vaardigheden",
     allSkills: 'Alle vaardigheden ({count})',
     noneInCommon: 'Jullie hebben nog geen vaardigheden gemeen.',
     noneTracked: 'Nog geen vaardigheden gevolgd.',

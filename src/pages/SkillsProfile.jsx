@@ -174,16 +174,76 @@ export default function SkillsProfile() {
   const filteredSkills = filterMode === 'common' ? commonSkills : skills
   const expertCount = useMemo(() => skills.filter((s) => s.level === EXPERT_LEVEL).length, [skills])
 
-  // The skills they share and their recent growth. For a connection these sit
-  // in the Skills and Activity tabs beside "You and {name}" (ConnectionPanel);
-  // otherwise one after the other.
-  const skillsSection = !visible ? (
+  // A grid of their skills; each opens the rating dialog when you can rate.
+  function renderSkillGrid(list) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {list.map((skill) => {
+          const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
+          const content = <>
+            <GrowthRing level={skill.level} size={48} />
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
+              {tagsBySkill.get(skill.id)?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {tagsBySkill.get(skill.id).map((tag) => (
+                    <span
+                      key={tag}
+                      className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {canRate && lastRatedAt && (
+                <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
+                  {t('skillsProfile.lastRatedByYou', { when: formatRelativeDate(lastRatedAt) })}
+                </p>
+              )}
+            </div>
+          </>
+          return canRate ? (
+            <button
+              key={skill.id}
+              type="button"
+              onClick={() => setRatingSkill(skill)}
+              className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={skill.id} className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center">
+              {content}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const notVisibleSection = (
     <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
       <p className="text-secondary">{t('skillsProfile.notVisible', { name: displayName })}</p>
       {!isOwnProfile && <RequestAccessButton
         name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
     </div>
-  ) : (
+  )
+
+  // For a connection: every skill they share on the Skills tab, and the ones
+  // you have in common on "You and {name}" (ConnectionPanel), so neither needs
+  // the in-common/all filter below.
+  const allSkillsSection = !visible ? notVisibleSection : skills.length === 0 ? (
+    <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+      <p className="text-secondary">{t('skillsProfile.noneTracked')}</p>
+      <RequestAccessButton name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />
+    </div>
+  ) : renderSkillGrid(skills)
+  const commonSkillsSection = visible && commonSkills.length > 0 ? renderSkillGrid(commonSkills) : null
+
+  // Otherwise (your own profile, or someone you aren't connected to) the
+  // skills they share, filtered, then their recent growth, one after the other.
+  const skillsSection = !visible ? notVisibleSection : (
     <div className="mb-10">
       {!isOwnProfile && skills.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label={t('skillsProfile.filterLabel')}>
@@ -225,48 +285,7 @@ export default function SkillsProfile() {
             name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {filteredSkills.map((skill) => {
-            const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
-            const content = <>
-              <GrowthRing level={skill.level} size={48} />
-              <div className="min-w-0 flex-1">
-                <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-                {tagsBySkill.get(skill.id)?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {tagsBySkill.get(skill.id).map((tag) => (
-                      <span
-                        key={tag}
-                        className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {canRate && lastRatedAt && (
-                  <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
-                    {t('skillsProfile.lastRatedByYou', { when: formatRelativeDate(lastRatedAt) })}
-                  </p>
-                )}
-              </div>
-            </>
-            return canRate ? (
-              <button
-                key={skill.id}
-                type="button"
-                onClick={() => setRatingSkill(skill)}
-                className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
-              >
-                {content}
-              </button>
-            ) : (
-              <div key={skill.id} className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center">
-                {content}
-              </div>
-            )
-          })}
-        </div>
+        renderSkillGrid(filteredSkills)
       )}
     </div>
   )
@@ -320,6 +339,34 @@ export default function SkillsProfile() {
     </div>
   ) : null
 
+  // Who they are; for a connection, how the two of you relate below (ties).
+  function profileBox(ties) {
+    return (
+      <div className="bg-card border border-hairline rounded-lg p-6 mb-6">
+        <div className="flex items-center gap-4">
+          <PersonAvatar name={displayName} avatarUrl={avatarUrl} size={20} />
+          <div className="min-w-0">
+            <h1 className="font-display text-xl text-ink truncate">{displayName}</h1>
+            {(location || country) && (
+              <p className="text-sm text-secondary truncate">{[location, country].filter(Boolean).join(', ')}</p>
+            )}
+            <p className="text-xs text-secondary mt-1">
+              {memberSince && <span>{t('skillsProfile.memberSince', { date: formatMonthYear(memberSince.slice(0, 10)) })}</span>}
+              {memberSince && visible && skills.length > 0 && <span> · </span>}
+              {visible && skills.length > 0 && (
+                <span>
+                  {t(skills.length === 1 ? 'skillsProfile.sharedOne' : 'skillsProfile.sharedMany', { count: skills.length })}
+                  {expertCount > 0 ? t('skillsProfile.expertIn', { count: expertCount }) : ''}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        {ties}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -335,31 +382,13 @@ export default function SkillsProfile() {
           <p className="text-red-700 text-sm">{error}</p>
         ) : (
           <>
-            <div className="bg-card border border-hairline rounded-lg p-6 mb-6 flex items-center gap-4">
-              <PersonAvatar name={displayName} avatarUrl={avatarUrl} size={20} />
-              <div className="min-w-0">
-                <h1 className="font-display text-xl text-ink truncate">{displayName}</h1>
-                {(location || country) && (
-                  <p className="text-sm text-secondary truncate">{[location, country].filter(Boolean).join(', ')}</p>
-                )}
-                <p className="text-xs text-secondary mt-1">
-                  {memberSince && <span>{t('skillsProfile.memberSince', { date: formatMonthYear(memberSince.slice(0, 10)) })}</span>}
-                  {memberSince && visible && skills.length > 0 && <span> · </span>}
-                  {visible && skills.length > 0 && (
-                    <span>
-                      {t(skills.length === 1 ? 'skillsProfile.sharedOne' : 'skillsProfile.sharedMany', { count: skills.length })}
-                      {expertCount > 0 ? t('skillsProfile.expertIn', { count: expertCount }) : ''}
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {isOwnProfile ? <>{skillsSection}{growthSection}</> : (
+            {isOwnProfile ? <>{profileBox(null)}{skillsSection}{growthSection}</> : (
               <ConnectionPanel
                 userId={userId}
                 name={displayName}
-                skills={skillsSection}
+                header={profileBox}
+                commonSkills={commonSkillsSection}
+                skills={allSkillsSection}
                 growth={growthSection}
                 fallback={<>{skillsSection}{growthSection}</>}
               />
