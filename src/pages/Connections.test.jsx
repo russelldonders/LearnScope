@@ -124,9 +124,6 @@ describe('Connections sections', () => {
     const teamsTab = screen.getByRole('tab', { name: 'Teams' })
     expect(teamsTab).toHaveAttribute('aria-selected', 'true')
     fireEvent.keyDown(teamsTab, { key: 'ArrowRight' })
-    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveFocus()
-    fireEvent.keyDown(screen.getByRole('tab', { name: /^Pending invites/ }), { key: 'ArrowRight' })
     expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveFocus()
   })
@@ -146,7 +143,9 @@ describe('Connections sections', () => {
     await screen.findByRole('tab', { name: /^Connections/ })
   })
 
-  it('shows pending invites in their own tab, separate from People', async () => {
+  it('lists pending invites on the Connections tab, under the connections, with no tab of their own', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
     connectionApi.listSentInvites.mockResolvedValue([
       {
         id: 'invite-1', status: 'pending', invite_type: 'rate', invitee_email: 'friend@example.com',
@@ -154,12 +153,16 @@ describe('Connections sections', () => {
       },
     ])
     renderPage()
+    const invites = await screen.findByRole('region', { name: /^Pending invites/ })
+    expect(invites).toHaveTextContent('sent to friend@example.com')
+    expect(screen.queryByRole('tab', { name: /^Pending invites/ })).not.toBeInTheDocument()
 
-    const invitesTab = await screen.findByRole('tab', { name: /^Pending invites\s*1$/ })
-    expect(screen.queryByText('friend@example.com', { exact: false })).not.toBeInTheDocument()
-
-    fireEvent.click(invitesTab)
-    expect(await screen.findByText(/sent to friend@example.com/)).toBeInTheDocument()
+    const search = screen.getByRole('searchbox', { name: 'Search connections' })
+    fireEvent.change(search, { target: { value: 'friend' } })
+    expect(screen.getByRole('region', { name: /^Pending invites/ })).toBeInTheDocument()
+    expect(screen.queryByText(/No connections match/)).not.toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'alex' } })
+    expect(screen.queryByRole('region', { name: /^Pending invites/ })).not.toBeInTheDocument()
   })
 
   it('shows each connection once, summing up their last month, most recently active first', async () => {
@@ -239,7 +242,7 @@ describe('Connections sections', () => {
       },
     ])
     connectionApi.sendInviteEmail.mockResolvedValue()
-    renderPage('/connections?section=invites')
+    renderPage()
     expect(await screen.findByText('Invitation to connect — sent to new@example.com')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Resend email' }))
     await waitFor(() => expect(connectionApi.sendInviteEmail).toHaveBeenCalledWith(expect.objectContaining({
@@ -257,9 +260,10 @@ describe('Connections sections', () => {
     expect(connectionApi.listConnectionsActivity).toHaveBeenCalledTimes(2)
   })
 
-  it('shows an empty state on the invites tab when there are none', async () => {
+  it('leaves the pending invites section out when there are none, and treats an old invites link as Connections', async () => {
     renderPage('/connections?section=invites')
-    expect(screen.getByRole('tab', { name: /^Pending invites/ })).toHaveAttribute('aria-selected', 'true')
-    expect(await screen.findByText('No pending invites.')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Connections/ })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Pending invites/ })).not.toBeInTheDocument()
   })
 })

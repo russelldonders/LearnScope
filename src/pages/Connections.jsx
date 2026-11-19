@@ -67,7 +67,7 @@ export default function Connections() {
   // People this learner manages at an employer get their own tab -- only
   // offered to someone who actually manages anyone there.
   const managesEmployerTeam = (managerContexts?.length ?? 0) > 0
-  const sectionKeys = managesEmployerTeam ? ['people', 'teams', 'team', 'invites'] : ['people', 'teams', 'invites']
+  const sectionKeys = managesEmployerTeam ? ['people', 'teams', 'team'] : ['people', 'teams']
   const sectionParam = searchParams.get('section')
   const activeSection = sectionKeys.includes(sectionParam) ? sectionParam : 'people'
   const tabRefs = useRef({})
@@ -218,6 +218,11 @@ export default function Connections() {
     return q ? connections.filter((c) => c.name?.toLowerCase().includes(q)) : connections
   }, [connections, connectionQuery])
 
+  const filteredInvites = useMemo(() => {
+    const q = connectionQuery.trim().toLowerCase()
+    return q ? pendingInvites.filter((i) => i.invitee_email?.toLowerCase().includes(q)) : pendingInvites
+  }, [pendingInvites, connectionQuery])
+
   function handleCopy(invite) {
     navigator.clipboard.writeText(invite.url)
     setCopiedId(invite.id)
@@ -295,7 +300,6 @@ export default function Connections() {
     { key: 'people', label: t('connections.tabs.connections'), count: loading ? null : connections.length || null },
     { key: 'teams', label: t('connections.tabs.teams') },
     managesEmployerTeam && { key: 'team', label: t('connections.tabs.myTeam') },
-    { key: 'invites', label: t('connections.pendingInvites'), count: pendingInvites.length || null },
   ].filter(Boolean)
 
   return (
@@ -393,7 +397,7 @@ export default function Connections() {
             </div>
           )}
 
-          {!loading && connections.length > 0 && filteredConnections.length === 0 && (
+          {!loading && connections.length > 0 && filteredConnections.length === 0 && filteredInvites.length === 0 && (
             <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
               <p className="text-sm text-secondary">No connections match "{connectionQuery}".</p>
             </div>
@@ -415,78 +419,61 @@ export default function Connections() {
               />
             ))}
           </div>
-        </div>}
 
-        {activeSection === 'invites' && <div>
-          {loading && <p className="text-secondary">Loading…</p>}
-          {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
-
-          {!loading && pendingInvites.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-              <p className="text-secondary">No pending invites.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingInvites.map((invite) => (
-                <div
-                  key={invite.id}
-                  className="bg-card border border-hairline rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm text-ink">
-                      {invite.invite_type === 'connect' ? (
-                        t('connections.connectInviteSentTo', { email: invite.invitee_email })
-                      ) : (
-                        <>
-                          {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
-                          <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
-                        </>
-                      )}
-                    </p>
-                    <p className="font-mono text-xs text-secondary mt-0.5">
-                      Sent {formatFullDate(invite.created_at)}
-                    </p>
-                    {resendError?.id === invite.id && (
-                      <p className="text-xs text-red-700 mt-1">{resendError.message}</p>
-                    )}
-                    {revokeError?.id === invite.id && (
-                      <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleResend(invite)}
-                      disabled={resendingId === invite.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      {resendingId === invite.id
-                        ? 'Sending…'
-                        : resentId === invite.id
-                          ? 'Sent!'
-                          : 'Resend email'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(invite)}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-                    >
-                      {copiedId === invite.id ? 'Copied!' : 'Copy link'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingRevoke(invite)}
-                      disabled={revokingId === invite.id}
-                      className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      {revokingId === invite.id ? 'Revoking…' : 'Revoke'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* Invitations still waiting for a reply: people who may become
+              connections, so they're listed with them, kept compact. */}
+          {!loading && filteredInvites.length > 0 && (
+            <section aria-labelledby="pending-invites-heading" className="mt-8">
+              <h2 id="pending-invites-heading" className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">
+                {t('connections.pendingInvites')}
+                <span className="ml-1.5 tabular-nums normal-case tracking-normal">{filteredInvites.length}</span>
+              </h2>
+              <ul className="bg-card border border-hairline rounded-lg divide-y divide-hairline/40">
+                {filteredInvites.map((invite) => (
+                  <li key={invite.id} className="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink break-words">
+                        {invite.invite_type === 'connect' ? (
+                          t('connections.connectInviteSentTo', { email: invite.invitee_email })
+                        ) : (
+                          <>
+                            {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
+                            <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
+                          </>
+                        )}
+                      </p>
+                      <p className="text-xs text-secondary mt-0.5">Sent {formatFullDate(invite.created_at)}</p>
+                      {resendError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{resendError.message}</p>}
+                      {revokeError?.id === invite.id && <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleResend(invite)}
+                        disabled={resendingId === invite.id}
+                        className="text-sm text-moss font-medium hover:underline disabled:opacity-60"
+                      >
+                        {resendingId === invite.id ? 'Sending…' : resentId === invite.id ? 'Sent!' : 'Resend email'}
+                      </button>
+                      <button type="button" onClick={() => handleCopy(invite)} className="text-sm text-moss font-medium hover:underline">
+                        {copiedId === invite.id ? 'Copied!' : 'Copy link'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingRevoke(invite)}
+                        disabled={revokingId === invite.id}
+                        className="text-sm text-red-700 font-medium hover:underline disabled:opacity-60"
+                      >
+                        {revokingId === invite.id ? 'Revoking…' : 'Revoke'}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>}
+
         </div>
       </main>
 
