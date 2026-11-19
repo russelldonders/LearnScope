@@ -636,6 +636,7 @@ export default {
     },
     inviteSomeone: "Invitar a alguien",
     activityError: "No se pudo cargar lo que han hecho tus conexiones.",
+    loadError: "No se pudieron cargar tus contactos. Comprueba tu conexión e inténtalo de nuevo.",
     retry: "Reintentar",
     noRecentUpdates: "Sin novedades en el último mes",
     connected: "Conectado",

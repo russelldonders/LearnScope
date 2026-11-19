@@ -636,6 +636,7 @@ export default {
     },
     inviteSomeone: "Iemand uitnodigen",
     activityError: "Kon niet laden waar je connecties mee bezig zijn geweest.",
+    loadError: "Je connecties konden niet worden geladen. Controleer je verbinding en probeer het opnieuw.",
     retry: "Opnieuw proberen",
     noRecentUpdates: "Geen nieuws in de afgelopen maand",
     connected: "Verbonden",

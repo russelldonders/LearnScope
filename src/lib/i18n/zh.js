@@ -636,6 +636,7 @@ export default {
     },
     inviteSomeone: "邀请他人",
     activityError: "无法加载你的连接人的近况。",
+    loadError: "无法加载你的联系人。请检查网络连接后重试。",
     retry: "重试",
     noRecentUpdates: "最近一个月没有更新",
     connected: "已连接",

@@ -636,6 +636,7 @@ export default {
     },
     inviteSomeone: "Invite someone",
     activityError: "Couldn’t load what your connections have been up to.",
+    loadError: "Couldn’t load your connections. Check your connection and try again.",
     retry: "Retry",
     noRecentUpdates: "No updates in the last month",
     connected: "Connected",

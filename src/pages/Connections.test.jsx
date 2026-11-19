@@ -241,6 +241,17 @@ describe('Connections sections', () => {
     })))
   })
 
+  it('says the list couldn’t load, rather than that there are no connections, and can retry', async () => {
+    connectionApi.listConnections.mockRejectedValueOnce(new TypeError('Load failed'))
+    renderPage()
+    expect(await screen.findByText('Couldn’t load your connections. Check your connection and try again.')).toBeInTheDocument()
+    expect(screen.queryByText('Load failed')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No connections yet/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn’t load your connections/)).not.toBeInTheDocument()
+  })
+
   it('keeps the connection list when the activity fails to load, and can retry', async () => {
     connectionApi.listConnectionsActivity.mockRejectedValueOnce(new Error('boom'))
     renderPage()

@@ -636,6 +636,7 @@ export default {
     },
     inviteSomeone: "Invita qualcuno",
     activityError: "Impossibile caricare cosa hanno fatto di recente le tue connessioni.",
+    loadError: "Impossibile caricare i tuoi contatti. Controlla la connessione e riprova.",
     retry: "Riprova",
     noRecentUpdates: "Nessuna novità nell’ultimo mese",
     connected: "Collegato",

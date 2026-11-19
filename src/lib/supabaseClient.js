@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { fetchRetryingReads } from './networkRetry'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -67,7 +68,8 @@ async function guardedFetch(input, init = {}) {
       })
     }
   }
-  return fetch(input, init)
+  // A read dropped by the network is tried again before it fails the page.
+  return fetchRetryingReads((request, options) => fetch(request, options), input, init)
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

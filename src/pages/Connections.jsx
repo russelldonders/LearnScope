@@ -401,7 +401,7 @@ export default function Connections() {
           {/* The activity behind each summary is loaded on its own -- it's the
               one query here that reads other people's records -- so a failure
               only costs the summaries, never the list. */}
-          {activityError && (
+          {activityError && !error && (
             <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 mb-4">
               <p className="text-sm text-secondary">{t('connections.activityError')}</p>
               <button
@@ -415,12 +415,25 @@ export default function Connections() {
           )}
 
           {loading && <p className="text-secondary">Loading…</p>}
-          {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
+          {/* A failed load says so plainly and offers to try again, rather than
+              showing the browser's own message over an empty list. */}
+          {error && (
+            <div role="alert" className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 mb-4">
+              <p className="text-sm text-secondary">{t('connections.loadError')}</p>
+              <button
+                type="button"
+                onClick={() => { load(); loadActivity() }}
+                className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
+              >
+                {t('connections.retry')}
+              </button>
+            </div>
+          )}
           {disconnectedName && (
             <p role="status" className="text-sm text-moss mb-4">{t('connections.disconnected', { name: disconnectedName })}</p>
           )}
 
-          {!loading && connections.length === 0 && (
+          {!loading && !error && connections.length === 0 && (
             <div className="text-center py-16 px-4 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary max-w-md mx-auto text-pretty">
                 {t('connections.emptyState')}
