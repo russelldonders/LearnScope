@@ -2809,6 +2809,8 @@ export default {
     filterLabel: '筛选技能',
     inCommon: '共同技能（{count}）',
     skillsInCommon: "共同技能",
+    yourLevel: "你的水平：{level}",
+    theyRatedYours: "{name} 对你的评分：{level}",
     allSkills: '全部技能（{count}）',
     noneInCommon: '你们还没有共同的技能。',
     noneTracked: '尚未跟踪任何技能。',

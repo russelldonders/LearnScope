@@ -2829,6 +2829,8 @@ export default {
     filterLabel: 'Filtrar habilidades',
     inCommon: 'En común ({count})',
     skillsInCommon: "Habilidades en común",
+    yourLevel: "Tu nivel: {level}",
+    theyRatedYours: "{name} valoró la tuya: {level}",
     allSkills: 'Todas las habilidades ({count})',
     noneInCommon: 'Aún no tenéis habilidades en común.',
     noneTracked: 'Aún no sigue ninguna habilidad.',

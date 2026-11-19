@@ -305,6 +305,26 @@ export async function listMyRatingsGivenTo(skillIds) {
   return myRatingBySkillId
 }
 
+// The latest rating raterId gave each of ownerId's skills (level + when), by
+// the owner's skill id -- on a connection's page, what they rated your own
+// version of a skill you share. Only ever called with ownerId = the caller:
+// skill_peer_ratings' "skill owners can view" policy is what lets these rows
+// back, so the filters just narrow it to the one rater.
+export async function listRatingsReceivedFrom(raterId, ownerId) {
+  const { data, error } = await supabase
+    .from('skill_peer_ratings')
+    .select('skill_id, level, rated_at')
+    .eq('rater_id', raterId)
+    .eq('skill_owner_id', ownerId)
+    .order('rated_at', { ascending: false })
+  if (error) throw error
+  const bySkillId = {}
+  for (const row of data ?? []) {
+    if (!(row.skill_id in bySkillId)) bySkillId[row.skill_id] = { level: row.level, ratedAt: row.rated_at }
+  }
+  return bySkillId
+}
+
 // Ratings received on the current user's own skills that they haven't seen
 // yet -- feeds the bell notification (PendingActionsContext) and the
 // "Ratings received" section on Actions.jsx. Scoped explicitly to

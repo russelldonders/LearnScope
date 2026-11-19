@@ -562,15 +562,16 @@ function ConnectionCard({ connection: c, sharedSkills, sharedTeams, lines }) {
             </span>
           </Link>
 
+          {/* pl-10 lines these up with the name, past the avatar (w-8 + gap-2). */}
           {parts.length > 0 && (
-            <p className="mt-1.5 text-sm text-ink text-pretty">
+            <p className="mt-1.5 pl-10 text-sm text-ink text-pretty">
               {parts.map((part) => summaryText(part, t)).join(' · ')}
               {more > 0 && <span className="text-secondary"> · {t('connectionsActivity.moreSkills', { count: more })}</span>}
             </p>
           )}
 
           {sharedSkills.length > 0 && (
-            <p className="mt-1 text-xs text-secondary text-pretty">
+            <p className="mt-1 pl-10 text-xs text-secondary text-pretty">
               {t('connections.sharedSkillsLine', { skills: shownSkills.join(', ') })}
               {moreSkills > 0 && ` ${t('connectionsActivity.moreSkills', { count: moreSkills })}`}
             </p>

@@ -2828,6 +2828,8 @@ export default {
     filterLabel: 'Vaardigheden filteren',
     inCommon: 'Gemeenschappelijk ({count})',
     skillsInCommon: "Gedeelde vaardigheden",
+    yourLevel: "Jouw niveau: {level}",
+    theyRatedYours: "{name} beoordeelde de jouwe: {level}",
     allSkills: 'Alle vaardigheden ({count})',
     noneInCommon: 'Jullie hebben nog geen vaardigheden gemeen.',
     noneTracked: 'Nog geen vaardigheden gevolgd.',

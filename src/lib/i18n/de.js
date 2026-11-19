@@ -2830,6 +2830,8 @@ export default {
     filterLabel: 'Fähigkeiten filtern',
     inCommon: 'Gemeinsam ({count})',
     skillsInCommon: "Gemeinsame Fähigkeiten",
+    yourLevel: "Dein Niveau: {level}",
+    theyRatedYours: "{name} hat deine bewertet: {level}",
     allSkills: 'Alle Fähigkeiten ({count})',
     noneInCommon: 'Ihr habt noch keine gemeinsamen Fähigkeiten.',
     noneTracked: 'Noch keine Fähigkeiten erfasst.',

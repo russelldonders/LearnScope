@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { getMemberSince, listConnectionRecentGrowth, listMyRatingsGivenTo, rateConnectionSkill } from '../lib/connections'
+import {
+  getMemberSince, listConnectionRecentGrowth, listMyRatingsGivenTo, listRatingsReceivedFrom, rateConnectionSkill,
+} from '../lib/connections'
 import { requestSkillAccess } from '../lib/skillDiscovery'
 import { formatMonthYear, formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
@@ -28,8 +30,9 @@ export default function SkillsProfile() {
   const [memberSince, setMemberSince] = useState(null)
   const [visible, setVisible] = useState(false)
   const [skills, setSkills] = useState([])
-  const [tagsBySkill, setTagsBySkill] = useState(new Map())
-  const [ownLibrarySkillIds, setOwnLibrarySkillIds] = useState(new Set())
+  // Your own version of each library skill (your level, and what they last
+  // rated it), to compare against theirs.
+  const [ownByLibraryId, setOwnByLibraryId] = useState(new Map())
   // "In common" only means anything when comparing against someone else --
   // viewing your own profile always shows everything you share, no filter.
   const [filterMode, setFilterMode] = useState(isOwnProfile ? 'all' : 'common')
@@ -90,38 +93,33 @@ export default function SkillsProfile() {
     setVisible(mayBeVisible)
 
     if (mayBeVisible) {
-      const [{ data, error: skillsError }, { data: tagLinks }] = await Promise.all([
-        supabase
-          .from('skills')
-          .select('id, name, level, library_skill_id')
-          .eq('user_id', userId)
-          .eq('visible_on_profile', true)
-          .order('name', { ascending: true }),
-        supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', userId),
-      ])
+      const { data, error: skillsError } = await supabase
+        .from('skills')
+        .select('id, name, level, library_skill_id')
+        .eq('user_id', userId)
+        .eq('visible_on_profile', true)
+        .order('name', { ascending: true })
       if (skillsError) {
         setError(skillsError.message)
       } else {
         setSkills(data ?? [])
-        const map = new Map()
-        for (const link of tagLinks ?? []) {
-          if (!link.tags?.name) continue
-          if (!map.has(link.skill_id)) map.set(link.skill_id, [])
-          map.get(link.skill_id).push(link.tags.name)
-        }
-        setTagsBySkill(map)
       }
 
-      // Only needed to work out which of their shared skills overlap with
-      // yours -- your own tracking list isn't shown, just used to filter
-      // theirs (see filteredSkills below).
+      // Your own skills, to work out which of theirs overlap with yours and
+      // show your level (and their rating of it) beside theirs -- your own
+      // tracking list isn't shown, just compared against.
       if (!isOwnProfile) {
-        const { data: mine } = await supabase
-          .from('skills')
-          .select('library_skill_id')
-          .eq('user_id', user.id)
-          .not('library_skill_id', 'is', null)
-        setOwnLibrarySkillIds(new Set((mine ?? []).map((s) => s.library_skill_id)))
+        const [{ data: mine }, ratedByThem] = await Promise.all([
+          supabase
+            .from('skills')
+            .select('id, level, library_skill_id')
+            .eq('user_id', user.id)
+            .not('library_skill_id', 'is', null),
+          listRatingsReceivedFrom(userId, user.id).catch(() => ({})),
+        ])
+        setOwnByLibraryId(new Map((mine ?? []).map((s) => [s.library_skill_id, {
+          level: s.level, ratedByThem: ratedByThem[s.id] ?? null,
+        }])))
 
         try {
           setMyRatingBySkillId(await listMyRatingsGivenTo((data ?? []).map((s) => s.id)))
@@ -168,8 +166,8 @@ export default function SkillsProfile() {
   const displayName = name || t('skillsProfile.thisPerson')
 
   const commonSkills = useMemo(
-    () => skills.filter((s) => s.library_skill_id && ownLibrarySkillIds.has(s.library_skill_id)),
-    [skills, ownLibrarySkillIds]
+    () => skills.filter((s) => s.library_skill_id && ownByLibraryId.has(s.library_skill_id)),
+    [skills, ownByLibraryId]
   )
   const filteredSkills = filterMode === 'common' ? commonSkills : skills
   const expertCount = useMemo(() => skills.filter((s) => s.level === EXPERT_LEVEL).length, [skills])
@@ -180,21 +178,21 @@ export default function SkillsProfile() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {list.map((skill) => {
           const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
+          const mine = isOwnProfile ? null : ownByLibraryId.get(skill.library_skill_id)
           const content = <>
             <GrowthRing level={skill.level} size={48} />
             <div className="min-w-0 flex-1">
               <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-              {tagsBySkill.get(skill.id)?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {tagsBySkill.get(skill.id).map((tag) => (
-                    <span
-                      key={tag}
-                      className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+              {LEVEL_LABELS[skill.level] && <p className="text-sm text-secondary">{LEVEL_LABELS[skill.level]}</p>}
+              {mine && (
+                <p className="text-xs text-ink mt-1">
+                  {t('skillsProfile.yourLevel', { level: LEVEL_LABELS[mine.level] ?? '—' })}
+                </p>
+              )}
+              {mine?.ratedByThem && (
+                <p className="text-xs text-secondary mt-0.5" title={formatAbsoluteDate(mine.ratedByThem.ratedAt)}>
+                  {t('skillsProfile.theyRatedYours', { name: displayName, level: LEVEL_LABELS[mine.ratedByThem.level] })}
+                </p>
               )}
               {canRate && lastRatedAt && (
                 <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
@@ -360,9 +358,10 @@ export default function SkillsProfile() {
                 </span>
               )}
             </p>
+            {/* Lined up under the name and details, not the photo. */}
+            {ties}
           </div>
         </div>
-        {ties}
       </div>
     )
   }

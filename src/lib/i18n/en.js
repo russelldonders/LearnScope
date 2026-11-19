@@ -2827,6 +2827,8 @@ export default {
     filterLabel: 'Filter skills',
     inCommon: 'In common ({count})',
     skillsInCommon: "Skills in common",
+    yourLevel: "Your level: {level}",
+    theyRatedYours: "{name} rated yours: {level}",
     allSkills: 'All skills ({count})',
     noneInCommon: "You don't share any skills in common yet.",
     noneTracked: 'No skills tracked yet.',

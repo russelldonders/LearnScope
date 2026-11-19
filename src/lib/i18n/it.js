@@ -2830,6 +2830,8 @@ export default {
     filterLabel: 'Filtra competenze',
     inCommon: 'In comune ({count})',
     skillsInCommon: "Competenze in comune",
+    yourLevel: "Il tuo livello: {level}",
+    theyRatedYours: "{name} ha valutato la tua: {level}",
     allSkills: 'Tutte le competenze ({count})',
     noneInCommon: 'Non avete ancora competenze in comune.',
     noneTracked: 'Nessuna competenza seguita.',
