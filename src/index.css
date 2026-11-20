@@ -335,6 +335,11 @@ body {
   .page-content .page-quote { padding-left: 1.25rem; border-left: 3px solid var(--color-moss); font-style: italic; line-height: 1.7; color: var(--color-secondary); }
   .page-content .page-divider { margin-block: 2.75rem; border: 0; border-top: 1px solid var(--color-hairline); }
   .page-content .page-columns { display: grid; gap: 2rem; line-height: 1.7; }
+  /* In the page editor the two columns always sit side by side, each in its
+     own outlined area, so the layout is clear whatever the window width.
+     Readers' pages still stack them on narrow screens (below). */
+  .page-content .page-columns--editing { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .page-content .page-columns--editing > .page-inline-editable { border: 1px dashed var(--color-hairline); border-radius: 8px; padding: 0.5rem 0.75rem; }
   .page-content a { color: var(--color-moss); text-decoration: underline; text-underline-offset: 3px; }
   .page-content ul, .page-content ol { margin: 0.5rem 0 0 1.25rem; }
   .page-content ul { list-style: disc; }

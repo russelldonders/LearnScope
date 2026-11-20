@@ -15,6 +15,18 @@ describe('page builder content', () => {
     expect(sanitiseRichText('<section><p>One <strong onmouseover="x()">two</strong></p></section>')).toBe('One <strong>two</strong>')
   })
 
+  it('opens links in a new tab unless the author chose the same window', () => {
+    expect(sanitiseRichText('<a href="https://example.com">Old link</a>')).toBe(
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer">Old link</a>'
+    )
+    expect(sanitiseRichText('<a href="https://example.com" target="_self">Same window</a>')).toBe(
+      '<a href="https://example.com" target="_self" rel="noopener noreferrer">Same window</a>'
+    )
+    expect(sanitiseRichText('<a href="https://example.com" target="evil">Odd</a>')).toBe(
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer">Odd</a>'
+    )
+  })
+
   it('normalises unknown blocks to safe text blocks', () => {
     const result = normalisePageDocument({ version: 99, blocks: [{ id: 'one', type: 'embed', content: '<b>Hi</b>' }] })
     expect(result).toEqual({ version: 1, blocks: [{ id: 'one', type: 'text', content: '<b>Hi</b>' }] })

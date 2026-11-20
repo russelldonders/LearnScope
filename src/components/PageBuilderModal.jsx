@@ -362,6 +362,12 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   // focus (focusing its input clears the page's own selection).
   const [linkRange, setLinkRange] = useState(null)
   const [linkUrl, setLinkUrl] = useState('')
+  // New tab unless the author picks the same window; the text to show when
+  // the link is added at the cursor rather than to selected text; and the
+  // link being changed, when the cursor or selection is inside one.
+  const [linkNewTab, setLinkNewTab] = useState(true)
+  const [linkText, setLinkText] = useState('')
+  const [linkExisting, setLinkExisting] = useState(false)
   const [linkError, setLinkError] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null) // { id, side: 'before' | 'after' }
@@ -589,17 +595,32 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   const wordCount = useMemo(() => pageDocumentWordCount(pageDocument), [pageDocument])
   const readingMinutes = Math.max(1, Math.round(wordCount / 200))
 
+  function editableOf(node) {
+    return (node?.nodeType === 1 ? node : node?.parentElement)?.closest('[contenteditable="true"]') ?? null
+  }
+
+  function linkAt(node, editable) {
+    const anchor = (node?.nodeType === 1 ? node : node?.parentElement)?.closest('a')
+    return anchor && editable?.contains(anchor) ? anchor : null
+  }
+
   function handleAddLink(event) {
     event.preventDefault()
     const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setError('Select some text first, then add a link.')
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+    const editable = range ? editableOf(range.startContainer) : null
+    if (!range || !editable) {
+      setError('Click into some text first (or select the words to link), then add a link.')
       return
     }
+    const existing = linkAt(range.startContainer, editable)
     setError(null)
     setLinkError(null)
-    setLinkUrl('')
-    setLinkRange(selection.getRangeAt(0).cloneRange())
+    setLinkUrl(existing?.getAttribute('href') ?? '')
+    setLinkNewTab(existing ? existing.getAttribute('target') !== '_self' : true)
+    setLinkText('')
+    setLinkExisting(Boolean(existing))
+    setLinkRange(range.cloneRange())
   }
 
   function applyLink(event) {
@@ -609,15 +630,44 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
       setLinkError('Enter a full web address starting with http:// or https://')
       return
     }
+    const target = linkNewTab ? '_blank' : '_self'
     // Put the remembered selection back, in its own editable block, before
     // turning it into a link.
-    const node = linkRange.startContainer
-    const editable = (node.nodeType === 1 ? node : node.parentElement)?.closest('[contenteditable="true"]')
-    editable?.focus()
+    const editable = editableOf(linkRange.startContainer)
+    if (!editable) { setLinkRange(null); return }
+    const existing = linkAt(linkRange.startContainer, editable)
+    if (linkRange.collapsed && !existing && !linkText.trim()) {
+      setLinkError('Enter the text to show for the link.')
+      return
+    }
+    editable.focus()
     const selection = window.getSelection()
     selection.removeAllRanges()
     selection.addRange(linkRange)
-    window.document.execCommand?.('createLink', false, url)
+    if (linkRange.collapsed && existing) {
+      existing.setAttribute('href', url)
+      existing.setAttribute('target', target)
+    } else if (linkRange.collapsed) {
+      const anchor = window.document.createElement('a')
+      anchor.setAttribute('href', url)
+      anchor.setAttribute('target', target)
+      anchor.textContent = linkText.trim()
+      linkRange.insertNode(anchor)
+      const after = window.document.createRange()
+      after.setStartAfter(anchor)
+      after.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(after)
+    } else {
+      window.document.execCommand?.('createLink', false, url)
+      const linked = selection.rangeCount ? selection.getRangeAt(0) : linkRange
+      for (const anchor of editable.querySelectorAll('a')) {
+        if (linked.intersectsNode(anchor) || anchor.contains(linked.startContainer)) anchor.setAttribute('target', target)
+      }
+    }
+    // Hand the finished markup (with its target) back through the block's
+    // own onInput, which sanitises it into the page.
+    editable.dispatchEvent(new Event('input', { bubbles: true }))
     setLinkRange(null)
   }
 
@@ -780,7 +830,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                           autoFocus={block.id === newlyInsertedId} onAutoFocused={() => setNewlyInsertedId(null)} />
                       )}
                       {block.type === 'columns' && (
-                        <div className="page-columns">
+                        <div className="page-columns page-columns--editing">
                           <Editable value={block.content} onChange={(content) => updateBlock(block.id, { content })} onFocus={() => setActiveBlockId(block.id)}
                             label="First column" placeholder="First column…"
                             autoFocus={block.id === newlyInsertedId} onAutoFocused={() => setNewlyInsertedId(null)} />
@@ -835,7 +885,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
         >
           <form onSubmit={applyLink} className="space-y-3">
-            <h2 id="page-link-dialog-title" className="font-display text-lg text-ink">Add a link</h2>
+            <h2 id="page-link-dialog-title" className="font-display text-lg text-ink">{linkExisting ? 'Edit link' : 'Add a link'}</h2>
             <div>
               <label htmlFor="page-link-url" className="block text-sm text-secondary mb-1">Web address</label>
               <input
@@ -847,14 +897,37 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                 placeholder="https://…"
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
-              {linkError && <p role="alert" className="mt-1 text-xs text-red-700">{linkError}</p>}
             </div>
+            {linkRange.collapsed && !linkExisting && (
+              <div>
+                <label htmlFor="page-link-text" className="block text-sm text-secondary mb-1">Text to show</label>
+                <input
+                  id="page-link-text"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  maxLength={200}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+            )}
+            <fieldset>
+              <legend className="text-sm text-secondary mb-1">Open the link in</legend>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="radio" name="page-link-target" checked={linkNewTab} onChange={() => setLinkNewTab(true)} />
+                A new tab
+              </label>
+              <label className="mt-1 flex items-center gap-2 text-sm text-ink">
+                <input type="radio" name="page-link-target" checked={!linkNewTab} onChange={() => setLinkNewTab(false)} />
+                The same window
+              </label>
+            </fieldset>
+            {linkError && <p role="alert" className="text-xs text-red-700">{linkError}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setLinkRange(null)} className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper">
                 Cancel
               </button>
               <button type="submit" className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90">
-                Add link
+                {linkExisting ? 'Update link' : 'Add link'}
               </button>
             </div>
           </form>

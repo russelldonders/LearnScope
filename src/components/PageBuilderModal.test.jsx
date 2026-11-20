@@ -137,12 +137,85 @@ it('asks in an in-app dialog before discarding unsaved changes', () => {
   return waitFor(() => expect(onClose).toHaveBeenCalled()).finally(() => confirmSpy.mockRestore())
 })
 
-it('explains inline, not in a browser pop-up, that a link needs selected text', () => {
+it('explains inline, not in a browser pop-up, where to put a link', () => {
   const alertSpy = vi.spyOn(window, 'alert')
   render(<PageBuilderModal organisationId="org-1" userId="me" initialTitle="Listening" onClose={vi.fn()} onSaved={vi.fn()} />)
   window.getSelection()?.removeAllRanges()
   fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
   expect(alertSpy).not.toHaveBeenCalled()
-  expect(screen.getByRole('alert')).toHaveTextContent('Select some text first, then add a link.')
+  expect(screen.getByRole('alert')).toHaveTextContent('Click into some text first (or select the words to link), then add a link.')
   alertSpy.mockRestore()
+})
+
+function placeCaret(node, offset) {
+  const range = document.createRange()
+  range.setStart(node, offset)
+  range.collapse(true)
+  window.getSelection().removeAllRanges()
+  window.getSelection().addRange(range)
+}
+
+function selectText(node, start, end) {
+  const range = document.createRange()
+  range.setStart(node, start)
+  range.setEnd(node, end)
+  window.getSelection().removeAllRanges()
+  window.getSelection().addRange(range)
+}
+
+const linkPage = (content) => ({ title: 'Links', page_content: { version: 1, blocks: [{ id: 't1', type: 'text', content }] } })
+
+it('adds a link at the cursor with its own text, opening in the same window', async () => {
+  const saveResource = vi.fn().mockResolvedValue({})
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('Read the guide')} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
+  const text = screen.getByRole('textbox', { name: 'Body text' })
+  placeCaret(text.firstChild, 'Read the guide'.length)
+  fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
+
+  fireEvent.change(screen.getByLabelText('Web address'), { target: { value: 'https://example.com/guide' } })
+  fireEvent.click(screen.getByText('Add link', { selector: 'button[type="submit"]' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('Enter the text to show for the link.')
+
+  fireEvent.change(screen.getByLabelText('Text to show'), { target: { value: ' here' } })
+  fireEvent.click(screen.getByRole('radio', { name: 'The same window' }))
+  fireEvent.click(screen.getByText('Add link', { selector: 'button[type="submit"]' }))
+
+  expect(screen.queryByLabelText('Web address')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /save page/i }))
+  await waitFor(() => expect(saveResource).toHaveBeenCalled())
+  expect(saveResource.mock.calls[0][1].blocks[0].content).toBe(
+    'Read the guide<a href="https://example.com/guide" target="_self" rel="noopener noreferrer">here</a>'
+  )
+})
+
+it('changes an existing link’s address and window from inside it', async () => {
+  const saveResource = vi.fn().mockResolvedValue({})
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('See <a href="https://old.example" target="_blank" rel="noopener noreferrer">the policy</a>')} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
+  const anchor = screen.getByRole('textbox', { name: 'Body text' }).querySelector('a')
+  placeCaret(anchor.firstChild, 3)
+  fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
+
+  expect(screen.getByRole('heading', { name: 'Edit link' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Web address')).toHaveValue('https://old.example')
+  expect(screen.getByRole('radio', { name: 'A new tab' })).toBeChecked()
+  expect(screen.queryByLabelText('Text to show')).not.toBeInTheDocument()
+
+  fireEvent.change(screen.getByLabelText('Web address'), { target: { value: 'https://new.example' } })
+  fireEvent.click(screen.getByRole('radio', { name: 'The same window' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Update link' }))
+  fireEvent.click(screen.getByRole('button', { name: /save page/i }))
+  await waitFor(() => expect(saveResource).toHaveBeenCalled())
+  expect(saveResource.mock.calls[0][1].blocks[0].content).toBe(
+    'See <a href="https://new.example" target="_self" rel="noopener noreferrer">the policy</a>'
+  )
+})
+
+it('offers a new tab by default when linking selected words', () => {
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('Read the guide')} saveResource={vi.fn()} onClose={vi.fn()} onSaved={vi.fn()} />)
+  const text = screen.getByRole('textbox', { name: 'Body text' })
+  selectText(text.firstChild, 9, 14)
+  fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
+  expect(screen.getByRole('heading', { name: 'Add a link' })).toBeInTheDocument()
+  expect(screen.getByRole('radio', { name: 'A new tab' })).toBeChecked()
+  expect(screen.queryByLabelText('Text to show')).not.toBeInTheDocument()
 })

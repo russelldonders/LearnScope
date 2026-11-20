@@ -109,7 +109,10 @@ export function sanitiseRichText(value = '') {
         const href = child.getAttribute('href') || ''
         if (!/^https?:\/\//i.test(href)) child.removeAttribute('href')
         else {
-          child.setAttribute('target', '_blank')
+          // Opens in a new tab unless the author chose the same window
+          // (target="_self"), so links written before that choice existed
+          // keep opening in a new tab.
+          child.setAttribute('target', child.getAttribute('target') === '_self' ? '_self' : '_blank')
           child.setAttribute('rel', 'noopener noreferrer')
         }
       }
