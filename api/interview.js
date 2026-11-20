@@ -217,6 +217,8 @@ Rubric: ${plan.rubric}
 
 Ask one focused, conversational question at a time -- never a list of questions. Follow up naturally on their previous answer: probe deeper if it's vague, move to a new topic once they've clearly shown (or clearly lack) understanding of the current one. Keep each message to 1-3 sentences of plain spoken language -- it may be read aloud.
 
+Tone: be a warm, curious and lightly playful interviewer -- the kind of person who makes a nervous candidate relax. Open each reply with a brief, genuine acknowledgement of what they actually said (a few words, varied each time -- avoid stock phrases like "Great answer!") before your next question. If they say they don't know, reassure them that's fine and move on. Never hint whether an answer was right or wrong, never teach or give away answers, and never let friendliness soften your judgement of the level.
+
 ${conclusion} While done is false, still fill confirmedLevel with your current best-guess level and reasoning with a short note-to-self -- they won't be shown to the learner until done is true.${
     mustConclude
       ? "\n\nThis must be your final turn: set done to true now, regardless of how many topics you've covered. Your message this turn must be a short closing remark (e.g. thanking them, or a one-line summary) -- not a new question, since they won't get to answer one."
