@@ -12,6 +12,31 @@ const getSettingsMock = vi.hoisted(() => vi.fn())
 const saveSettingsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: authMock }))
+// A stand-in for the course page editor: shows what it was opened with and
+// saves a fixed page through the caller's saveResource, as the real one does.
+const editorSaveMock = vi.hoisted(() => ({ title: 'Benefits', document: null }))
+vi.mock('../../components/PageBuilderModal', () => ({
+  default: ({ resource, saveResource, onSaved, onClose }) => (
+    <div role="dialog" aria-label="Page editor">
+      <p>Editing {resource.title} with {resource.page_content.blocks.length} blocks</p>
+      <p role="alert" data-testid="editor-error" />
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            const saved = await saveResource(editorSaveMock.title, editorSaveMock.document)
+            onSaved(saved)
+            onClose()
+          } catch (err) {
+            document.querySelector('[data-testid="editor-error"]').textContent = err.message
+          }
+        }}
+      >
+        Save page
+      </button>
+    </div>
+  ),
+}))
 vi.mock('../../lib/admin/organisations', () => ({
   getOrganisation: () => Promise.resolve({ id: 'org-1', name: 'Acme Ltd', brand_primary_color: '#123456' }),
 }))
@@ -95,19 +120,33 @@ describe('LearnerWorkspaceSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a section' }))
     const nameField = screen.getByRole('textbox', { name: 'Section name' })
     expect(nameField).toHaveValue('New section')
-    expect(screen.getByRole('textbox', { name: 'Page content' })).toHaveValue('')
+    expect(screen.getByText('Empty. Members see “Nothing has been added here yet.”')).toBeInTheDocument()
 
     fireEvent.click(within(preview).getByRole('button', { name: 'New section' }))
     expect(within(preview).getByText('Nothing has been added here yet.')).toBeInTheDocument()
 
-    fireEvent.change(nameField, { target: { value: 'Benefits' } })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Page content' }), { target: { value: 'Pension details' } })
+    // A scored question is turned away by the editor's save.
+    editorSaveMock.title = 'Quiz'
+    editorSaveMock.document = { version: 1, blocks: [{ id: 'q', type: 'test_question', title: 'Q', items: [] }] }
+    fireEvent.click(screen.getByRole('button', { name: 'Edit page: New section' }))
+    expect(screen.getByText('Editing New section with 0 blocks')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save page' }))
+    expect(await screen.findByText(/can’t have scored questions/)).toBeInTheDocument()
+
+    editorSaveMock.title = 'Benefits'
+    editorSaveMock.document = { version: 1, blocks: [{ id: 'b1', type: 'text', content: 'Pension details' }] }
+    fireEvent.click(screen.getByRole('button', { name: 'Save page' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('“Benefits” updated. Save changes to publish it to members.')
+    expect(screen.queryByRole('dialog', { name: 'Page editor' })).not.toBeInTheDocument()
+    expect(nameField).toHaveValue('Benefits')
+    expect(screen.getByText('1 block')).toBeInTheDocument()
+    fireEvent.click(within(preview).getByRole('button', { name: 'Benefits' }))
     expect(within(preview).getByText('Pension details')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await screen.findByRole('status')
+    await screen.findByText(/^Saved\./)
     const saved = saveSettingsMock.mock.calls[0][1]
-    expect(saved.customPages).toEqual([{ id: expect.stringMatching(/^page-/), title: 'Benefits', body: 'Pension details' }])
+    expect(saved.customPages).toEqual([{ id: expect.stringMatching(/^page-/), title: 'Benefits', content: { version: 1, blocks: [{ id: 'b1', type: 'text', content: 'Pension details' }] } }])
     expect(saved.sectionOrder.at(-1)).toBe(saved.customPages[0].id)
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Benefits' }))

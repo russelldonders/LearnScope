@@ -100,16 +100,20 @@ describe('custom sections', () => {
   it('reads the organisation’s own pages into the order, hidden list and landing section', () => {
     const settings = normaliseWorkspaceSettings({
       custom_pages: [
-        { id: pageId, title: 'Benefits', body: 'Pension details' },
-        { id: 'not-a-page', title: 'Bad', body: '' },
-        { id: 'page-22222222-2222-4222-8222-222222222222', title: '  ', body: '' },
+        { id: pageId, title: 'Benefits', content: { version: 1, blocks: [{ id: 'b1', type: 'text', content: 'Pension details' }] } },
+        { id: 'not-a-page', title: 'Bad', content: { version: 1, blocks: [] } },
+        { id: 'page-22222222-2222-4222-8222-222222222222', title: '  ', content: { version: 1, blocks: [] } },
+        { id: 'page-33333333-3333-4333-8333-333333333333', title: 'No content yet' },
       ],
-      section_order: ['home', pageId, 'not-a-page', 'learning', 'catalogue', 'role'],
+      section_order: ['home', pageId, 'not-a-page', 'learning', 'catalogue', 'role', 'page-33333333-3333-4333-8333-333333333333'],
       hidden_sections: [pageId],
       landing_section: pageId,
     })
-    expect(settings.customPages).toEqual([{ id: pageId, title: 'Benefits', body: 'Pension details' }])
-    expect(settings.sectionOrder).toEqual(['home', pageId, 'learning', 'catalogue', 'role'])
+    expect(settings.customPages).toEqual([
+      { id: pageId, title: 'Benefits', content: { version: 1, blocks: [{ id: 'b1', type: 'text', content: 'Pension details' }] } },
+      { id: 'page-33333333-3333-4333-8333-333333333333', title: 'No content yet', content: { version: 1, blocks: [] } },
+    ])
+    expect(settings.sectionOrder).toEqual(['home', pageId, 'learning', 'catalogue', 'role', 'page-33333333-3333-4333-8333-333333333333'])
     expect(settings.hiddenSections).toEqual([pageId])
     expect(settings.landingSection).toBe('home')
     expect(isSectionVisible(settings, pageId)).toBe(false)
@@ -118,7 +122,7 @@ describe('custom sections', () => {
   it('adds a page that is new, empty and last, and removes it from everywhere', () => {
     const added = addCustomPage({ ...DEFAULT_WORKSPACE_SETTINGS })
     const page = added.customPages[0]
-    expect(page).toEqual({ id: expect.stringMatching(/^page-[0-9a-f-]{36}$/), title: 'New section', body: '' })
+    expect(page).toEqual({ id: expect.stringMatching(/^page-[0-9a-f-]{36}$/), title: 'New section', content: { version: 1, blocks: [] } })
     expect(added.sectionOrder.at(-1)).toBe(page.id)
     expect(isSectionVisible(added, page.id)).toBe(true)
     expect(sectionLabel((key) => key, added, page.id)).toBe('New section')
@@ -130,14 +134,17 @@ describe('custom sections', () => {
     expect(removed.landingSection).toBe('home')
   })
 
-  it('asks for a name and limits content length', () => {
+  it('asks for a name and refuses scored questions', () => {
     const errors = validateWorkspaceSettings({
       ...DEFAULT_WORKSPACE_SETTINGS,
-      customPages: [{ id: pageId, title: ' ', body: '' }, { id: 'page-22222222-2222-4222-8222-222222222222', title: 'Policies', body: 'x'.repeat(10001) }],
+      customPages: [
+        { id: pageId, title: ' ', content: { version: 1, blocks: [] } },
+        { id: 'page-22222222-2222-4222-8222-222222222222', title: 'Quiz', content: { version: 1, blocks: [{ id: 'q', type: 'test_question' }] } },
+      ],
     })
     expect(errors).toEqual([
       'Your section 1 needs a name.',
-      'The content of “Policies” must be 10000 characters or fewer.',
+      '“Quiz” has a scored question. Use a knowledge check instead: workspace pages don’t record scores.',
     ])
   })
 })

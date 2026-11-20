@@ -6,8 +6,10 @@ import { supabase } from './supabaseClient'
 // here touches a learner's personal workspace. No row means the defaults.
 //
 // Besides the four built-in sections, an organisation can add its own pages
-// (custom_pages, 0326): { id: 'page-<uuid>', title, body }, where body is
-// plain text. Their ids sit in sectionOrder/hiddenSections/landingSection
+// (custom_pages, 0326): { id: 'page-<uuid>', title, content }, where content
+// is a page document from the course page editor ({ version: 1, blocks }),
+// shown with the course page renderer (0327). Scored questions aren't
+// allowed on them -- nothing records a member's score there. Their ids sit in sectionOrder/hiddenSections/landingSection
 // alongside the built-in section keys.
 
 export const WORKSPACE_SECTIONS = ['home', 'learning', 'catalogue', 'role']
@@ -26,7 +28,6 @@ export const LIMITS = {
   linkUrl: 500,
   links: 5,
   pageTitle: 30,
-  pageBody: 10000,
   pages: 10,
 }
 
@@ -34,6 +35,20 @@ const CUSTOM_PAGE_ID = /^page-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 
 export function isCustomPageId(section) {
   return CUSTOM_PAGE_ID.test(section ?? '')
+}
+
+export function emptyPageDocument() {
+  return { version: 1, blocks: [] }
+}
+
+function pageDocumentOf(content) {
+  return content && typeof content === 'object' && Array.isArray(content.blocks)
+    ? { ...content, blocks: content.blocks }
+    : emptyPageDocument()
+}
+
+export function isEmptyPage(page) {
+  return page.content.blocks.length === 0
 }
 
 export function findCustomPage(settings, section) {
@@ -66,7 +81,7 @@ export function normaliseWorkspaceSettings(row) {
   const customPages = (Array.isArray(row.custom_pages) ? row.custom_pages : [])
     .filter((page, i, all) => isCustomPageId(page?.id) && typeof page.title === 'string' && page.title.trim()
       && all.findIndex((other) => other?.id === page.id) === i)
-    .map((page) => ({ id: page.id, title: page.title, body: typeof page.body === 'string' ? page.body : '' }))
+    .map((page) => ({ id: page.id, title: page.title, content: pageDocumentOf(page.content) }))
   const pageIds = customPages.map((page) => page.id)
   const known = [...WORKSPACE_SECTIONS, ...pageIds]
   const order = (row.section_order ?? []).filter((s, i, all) => known.includes(s) && all.indexOf(s) === i)
@@ -111,7 +126,7 @@ export function addCustomPage(settings, title = 'New section') {
   const id = `page-${crypto.randomUUID()}`
   return {
     ...settings,
-    customPages: [...settings.customPages, { id, title, body: '' }],
+    customPages: [...settings.customPages, { id, title, content: emptyPageDocument() }],
     sectionOrder: [...settings.sectionOrder, id],
   }
 }
@@ -176,7 +191,7 @@ export function validateWorkspaceSettings(settings) {
     const n = index + 1
     if (!page.title.trim()) errors.push(`Your section ${n} needs a name.`)
     else if (page.title.trim().length > LIMITS.pageTitle) errors.push(`The name of “${page.title.trim()}” must be ${LIMITS.pageTitle} characters or fewer.`)
-    if (page.body.length > LIMITS.pageBody) errors.push(`The content of “${page.title.trim() || `section ${n}`}” must be ${LIMITS.pageBody} characters or fewer.`)
+    if (page.content.blocks.some((block) => block.type === 'test_question')) errors.push(`“${page.title.trim() || `Section ${n}`}” has a scored question. Use a knowledge check instead: workspace pages don’t record scores.`)
   })
   return errors
 }
@@ -198,7 +213,7 @@ function toRow(settings) {
     pinned_links: settings.pinnedLinks.map((link) => ({ label: link.label.trim(), url: link.url.trim() })),
     catalogue_enrolment: settings.catalogueEnrolment,
     assigned_training_framing: settings.assignedTrainingFraming,
-    custom_pages: settings.customPages.map((page) => ({ id: page.id, title: page.title.trim(), body: page.body.trimEnd() })),
+    custom_pages: settings.customPages.map((page) => ({ id: page.id, title: page.title.trim(), content: page.content })),
   }
 }
 

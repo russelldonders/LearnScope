@@ -133,13 +133,16 @@ reset role;
 select set_config('request.jwt.claim.sub', '73000000-0000-0000-0000-000000000001', true);
 set local role authenticated;
 update public.organisation_learner_workspace_settings set
-  custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Benefits", "body": ""}]',
+  custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Benefits", "content": {"version": 1, "blocks": []}}]',
   section_order = array['home', 'page-11111111-1111-4111-8111-111111111111', 'learning', 'catalogue', 'role'],
   hidden_sections = array['catalogue'],
   landing_section = 'page-11111111-1111-4111-8111-111111111111';
 update public.organisation_learner_workspace_settings set
   hidden_sections = array['catalogue', 'page-11111111-1111-4111-8111-111111111111'],
   landing_section = 'home';
+-- Page-editor blocks, including feedback-only knowledge checks, are fine.
+update public.organisation_learner_workspace_settings set
+  custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Benefits", "content": {"version": 1, "blocks": [{"id": "b1", "type": "heading", "level": 1, "content": "Benefits"}, {"id": "b2", "type": "knowledge_check", "title": "Q", "layout": "single", "items": []}]}}]';
 do $$
 declare
   bad record;
@@ -151,9 +154,12 @@ begin
       ('landing on a hidden page', $q$update public.organisation_learner_workspace_settings set landing_section = 'page-11111111-1111-4111-8111-111111111111'$q$),
       ('hiding an unknown page', $q$update public.organisation_learner_workspace_settings set hidden_sections = array['page-22222222-2222-4222-8222-222222222222']$q$),
       ('removing a page still in the order', $q$update public.organisation_learner_workspace_settings set custom_pages = '[]'$q$),
-      ('a badly formed page id', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "home", "title": "Home again", "body": ""}]', section_order = array['home', 'learning', 'catalogue', 'role']$q$),
-      ('a page without a title', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": " ", "body": ""}]'$q$),
-      ('the same page twice', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "A", "body": ""}, {"id": "page-11111111-1111-4111-8111-111111111111", "title": "B", "body": ""}]'$q$)
+      ('a badly formed page id', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "home", "title": "Home again", "content": {"version": 1, "blocks": []}}]', section_order = array['home', 'learning', 'catalogue', 'role']$q$),
+      ('a page without a title', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": " ", "content": {"version": 1, "blocks": []}}]'$q$),
+      ('the same page twice', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "A", "content": {"version": 1, "blocks": []}}, {"id": "page-11111111-1111-4111-8111-111111111111", "title": "B", "content": {"version": 1, "blocks": []}}]'$q$),
+      ('a scored question on a workspace page', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Quiz", "content": {"version": 1, "blocks": [{"id": "b1", "type": "test_question", "title": "Q", "items": []}]}}]'$q$),
+      ('a block that is not an object', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Broken", "content": {"version": 1, "blocks": [null]}}]'$q$),
+      ('a page with plain-text body instead of content', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Old", "body": "text"}]'$q$)
     ) as cases(label, statement)
   loop
     begin
@@ -162,6 +168,70 @@ begin
     exception when check_violation then null;
     end;
   end loop;
+end
+$$;
+reset role;
+
+-- Page media (0327): the organisation's admin can upload to its page-media
+-- folder only, and remove only what they uploaded.
+insert into storage.objects (bucket_id, name, owner_id)
+values ('course-content', '73000000-0000-0000-0000-000000000010/page-media/training-team.png', '73000000-0000-0000-0000-000000000004');
+select set_config('request.jwt.claim.sub', '73000000-0000-0000-0000-000000000001', true);
+set local role authenticated;
+insert into storage.objects (bucket_id, name, owner_id)
+values ('course-content', '73000000-0000-0000-0000-000000000010/page-media/welcome.png', '73000000-0000-0000-0000-000000000001');
+do $$
+declare
+  removed integer;
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('course-content', '73000000-0000-0000-0000-000000000010/page-media/script.js', '73000000-0000-0000-0000-000000000001');
+    raise exception 'an organisation admin uploaded a script as page media';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from storage.objects where name = '73000000-0000-0000-0000-000000000010/page-media/training-team.png') then
+    raise exception 'an organisation admin could list someone else''s page media';
+  end if;
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('course-content', '73000000-0000-0000-0000-000000000010/other-folder/file.png', '73000000-0000-0000-0000-000000000001');
+    raise exception 'an organisation admin uploaded outside page-media';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('course-content', '73000000-0000-0000-0000-000000000020/page-media/file.png', '73000000-0000-0000-0000-000000000001');
+    raise exception 'an organisation admin uploaded into another organisation''s folder';
+  exception when insufficient_privilege then null;
+  end;
+  -- Stands in for the Storage API, which is what deletes in the app.
+  perform set_config('storage.allow_delete_query', 'true', true);
+  delete from storage.objects where name = '73000000-0000-0000-0000-000000000010/page-media/training-team.png';
+  get diagnostics removed = row_count;
+  if removed <> 0 then
+    raise exception 'an organisation admin removed a file someone else uploaded';
+  end if;
+  delete from storage.objects where name = '73000000-0000-0000-0000-000000000010/page-media/welcome.png';
+  get diagnostics removed = row_count;
+  if removed <> 1 then
+    raise exception 'an organisation admin could not remove their own upload';
+  end if;
+end
+$$;
+reset role;
+
+-- A plain member can't upload page media.
+select set_config('request.jwt.claim.sub', '73000000-0000-0000-0000-000000000002', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('course-content', '73000000-0000-0000-0000-000000000010/page-media/member.png', '73000000-0000-0000-0000-000000000002');
+    raise exception 'a plain member uploaded page media';
+  exception when insufficient_privilege then null;
+  end;
 end
 $$;
 reset role;

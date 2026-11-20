@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import PageBuilderModal from '../../components/PageBuilderModal'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getOrganisation } from '../../lib/admin/organisations'
@@ -13,6 +14,7 @@ import {
   addCustomPage,
   findCustomPage,
   getLearnerWorkspaceSettings,
+  isEmptyPage,
   removeCustomPage,
   saveLearnerWorkspaceSettings,
   sectionHeading,
@@ -85,6 +87,7 @@ export default function LearnerWorkspaceSettingsPage() {
 }
 
 export function LearnerWorkspaceSettings({ organisationId }) {
+  const { user } = useAuth()
   const [organisation, setOrganisation] = useState(null)
   const [saved, setSaved] = useState(null)
   const [draft, setDraft] = useState(null)
@@ -96,6 +99,8 @@ export function LearnerWorkspaceSettings({ organisationId }) {
   // and the one just added (its name field takes focus).
   const [deletingPageId, setDeletingPageId] = useState(null)
   const [addedPageId, setAddedPageId] = useState(null)
+  // The section open in the course page editor.
+  const [editingPageId, setEditingPageId] = useState(null)
 
   useEffect(() => {
     let live = true
@@ -157,6 +162,23 @@ export function LearnerWorkspaceSettings({ organisationId }) {
     const next = addCustomPage(draft)
     setAddedPageId(next.customPages[next.customPages.length - 1].id)
     update(next)
+  }
+
+  // The page editor's save: puts its title and page into this section of the
+  // draft. Published with the rest of the settings by "Save changes".
+  async function savePageFromEditor(title, document) {
+    const name = title.trim()
+    if (name.length > LIMITS.pageTitle) throw new Error(`Section names can be up to ${LIMITS.pageTitle} characters. Shorten the page title.`)
+    if (document.blocks.some((block) => block.type === 'test_question')) {
+      throw new Error('Workspace pages can’t have scored questions, because they don’t record scores. Use a knowledge check instead.')
+    }
+    const pageId = editingPageId
+    setMessage(null)
+    setDraft((current) => ({
+      ...current,
+      customPages: current.customPages.map((page) => (page.id === pageId ? { ...page, title: name, content: document } : page)),
+    }))
+    return { title: name }
   }
 
   function confirmDeletePage() {
@@ -260,16 +282,14 @@ export function LearnerWorkspaceSettings({ organisationId }) {
                       )}
                     </div>
                     {page && (
-                      <label className="mt-3 block text-sm text-secondary">
-                        Page content
-                        <textarea
-                          className={`${inputClass} min-h-28`}
-                          value={page.body}
-                          maxLength={LIMITS.pageBody}
-                          placeholder="Starts empty. Write what members should see here. Paragraphs and line breaks are kept."
-                          onChange={(event) => setPage(section, { body: event.target.value })}
-                        />
-                      </label>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button type="button" className={buttonClass} onClick={() => setEditingPageId(section)} aria-label={`Edit page: ${name}`}>
+                          Edit page
+                        </button>
+                        <span className="text-xs text-secondary">
+                          {isEmptyPage(page) ? 'Empty. Members see “Nothing has been added here yet.”' : `${page.content.blocks.length} ${page.content.blocks.length === 1 ? 'block' : 'blocks'}`}
+                        </span>
+                      </div>
                     )}
                   </li>
                 )
@@ -412,6 +432,16 @@ export function LearnerWorkspaceSettings({ organisationId }) {
           <LearnerWorkspacePreview settings={draft} organisation={organisation} />
         </div>
       </div>
+      {editingPageId && findCustomPage(draft, editingPageId) && (
+        <PageBuilderModal
+          organisationId={organisationId}
+          userId={user?.id}
+          resource={{ title: findCustomPage(draft, editingPageId).title, page_content: findCustomPage(draft, editingPageId).content }}
+          saveResource={savePageFromEditor}
+          onSaved={(saved) => setMessage(`“${saved.title}” updated. Save changes to publish it to members.`)}
+          onClose={() => setEditingPageId(null)}
+        />
+      )}
       {deletingPageId && (
         <ConfirmDialog
           message={`Delete the “${displayName(deletingPageId)}” section and its content? Members stop seeing it once you save.`}
@@ -473,7 +503,7 @@ export function LearnerWorkspacePreview({ settings, organisation }) {
             </>
           )}
           {section === 'role' && placeholder(PREVIEW_PLACEHOLDERS.role)}
-          {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} />}
+          {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} compact />}
         </div>
       </div>
     </div>

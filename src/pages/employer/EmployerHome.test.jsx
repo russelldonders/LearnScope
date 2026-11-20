@@ -129,8 +129,8 @@ describe('EmployerHome shows the organisation’s own sections', () => {
   const policies = 'page-22222222-2222-4222-8222-222222222222'
   const withPages = normaliseWorkspaceSettings({
     custom_pages: [
-      { id: benefits, title: 'Benefits', body: 'Pension details\nCycle to work' },
-      { id: policies, title: 'Policies', body: '' },
+      { id: benefits, title: 'Benefits', content: { version: 1, blocks: [{ id: 'b1', type: 'heading', level: 2, content: 'Your benefits' }, { id: 'b2', type: 'text', content: 'Pension details<img src=x onerror="alert(1)">' }] } },
+      { id: policies, title: 'Policies', content: { version: 1, blocks: [] } },
     ],
     section_order: ['home', benefits, 'learning', 'catalogue', 'role', policies],
   })
@@ -140,7 +140,9 @@ describe('EmployerHome shows the organisation’s own sections', () => {
     render(<MemoryRouter initialEntries={[`/organisation/learning?org=acme&section=${benefits}`]}><EmployerHome /></MemoryRouter>)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Benefits' })).toBeInTheDocument()
-    expect(screen.getByText(/Pension details/)).toBeInTheDocument()
+    expect(screen.getByText('Your benefits')).toBeInTheDocument()
+    expect(screen.getByText('Pension details')).toBeInTheDocument()
+    expect(document.querySelector('main [onerror]')).toBeNull()
     expect(screen.getByRole('link', { name: 'Benefits' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Policies' })).toHaveAttribute('href', `/organisation/learning?org=acme&section=${policies}`)
   })

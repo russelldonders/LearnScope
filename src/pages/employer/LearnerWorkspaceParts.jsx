@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
+import PageContent from '../../components/PageContent'
 import { useLanguage } from '../../context/LanguageContext'
+import { isEmptyPage } from '../../lib/learnerWorkspaceSettings'
 
 // The parts of an organisation's learner workspace that its settings shape
 // (organisation_learner_workspace_settings, 0325). Shared by the real
@@ -109,16 +111,17 @@ export function WorkspaceHelp({ settings }) {
   )
 }
 
-// One of the organisation's own sections (custom_pages, 0326): its plain-text
-// content, line breaks kept, or a short note while it's still empty.
-export function WorkspaceCustomPage({ page }) {
+// One of the organisation's own sections (custom_pages, 0326/0327): its
+// page, drawn by the course page renderer (which sanitises its rich text),
+// or a short note while it's still empty.
+export function WorkspaceCustomPage({ page, compact = false }) {
   const { t } = useLanguage()
-  if (!page.body.trim()) {
+  if (isEmptyPage(page)) {
     return (
       <div className="rounded-lg border border-dashed border-hairline p-8 text-center">
         <p className="text-secondary">{t('employerHome.emptyPage')}</p>
       </div>
     )
   }
-  return <div className="max-w-2xl text-ink leading-relaxed whitespace-pre-line break-words">{page.body}</div>
+  return <PageContent document={page.content} compact={compact} />
 }
