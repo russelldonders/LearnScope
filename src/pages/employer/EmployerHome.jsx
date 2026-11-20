@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { orgBrandStyle } from '../../lib/orgBranding'
 import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
@@ -7,11 +7,23 @@ import LearnerRoleAlignmentContainer from '../roles/LearnerRoleAlignmentContaine
 import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 import EmployerCataloguePanel from './EmployerCataloguePanel'
 import { useLanguage } from '../../context/LanguageContext'
+import {
+  getLearnerWorkspaceSettings,
+  isSectionVisible,
+  sectionHeading,
+  sectionLabel,
+  visibleSections,
+} from '../../lib/learnerWorkspaceSettings'
+import {
+  LearnerWorkspaceNav,
+  WorkspaceAnnouncement,
+  WorkspaceHelp,
+  WorkspaceIntro,
+} from './LearnerWorkspaceParts'
 
 // Set in place of a message when the slug resolves to no employer, so the
 // effect below doesn't need t; the message is translated where it's shown.
 const NOT_AVAILABLE = 'employer-not-available'
-const NAV_IDS = ['home', 'learning', 'catalogue', 'role']
 
 // The learner-facing counterpart to EmployerConsole.jsx (which is admin-only,
 // see OrganisationAdminRoute's own comment) -- reached via the organisation URL
@@ -23,12 +35,17 @@ const NAV_IDS = ['home', 'learning', 'catalogue', 'role']
 // that container already is the learner's assigned role profile, required
 // skills/training and pending assignments, previously only reachable buried
 // on the Experience page.
+//
+// Which sections show, in what order, what they're called, where members
+// land and what Home says come from the organisation's learner workspace
+// settings (0325, set on LearnerWorkspaceSettingsPage). Presentation only:
+// a hidden section changes what's shown here, not what anyone can access.
 export default function EmployerHome() {
   const { t } = useLanguage()
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
-  const section = ['learning', 'catalogue', 'role'].includes(searchParams.get('section')) ? searchParams.get('section') : 'home'
   const [employer, setEmployer] = useState(undefined)
+  const [settings, setSettings] = useState(null)
   const [error, setError] = useState(null)
   // Members-only branding from get_employer_login_context (20261005090000)
   // rather than the public provider profile, so it still shows when the
@@ -38,11 +55,13 @@ export default function EmployerHome() {
   useEffect(() => {
     if (!orgSlug) return
     getEmployerLoginContext(orgSlug)
-      .then((result) => {
+      .then(async (result) => {
         if (!result) {
           setError(NOT_AVAILABLE)
           return
         }
+        const workspaceSettings = await getLearnerWorkspaceSettings(result.id)
+        setSettings(workspaceSettings)
         setEmployer(result)
       })
       .catch((err) => setError(err.message))
@@ -62,14 +81,24 @@ export default function EmployerHome() {
     )
   }
 
+  // The bare workspace URL opens the organisation's chosen landing section;
+  // a section it has hidden falls back there too.
+  const landingSection = settings?.landingSection ?? 'home'
+  const requestedSection = searchParams.get('section')
+  const section = settings && isSectionVisible(settings, requestedSection) ? requestedSection : landingSection
+
   function sectionHref(nextSection) {
     const params = new URLSearchParams(searchParams)
-    if (nextSection === 'home') params.delete('section')
+    if (nextSection === landingSection) params.delete('section')
     else params.set('section', nextSection)
     return `/organisation/learning?${params.toString()}`
   }
 
-  const navItems = NAV_IDS.map((id) => ({ id, label: t(`employerHome.nav.${id}`) }))
+  const navItems = settings
+    ? visibleSections(settings).map((id) => ({ id, label: sectionLabel(t, settings, id), href: sectionHref(id) }))
+    : []
+  const showLearning = settings ? isSectionVisible(settings, 'learning') : false
+  const showRole = settings ? isSectionVisible(settings, 'role') : false
 
   return (
     <div className="org-brand-scope min-h-screen bg-[var(--org-background,var(--color-paper))]" style={orgBrandStyle(branding)}>
@@ -82,22 +111,7 @@ export default function EmployerHome() {
         notificationsHref={orgSlug ? `/actions?org=${encodeURIComponent(orgSlug)}` : '/actions'}
       />
       <div className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">
-        <nav aria-label={t('employerHome.navLabel')} className="max-w-4xl mx-auto px-4 flex gap-6 overflow-x-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.id}
-              to={sectionHref(item.id)}
-              aria-current={section === item.id ? 'page' : undefined}
-              className={`border-b-2 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                section === item.id
-                  ? 'border-[var(--org-primary,var(--color-moss))] text-[var(--org-text,var(--color-ink))]'
-                  : 'border-transparent text-secondary hover:text-[var(--org-text,var(--color-ink))]'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <LearnerWorkspaceNav items={navItems} current={section} />
       </div>
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 sm:py-10">
         <div className="mb-8 sm:mb-10">
@@ -105,30 +119,33 @@ export default function EmployerHome() {
             {employer ? t('employerHome.learningWith', { name: employer.name }) : t('employerHome.employerLearning')}
           </p>
           <h1 className="font-display text-3xl sm:text-4xl text-[var(--org-text,var(--color-ink))] mt-2">
-            {t(`employerHome.headings.${section}`)}
+            {settings ? sectionHeading(t, settings, section) : t(`employerHome.headings.${section}`)}
           </h1>
-          {section === 'home' && (
-            <p className="text-sm text-secondary mt-2 max-w-2xl">
-              {t('employerHome.homeIntro')}
-            </p>
-          )}
+          {section === 'home' && settings && <WorkspaceIntro settings={settings} />}
         </div>
-        {employer ? (
+        {employer && settings ? (
           <>
             {section === 'home' && (
               <>
-                <EmployerAssignedTrainingPanel
-                  employerId={employer.id}
-                  employerName={employer.name}
-                  employerLogoUrl={branding?.logoUrl}
-                  variant="home"
-                  viewAllHref={sectionHref('learning')}
-                />
-                <LearnerRoleAlignmentContainer
-                  employerId={employer.id}
-                  variant="summary"
-                  roleHref={sectionHref('role')}
-                />
+                <WorkspaceAnnouncement settings={settings} />
+                {showLearning && (
+                  <EmployerAssignedTrainingPanel
+                    employerId={employer.id}
+                    employerName={employer.name}
+                    employerLogoUrl={branding?.logoUrl}
+                    variant="home"
+                    viewAllHref={sectionHref('learning')}
+                    framing={settings.assignedTrainingFraming}
+                  />
+                )}
+                {showRole && (
+                  <LearnerRoleAlignmentContainer
+                    employerId={employer.id}
+                    variant="summary"
+                    roleHref={sectionHref('role')}
+                  />
+                )}
+                <WorkspaceHelp settings={settings} />
               </>
             )}
             {section === 'learning' && (
@@ -136,6 +153,7 @@ export default function EmployerHome() {
                 employerId={employer.id}
                 employerName={employer.name}
                 employerLogoUrl={branding?.logoUrl}
+                framing={settings.assignedTrainingFraming}
               />
             )}
             {section === 'catalogue' && (
@@ -143,6 +161,7 @@ export default function EmployerHome() {
                 employerId={employer.id}
                 employerName={employer.name}
                 employerLogoUrl={branding?.logoUrl}
+                enrolment={settings.catalogueEnrolment}
               />
             )}
             {section === 'role' && <LearnerRoleAlignmentContainer employerId={employer.id} />}

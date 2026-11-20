@@ -218,6 +218,14 @@ export default function EmployerConsole() {
           onSelect: () => setSettingsView('member-fields'),
         }]
       : []),
+    ...(hasWorkforceCapability && selectedEmployer
+      ? [{
+          key: 'learner-workspace',
+          label: 'Learner workspace',
+          description: 'What members see: sections, Home page and catalogue rules',
+          to: `/organisation/organisations/${selectedEmployer.id}/learner-workspace`,
+        }]
+      : []),
   ]
   const visibleSections = SECTIONS.filter((s) => {
     if (s.workforceOnly && !hasWorkforceCapability) return false

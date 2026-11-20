@@ -3326,6 +3326,11 @@ export default {
     employerLearning: 'Employer learning',
     headings: { home: 'Welcome back', learning: 'My learning', catalogue: 'Catalogue', role: 'Role & skills' },
     homeIntro: 'Pick up where you left off, see what is next, and track the learning connected to your role.',
+    announcement: 'Announcement',
+    helpHeading: 'Help and useful links',
+    contactHeading: 'Your contact',
+    linksHeading: 'Useful links',
+    opensInNewTab: '(opens in a new tab)',
   },
   roleAlignment: {
     summary: {
@@ -3405,6 +3410,8 @@ export default {
     headingNone: 'Your learning',
     viewAll: 'View all',
     assignedBy: 'Assigned by {employer}',
+    requiredBy: 'Required by {employer}',
+    recommendedBy: 'Recommended by {employer}',
     caughtUp: 'You are all caught up.',
     noneAssigned: 'There is no learning assigned by {employer} yet.',
     upNext: 'Up next',
@@ -3418,6 +3425,7 @@ export default {
     loading: 'Loading catalogue…',
     heading: 'Available through {employer}',
     intro: 'Browse learning your employer has made available to you.',
+    browseOnly: 'Browse the learning available through {employer}. To take a course, ask {employer} to assign it to you.',
     searchLabel: 'Search catalogue',
     searchPlaceholder: 'Search catalogue',
     none: 'There are no catalogues available to you yet.',

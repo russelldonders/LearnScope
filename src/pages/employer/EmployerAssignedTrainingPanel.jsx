@@ -50,16 +50,26 @@ function LearningRow({ assignment, course, status, busy, onOpen }) {
   )
 }
 
+const FRAMING_KEYS = {
+  assigned: 'employerTraining.assignedBy',
+  required: 'employerTraining.requiredBy',
+  recommended: 'employerTraining.recommendedBy',
+}
+
 export default function EmployerAssignedTrainingPanel({
   employerId,
   employerName: employerNameProp,
   employerLogoUrl,
   variant = 'full',
   viewAllHref,
+  framing = 'assigned',
 }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const employerName = employerNameProp ?? t('employerTraining.defaultEmployer')
+  // How the organisation describes this training (its learner workspace
+  // settings, 0325): assigned (the default), required or recommended.
+  const byLine = t(FRAMING_KEYS[framing] ?? FRAMING_KEYS.assigned, { employer: employerName })
   const navigate = useNavigate()
   const location = useLocation()
   const [assignments, setAssignments] = useState([])
@@ -170,7 +180,7 @@ export default function EmployerAssignedTrainingPanel({
               <StatusBadge label={statusFor(focus).label} tone={statusFor(focus).tone} />
               <h3 className="font-display text-2xl text-ink mt-4">{focus.course_catalogue.name}</h3>
               {courseMeta(focus.course_catalogue) && <p className="text-sm text-secondary mt-2">{courseMeta(focus.course_catalogue)}</p>}
-              <p className="text-xs text-secondary mt-2">{t('employerTraining.assignedBy', { employer: employerName })}</p>
+              <p className="text-xs text-secondary mt-2">{byLine}</p>
               <div className="mt-6">
                 <CourseAction assignment={focus} course={focus.course_catalogue} status={statusFor(focus)} busy={openingId === focus.id} onOpen={openCourse} />
               </div>
@@ -217,7 +227,7 @@ export default function EmployerAssignedTrainingPanel({
   return (
     <section aria-labelledby="employer-assigned-training-heading">
       <div className="mb-6">
-        <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{t('employerTraining.assignedBy', { employer: employerName })}</p>
+        <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{byLine}</p>
         <h2 id="employer-assigned-training-heading" className="font-display text-2xl text-ink mt-1">{t('employerTraining.planHeading')}</h2>
         <p className="text-sm text-secondary mt-2">{t('employerTraining.planIntro')}</p>
       </div>

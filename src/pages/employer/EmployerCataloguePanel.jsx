@@ -11,9 +11,14 @@ import {
 import { listMyEmployerCatalogueCourses } from '../../lib/employerCatalogues'
 import { useLanguage } from '../../context/LanguageContext'
 
-export default function EmployerCataloguePanel({ employerId, employerName, employerLogoUrl }) {
+// `enrolment` is the organisation's learner workspace setting (0325):
+// 'self_enrol' lets members enrol here; 'browse_only' shows what's available
+// without the enrol button, for organisations that assign training instead.
+// Courses a member is already enrolled in keep their status either way.
+export default function EmployerCataloguePanel({ employerId, employerName, employerLogoUrl, enrolment: enrolmentMode = 'self_enrol' }) {
   const { user } = useAuth()
   const { t } = useLanguage()
+  const browseOnly = enrolmentMode === 'browse_only'
   const userId = user?.id
   const [courses, setCourses] = useState([])
   const [enrolledIds, setEnrolledIds] = useState(new Map())
@@ -95,7 +100,9 @@ export default function EmployerCataloguePanel({ employerId, employerName, emplo
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 id="employer-catalogue-heading" className="font-display text-2xl text-ink">{t('employerCatalogue.heading', { employer: employerName })}</h2>
-          <p className="text-sm text-secondary mt-1">{t('employerCatalogue.intro')}</p>
+          <p className="text-sm text-secondary mt-1">
+            {browseOnly ? t('employerCatalogue.browseOnly', { employer: employerName }) : t('employerCatalogue.intro')}
+          </p>
         </div>
         {courses.length > 0 && (
           <label className="block sm:w-72">
@@ -142,14 +149,16 @@ export default function EmployerCataloguePanel({ employerId, employerName, emplo
                   {[course.provider, course.courseType, course.duration].filter(Boolean).join(' · ')}
                 </p>
                 {course.synopsis && <p className="text-sm text-secondary mt-3 line-clamp-3 flex-1">{course.synopsis}</p>}
-                <button
-                  type="button"
-                  onClick={() => enrol(course)}
-                  disabled={Boolean(enrolment) || enrollingId === course.id}
-                  className="mt-4 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] px-3 py-2 text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {enrolment?.completedDate ? t('courses.completed') : enrolment ? t('courses.enrolled') : enrollingId === course.id ? t('courses.enrolling') : t('courses.enrol')}
-                </button>
+                {browseOnly && !enrolment ? null : (
+                  <button
+                    type="button"
+                    onClick={() => enrol(course)}
+                    disabled={Boolean(enrolment) || enrollingId === course.id}
+                    className="mt-4 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] px-3 py-2 text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {enrolment?.completedDate ? t('courses.completed') : enrolment ? t('courses.enrolled') : enrollingId === course.id ? t('courses.enrolling') : t('courses.enrol')}
+                  </button>
+                )}
               </div>
             </article>
           )

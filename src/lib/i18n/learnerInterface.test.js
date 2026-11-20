@@ -60,6 +60,7 @@ const SOURCES = Object.values(import.meta.glob([
   '../../pages/employer/EmployerHome.jsx',
   '../../pages/employer/EmployerAssignedTrainingPanel.jsx',
   '../../pages/employer/EmployerCataloguePanel.jsx',
+  '../../pages/employer/LearnerWorkspaceParts.jsx',
   '../../pages/roles/LearnerRoleAlignmentContainer.jsx',
   '../../pages/roles/employer-link/*.jsx',
   '!../../pages/roles/employer-link/*.test.jsx',

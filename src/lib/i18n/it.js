@@ -3329,6 +3329,11 @@ export default {
     employerLearning: 'Apprendimento con il datore di lavoro',
     headings: { home: 'Bentornato', learning: 'Il mio apprendimento', catalogue: 'Catalogo', role: 'Ruolo e competenze' },
     homeIntro: 'Riprendi da dove avevi lasciato, guarda cosa viene dopo e segui l’apprendimento legato al tuo ruolo.',
+    announcement: 'Annuncio',
+    helpHeading: 'Aiuto e link utili',
+    contactHeading: 'Il tuo referente',
+    linksHeading: 'Link utili',
+    opensInNewTab: '(si apre in una nuova scheda)',
   },
   roleAlignment: {
     summary: {
@@ -3408,6 +3413,8 @@ export default {
     headingNone: 'Il tuo apprendimento',
     viewAll: 'Vedi tutto',
     assignedBy: 'Assegnato da {employer}',
+    requiredBy: 'Obbligatoria per {employer}',
+    recommendedBy: 'Consigliata da {employer}',
     caughtUp: 'Sei in pari.',
     noneAssigned: '{employer} non ti ha ancora assegnato apprendimento.',
     upNext: 'A seguire',
@@ -3421,6 +3428,7 @@ export default {
     loading: 'Caricamento del catalogo…',
     heading: 'Disponibile tramite {employer}',
     intro: 'Sfoglia l’apprendimento che il tuo datore di lavoro ha messo a tua disposizione.',
+    browseOnly: 'Sfoglia la formazione disponibile tramite {employer}. Per seguire un corso, chiedi a {employer} di assegnartelo.',
     searchLabel: 'Cerca nel catalogo',
     searchPlaceholder: 'Cerca nel catalogo',
     none: 'Non hai ancora cataloghi disponibili.',

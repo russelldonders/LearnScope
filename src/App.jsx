@@ -25,6 +25,7 @@ import ImpersonationBanner from './components/ImpersonationBanner'
 const LtiSession = lazyRoute(() => import('./pages/LtiSession'))
 const LmsConnectionsPage = lazyRoute(() => import('./pages/provider/LtiConfiguration'))
 const LtiToolsPage = lazyRoute(() => import('./pages/provider/LtiTools'))
+const LearnerWorkspaceSettingsPage = lazyRoute(() => import('./pages/employer/LearnerWorkspaceSettingsPage'))
 const Signup = lazyRoute(() => import('./pages/Signup'))
 const ForgotPassword = lazyRoute(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazyRoute(() => import('./pages/ResetPassword'))
@@ -347,6 +348,10 @@ function App() {
           <Route
             path="/organisation/organisations/:organisationId/lti-tools"
             element={<OrganisationAdminRoute><LtiToolsPage /></OrganisationAdminRoute>}
+          />
+          <Route
+            path="/organisation/organisations/:organisationId/learner-workspace"
+            element={<OrganisationAdminRoute><LearnerWorkspaceSettingsPage /></OrganisationAdminRoute>}
           />
           <Route
             path="/organisation/organisations/:organisationId/skills/:skillId"

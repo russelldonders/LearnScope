@@ -3327,6 +3327,11 @@ export default {
     employerLearning: 'Leren bij de werkgever',
     headings: { home: 'Welkom terug', learning: 'Mijn leren', catalogue: 'Catalogus', role: 'Rol en vaardigheden' },
     homeIntro: 'Ga verder waar je gebleven was, zie wat er nu komt en volg het leren dat bij je rol hoort.',
+    announcement: 'Mededeling',
+    helpHeading: 'Hulp en handige links',
+    contactHeading: 'Je contactpersoon',
+    linksHeading: 'Handige links',
+    opensInNewTab: '(opent in een nieuw tabblad)',
   },
   roleAlignment: {
     summary: {
@@ -3406,6 +3411,8 @@ export default {
     headingNone: 'Je leren',
     viewAll: 'Alles bekijken',
     assignedBy: 'Toegewezen door {employer}',
+    requiredBy: 'Verplicht door {employer}',
+    recommendedBy: 'Aanbevolen door {employer}',
     caughtUp: 'Je bent helemaal bij.',
     noneAssigned: '{employer} heeft nog geen leren toegewezen.',
     upNext: 'Hierna',
@@ -3419,6 +3426,7 @@ export default {
     loading: 'Catalogus wordt geladen…',
     heading: 'Beschikbaar via {employer}',
     intro: 'Bekijk het leeraanbod dat je werkgever voor je beschikbaar heeft gemaakt.',
+    browseOnly: 'Bekijk het leeraanbod van {employer}. Wil je een cursus volgen? Vraag {employer} dan om die aan je toe te wijzen.',
     searchLabel: 'Catalogus doorzoeken',
     searchPlaceholder: 'Catalogus doorzoeken',
     none: 'Er zijn nog geen catalogi voor je beschikbaar.',

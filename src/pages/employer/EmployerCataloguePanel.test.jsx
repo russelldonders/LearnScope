@@ -53,4 +53,12 @@ describe('EmployerCataloguePanel', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search catalogue' }), { target: { value: 'missing' } })
     expect(screen.getByText('No learning matches “missing”.')).toBeInTheDocument()
   })
+
+  it('hides Enrol when the organisation keeps its catalogue browse-only', async () => {
+    render(<EmployerCataloguePanel employerId="employer-1" employerName="Acme" employerLogoUrl={null} enrolment="browse_only" />)
+
+    expect(await screen.findByRole('heading', { name: 'Lead safely' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Enrol' })).not.toBeInTheDocument()
+    expect(screen.getByText('Browse the learning available through Acme. To take a course, ask Acme to assign it to you.')).toBeInTheDocument()
+  })
 })

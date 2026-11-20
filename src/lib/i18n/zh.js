@@ -3308,6 +3308,11 @@ export default {
     employerLearning: '雇主学习',
     headings: { home: '欢迎回来', learning: '我的学习', catalogue: '目录', role: '岗位与技能' },
     homeIntro: '从上次停下的地方继续，看看接下来要做什么，并跟踪与你岗位相关的学习。',
+    announcement: '公告',
+    helpHeading: '帮助和实用链接',
+    contactHeading: '你的联系人',
+    linksHeading: '实用链接',
+    opensInNewTab: '（在新标签页中打开）',
   },
   roleAlignment: {
     summary: {
@@ -3387,6 +3392,8 @@ export default {
     headingNone: '你的学习',
     viewAll: '查看全部',
     assignedBy: '由{employer}分配',
+    requiredBy: '{employer} 要求完成',
+    recommendedBy: '{employer} 推荐',
     caughtUp: '你已全部完成。',
     noneAssigned: '{employer}尚未为你分配任何学习内容。',
     upNext: '接下来',
@@ -3400,6 +3407,7 @@ export default {
     loading: '正在加载目录…',
     heading: '通过{employer}提供',
     intro: '浏览雇主为你提供的学习内容。',
+    browseOnly: '浏览 {employer} 提供的学习内容。如需参加课程，请让 {employer} 为你分配。',
     searchLabel: '搜索目录',
     searchPlaceholder: '搜索目录',
     none: '目前还没有可供你使用的目录。',
