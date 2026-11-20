@@ -103,3 +103,16 @@ export function prepareLibraryLevelGuides(librarySkillId, name) {
     )
   }
 }
+
+// Every missing axis of an active, shared (non-private) library entry --
+// what the skill library's "Generate missing definitions" action fills.
+export function missingLevelDefinitionTasks(skills) {
+  return skills
+    .filter((skill) => skill.status === 'active' && !skill.is_private)
+    .flatMap((skill) =>
+      LEVEL_GUIDE_AXES.filter((axis) => !isCompleteLevelGuide(skill[`${axis}_level_guide`])).map((axis) => ({
+        skill,
+        axis,
+      }))
+    )
+}

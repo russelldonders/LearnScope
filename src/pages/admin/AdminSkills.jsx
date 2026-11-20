@@ -9,6 +9,7 @@ import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writ
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import SkillIcon from '../../components/SkillIcon'
 import AdminSkillCourseBuilderDialog from '../../components/AdminSkillCourseBuilderDialog'
+import MissingLevelDefinitions from './MissingLevelDefinitions'
 
 const SKILL_SORT_ACCESSORS = {
   code: (s) => s.skill_code?.toLowerCase() ?? '',
@@ -296,6 +297,15 @@ export default function AdminSkills() {
             onReset={resetToDefault}
           />
         </div>
+
+        {!loading && (
+          <MissingLevelDefinitions
+            skills={skills}
+            onSkillGuide={(skillId, axis, statements) =>
+              setSkills((prev) => prev.map((s) => (s.id === skillId ? { ...s, [`${axis}_level_guide`]: statements } : s)))
+            }
+          />
+        )}
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 

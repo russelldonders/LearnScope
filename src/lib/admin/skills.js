@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient'
 
 // Admin listing -- every status, unlike src/lib/skillLibrary.js's
 // listLibrarySkills (learner-facing, active-only).
-const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by, icon_url, knowledge_level_guide'
+const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by, icon_url, knowledge_level_guide, practical_level_guide'
 
 // skill_library.created_by only references auth.users, and organisation_id
 // references organisations -- neither is a foreign key PostgREST can embed
@@ -63,7 +63,7 @@ export async function listAllLibrarySkills() {
 export async function getLibrarySkill(id) {
   const { data, error } = await supabase
     .from('skill_library')
-    .select(`${ADMIN_SKILL_SELECT}, practical_level_guide`)
+    .select(ADMIN_SKILL_SELECT)
     .eq('id', id)
     .single()
   if (error) throw error
