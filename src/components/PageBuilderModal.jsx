@@ -384,6 +384,11 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     }
   }
   const [activeBlockId, setActiveBlockId] = useState(null)
+  // The formatting bar only shows while a rich-text area (heading, text,
+  // callout, quote, column) has focus -- or the bar itself does, for
+  // keyboard users who tab into it.
+  const [textFocused, setTextFocused] = useState(false)
+  const [formatBarFocused, setFormatBarFocused] = useState(false)
   // For MediaEditor's "Choose from library" -- loaded once, best-effort
   // (a failure here shouldn't block the editor from opening, since upload
   // and URL entry still work without it).
@@ -719,8 +724,20 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
 
         {error && <p className="bg-red-700 px-4 py-2 text-sm text-white" role="alert">{error}</p>}
 
-        {!previewing && (
-        <div className="page-format-bar" aria-label="Text formatting">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        {!previewing && (textFocused || formatBarFocused) && (
+        <div
+          className="page-format-bar page-format-bar--floating"
+          role="toolbar"
+          aria-label="Text formatting"
+          onFocus={() => setFormatBarFocused(true)}
+          onBlur={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) return
+            setFormatBarFocused(false)
+            // Back into the text keeps the bar; anywhere else closes it.
+            if (!event.relatedTarget?.closest?.('.page-inline-editable')) setTextFocused(false)
+          }}
+        >
           <span className="hidden text-xs text-secondary sm:inline">Select text, then format</span>
           {[
             ['bold', 'Bold', 'font-bold'],
@@ -749,7 +766,12 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
             </div>
           </main>
         ) : (
-        <main className="min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8 sm:py-10" onClick={() => setActiveBlockId(null)}>
+        <main
+          className="page-editor-scroll min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8 sm:py-10"
+          onClick={() => setActiveBlockId(null)}
+          onFocus={(event) => setTextFocused(Boolean(event.target.closest?.('.page-inline-editable')))}
+          onBlur={(event) => { if (!event.relatedTarget?.closest?.('.page-inline-editable, .page-format-bar')) setTextFocused(false) }}
+        >
           <div className="page-live-canvas mx-auto min-h-full max-w-4xl bg-card px-5 py-10 sm:px-14 sm:py-14">
             <article className="page-content mx-auto w-full max-w-[70ch]">
               {pageDocument.blocks.length > 0 && (
@@ -867,6 +889,8 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           </div>
         </main>
         )}
+
+      </div>
 
       {confirmingDiscard && (
         <ConfirmDialog

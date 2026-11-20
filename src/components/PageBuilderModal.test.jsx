@@ -137,10 +137,32 @@ it('asks in an in-app dialog before discarding unsaved changes', () => {
   return waitFor(() => expect(onClose).toHaveBeenCalled()).finally(() => confirmSpy.mockRestore())
 })
 
+it('shows the formatting bar only while text is being edited', () => {
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={{ title: 'Bar', page_content: { version: 1, blocks: [{ id: 't1', type: 'text', content: 'Hello' }] } }} onClose={vi.fn()} onSaved={vi.fn()} />)
+  expect(screen.queryByRole('toolbar', { name: 'Text formatting' })).not.toBeInTheDocument()
+
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
+  expect(screen.getByRole('toolbar', { name: 'Text formatting' })).toBeInTheDocument()
+
+  // Tabbing into the bar keeps it open; leaving both closes it.
+  const bold = screen.getByRole('button', { name: 'Bold' })
+  fireEvent.focusOut(screen.getByRole('textbox', { name: 'Body text' }), { relatedTarget: bold })
+  fireEvent.focusIn(bold)
+  expect(screen.getByRole('toolbar', { name: 'Text formatting' })).toBeInTheDocument()
+  fireEvent.focusOut(bold, { relatedTarget: screen.getByRole('textbox', { name: 'Resource title' }) })
+  expect(screen.queryByRole('toolbar', { name: 'Text formatting' })).not.toBeInTheDocument()
+
+  // Other fields, like the page title, don't bring it up.
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Resource title' }))
+  expect(screen.queryByRole('toolbar', { name: 'Text formatting' })).not.toBeInTheDocument()
+})
+
 it('explains inline, not in a browser pop-up, where to put a link', () => {
   const alertSpy = vi.spyOn(window, 'alert')
-  render(<PageBuilderModal organisationId="org-1" userId="me" initialTitle="Listening" onClose={vi.fn()} onSaved={vi.fn()} />)
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={{ title: 'Bar', page_content: { version: 1, blocks: [{ id: 't1', type: 'text', content: 'Hello' }] } }} onClose={vi.fn()} onSaved={vi.fn()} />)
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
   window.getSelection()?.removeAllRanges()
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
   fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
   expect(alertSpy).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('Click into some text first (or select the words to link), then add a link.')
@@ -170,6 +192,7 @@ it('adds a link at the cursor with its own text, opening in the same window', as
   render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('Read the guide')} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
   const text = screen.getByRole('textbox', { name: 'Body text' })
   placeCaret(text.firstChild, 'Read the guide'.length)
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
   fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
 
   fireEvent.change(screen.getByLabelText('Web address'), { target: { value: 'https://example.com/guide' } })
@@ -193,6 +216,7 @@ it('changes an existing link’s address and window from inside it', async () =>
   render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('See <a href="https://old.example" target="_blank" rel="noopener noreferrer">the policy</a>')} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
   const anchor = screen.getByRole('textbox', { name: 'Body text' }).querySelector('a')
   placeCaret(anchor.firstChild, 3)
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
   fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
 
   expect(screen.getByRole('heading', { name: 'Edit link' })).toBeInTheDocument()
@@ -214,6 +238,7 @@ it('offers a new tab by default when linking selected words', () => {
   render(<PageBuilderModal organisationId="org-1" userId="me" resource={linkPage('Read the guide')} saveResource={vi.fn()} onClose={vi.fn()} onSaved={vi.fn()} />)
   const text = screen.getByRole('textbox', { name: 'Body text' })
   selectText(text.firstChild, 9, 14)
+  fireEvent.focusIn(screen.getByRole('textbox', { name: 'Body text' }))
   fireEvent.mouseDown(screen.getAllByRole('button', { name: 'Add link' })[0])
   expect(screen.getByRole('heading', { name: 'Add a link' })).toBeInTheDocument()
   expect(screen.getByRole('radio', { name: 'A new tab' })).toBeChecked()

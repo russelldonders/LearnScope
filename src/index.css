@@ -195,6 +195,22 @@ body {
     padding: 0.4rem 1rem;
   }
 
+  /* Shown only while a text area is being edited, floating over the top of
+     the page so the page doesn't jump when it appears; one swipeable row on
+     phones. The editor's scroll area keeps focused text clear of it. */
+  .page-format-bar--floating {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--color-ink) 10%, transparent);
+  }
+  .page-editor-scroll { scroll-padding-top: 4rem; }
+  @media (max-width: 639px) {
+    .page-format-bar--floating { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
+    .page-format-bar--floating > * { flex-shrink: 0; }
+  }
+
   .page-format-bar button { border-radius: 6px; padding: 0.35rem 0.65rem; color: var(--color-ink); }
   .page-format-bar button:hover { background: var(--color-paper); }
   .page-inline-block-wrap { position: relative; }
