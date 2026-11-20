@@ -1,33 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const inserts = []
-const updates = []
-vi.mock('../lib/supabaseClient', () => ({
-  supabase: {
-    from: (table) => ({
-      insert: (row) => {
-        inserts.push({ table, row })
-        return Promise.resolve({ error: null })
-      },
-      update: (row) => ({
-        eq: () => {
-          updates.push({ table, row })
-          return Promise.resolve({ error: null })
-        },
-      }),
-    }),
-  },
-}))
-
-const plan = { openingQuestion: 'What does a variable do?', topics: ['Variables', 'Scope'], rubric: 'r' }
-const fetchPlan = vi.fn(() => Promise.resolve({ diagnosticContentId: 'c1', content: plan }))
+const fetchPlan = vi.fn(() =>
+  Promise.resolve({ sessionId: 'sess1', openingQuestion: 'What does a variable do?', topics: ['Variables', 'Scope'] })
+)
 const sendTurn = vi.fn()
-const saveAttempt = vi.fn(() => Promise.resolve())
+const saveInterview = vi.fn(() => Promise.resolve({ level: 3 }))
 vi.mock('../lib/skillDiagnostics', () => ({
-  fetchOrGenerateInterviewPlan: (...args) => fetchPlan(...args),
-  sendInterviewTurn: (...args) => sendTurn(...args),
-  saveInterviewAttempt: (...args) => saveAttempt(...args),
+  startInterview: (...args) => fetchPlan(...args),
+  sendInterviewAnswer: (...args) => sendTurn(...args),
+  saveInterview: (...args) => saveInterview(...args),
 }))
 vi.mock('./GrowthRing', () => ({ default: () => null }))
 vi.mock('../context/LanguageContext', async () => {
@@ -71,10 +53,8 @@ function answer(text) {
 }
 
 beforeEach(() => {
-  inserts.length = 0
-  updates.length = 0
   sendTurn.mockReset()
-  saveAttempt.mockClear()
+  saveInterview.mockClear()
   Element.prototype.scrollIntoView = vi.fn()
 })
 afterEach(cleanup)
@@ -102,7 +82,8 @@ describe('InterviewModal', () => {
     answer('It stores a value')
     expect(await screen.findByText('Nice. What about scope?')).toBeTruthy()
     expect(screen.getByText('Question 2 of up to 6')).toBeTruthy()
-    expect(sendTurn.mock.calls[0][0].transcript).toEqual([{ role: 'user', content: 'It stores a value' }])
+    // Only the new answer goes to the server, which keeps the conversation.
+    expect(sendTurn.mock.calls[0][0]).toEqual({ sessionId: 'sess1', answer: 'It stores a value' })
 
     answer('Block and function scope')
     fireEvent.click(await screen.findByRole('button', { name: 'See where you landed →' }))
@@ -111,10 +92,7 @@ describe('InterviewModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save to my skill' }))
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled())
-    expect(inserts).toEqual([
-      expect.objectContaining({ table: 'skill_assessments', row: expect.objectContaining({ level: 3, source: 'diagnostic_confirmed' }) }),
-    ])
-    expect(updates[0].row).toEqual({ knowledge_level: 3, lifecycle_stage: 'identified' })
+    expect(saveInterview).toHaveBeenCalledWith({ sessionId: 'sess1' })
   })
 
   it('stays honest rather than celebratory when the learner lands below the pitched level', async () => {

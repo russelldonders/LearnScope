@@ -1699,6 +1699,7 @@ export default {
       leave: 'Leave anyway',
       srRightAnswer: 'right answer',
       srWrongAnswer: 'your answer, not right',
+      checking: 'Checking…',
     },
     interview: {
       title: 'Interview me',

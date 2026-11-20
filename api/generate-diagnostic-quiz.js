@@ -9,23 +9,42 @@ import {
   normalizeAssessmentQuestion,
 } from './_lib/courseDraft.js'
 import { POOL_CAP, QUIZ_LENGTH, pickQuestions, questionsToGenerate, shuffle } from './_lib/questionPool.js'
+import {
+  PASS_THRESHOLD,
+  cleanAnswer,
+  diagnoseLevel,
+  loadOwnSkill,
+  markAnswer,
+  nextRoundLevel,
+  questionForLearner,
+  resolveCheckTarget,
+  quizAssessmentComment,
+  recordConfirmedKnowledge,
+  recordDiagnosticStatement,
+} from './_lib/knowledgeCheck.js'
 
-// Knowledge-check questions for one skill at one knowledge level, drawn from
-// a stored pool (skill_questions, migration 0323) rather than generated each
-// time. Two modes, one function (Vercel's function cap is full):
+// The knowledge check, run and marked on the server. Questions for a skill
+// at a knowledge level come from a stored pool (skill_questions, 0323); each
+// round is kept on a skill_quiz_attempts row (0324) with the questions'
+// answers, which the learner never receives until they've answered. Modes
+// (one function -- Vercel's function cap is full):
 //
-//   serve (default, any signed-in learner): returns QUIZ_LENGTH questions
-//     for a library skill + level -- ones this learner hasn't been served
-//     before. When they've run out and the level holds fewer than POOL_CAP
-//     active questions, QUIZ_LENGTH more are generated and stored first; at
-//     the cap, a random selection (unseen first). A skill with no readable
-//     library entry has no pool, so it gets a one-off generated set.
-//   admin_generate (platform admins, from the skill library): generates and
-//     stores `count` more questions for a level -- not limited by the cap.
+//   start   (learner): a round of QUIZ_LENGTH questions on their own skill,
+//           without answers, at the level the server decides -- a new run
+//           (a few a day per skill) or the next round of one. Unseen ones first; when they've run out and the
+//           level holds fewer than POOL_CAP active questions, QUIZ_LENGTH more
+//           are generated and stored first. A skill with no readable library
+//           entry gets a one-off generated set.
+//   check   (learner): marks one answer, once, and reveals that question.
+//   finish  (learner): scores the round and records it as evidence.
+//   settle  (learner): turns a finished run into the confirmed knowledge
+//           level -- the only way one is recorded (see 0324's guards).
+//   admin_generate (platform admins): stores `count` more questions for a
+//           level, not limited by the cap.
 //
 // Questions use the course builder's scored-question format (page-builder
-// `test_question` blocks) in a mix of types, so they're marked by the same
-// scoreTestQuestion() and edited with the same editor.
+// `test_question` blocks) in a mix of types; marking mirrors the course
+// player's scoreTestQuestion() (see _lib/knowledgeCheck.js).
 
 const MAX_SKILL_NAME_LENGTH = 200
 const MAX_ADMIN_GENERATE = 20
@@ -162,112 +181,416 @@ function sendError(res, err, fallback) {
   res.status(500).json({ error: fallback })
 }
 
-async function serve(req, res, { user, accessToken }) {
-  let { skillName, librarySkillId } = req.body ?? {}
-  const { level } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Missing skillName' })
-    return
-  }
-  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH).trim()
+// The QUIZ_LENGTH questions for one round, as full stored questions (with
+// answers): from the library skill's pool, topping it up first when this
+// learner has run out of unseen ones; or a one-off generated set for a skill
+// with no readable library entry.
+async function selectQuestions(admin, { user, accessToken, skill, level }) {
+  let librarySkillId = skill.library_skill_id
+  let skillName = String(skill.name ?? '').slice(0, MAX_SKILL_NAME_LENGTH).trim()
 
   // Pools are keyed by library skill and generated from that entry's own
-  // name; a library id the caller can't see just means no pool.
+  // name; a library entry the learner can't see just means no pool.
   if (librarySkillId) {
-    try {
-      const libraryName = await readableLibrarySkillName(accessToken, librarySkillId)
-      if (libraryName) skillName = libraryName.trim()
-      else librarySkillId = null
-    } catch (err) {
-      sendError(res, err, 'Failed to generate knowledge check.')
-      return
-    }
+    const libraryName = await readableLibrarySkillName(accessToken, librarySkillId)
+    if (libraryName) skillName = libraryName.trim()
+    else librarySkillId = null
   }
 
   if (!librarySkillId) {
-    if (!(await consumeQuota(user.id, 'ai'))) {
-      sendQuotaExceeded(res)
-      return
-    }
-    try {
-      const questions = await generateQuestions({ userId: user.id, skillName, level, count: QUIZ_LENGTH, existingTitles: [] })
-      res.status(200).json({ questions: questions.map((question) => ({ ...question })), pooled: false })
-    } catch (err) {
-      sendError(res, err, 'Failed to generate knowledge check.')
-    }
-    return
+    if (!(await consumeQuota(user.id, 'ai'))) return { quotaExceeded: true }
+    const generated = await generateQuestions({ userId: user.id, skillName, level, count: QUIZ_LENGTH, existingTitles: [] })
+    return { librarySkillId: null, questions: generated }
   }
 
-  const admin = supabaseAdmin()
-  try {
-    const pool = await loadPool(admin, librarySkillId, level)
-    let active = pool.filter((row) => row.status === 'active')
+  const pool = await loadPool(admin, librarySkillId, level)
+  let active = pool.filter((row) => row.status === 'active')
 
-    const { data: servings, error: servingsError } = await admin
-      .from('skill_question_servings')
-      .select('question_id')
-      .eq('user_id', user.id)
-      .in('question_id', active.length ? active.map((row) => row.id) : ['00000000-0000-0000-0000-000000000000'])
-    if (servingsError) throw servingsError
-    const servedIds = new Set((servings ?? []).map((row) => row.question_id))
-    let fresh = []
+  const { data: servings, error: servingsError } = await admin
+    .from('skill_question_servings')
+    .select('question_id')
+    .eq('user_id', user.id)
+    .in('question_id', active.length ? active.map((row) => row.id) : ['00000000-0000-0000-0000-000000000000'])
+  if (servingsError) throw servingsError
+  const servedIds = new Set((servings ?? []).map((row) => row.question_id))
+  let fresh = []
 
-    const room = questionsToGenerate({
-      activeCount: active.length,
-      unseenCount: active.filter((row) => !servedIds.has(row.id)).length,
-    })
-    if (room > 0) {
-      if (!(await consumeQuota(user.id, 'ai'))) {
-        if (active.length === 0) {
-          sendQuotaExceeded(res)
-          return
-        }
-      } else {
-        try {
-          const generated = await generateQuestions({
-            userId: user.id,
-            skillName,
-            level,
-            count: room,
-            existingTitles: pool.map((row) => row.question?.title).filter(Boolean),
-          })
-          // Re-count just before storing so learners generating at the same
-          // moment don't push the level far past the cap.
-          const { count: activeNow } = await admin
-            .from('skill_questions')
-            .select('id', { count: 'exact', head: true })
-            .eq('library_skill_id', librarySkillId)
-            .eq('axis', 'knowledge')
-            .eq('level', level)
-            .eq('status', 'active')
-          const keep = generated.slice(0, Math.max(0, POOL_CAP - (activeNow ?? active.length)))
-          fresh = await storeQuestions(admin, { librarySkillId, level, questions: keep, userId: user.id, source: 'ai' })
-          active = [...active, ...fresh]
-        } catch (err) {
-          // Better a quiz from what's already there than none at all.
-          if (active.length === 0) throw err
-          console.error('generate-diagnostic-quiz top-up failed, serving existing pool:', err)
-        }
+  const room = questionsToGenerate({
+    activeCount: active.length,
+    unseenCount: active.filter((row) => !servedIds.has(row.id)).length,
+  })
+  if (room > 0) {
+    if (!(await consumeQuota(user.id, 'ai'))) {
+      if (active.length === 0) return { quotaExceeded: true }
+    } else {
+      try {
+        const generated = await generateQuestions({
+          userId: user.id,
+          skillName,
+          level,
+          count: room,
+          existingTitles: pool.map((row) => row.question?.title).filter(Boolean),
+        })
+        // Re-count just before storing so learners generating at the same
+        // moment don't push the level far past the cap.
+        const { count: activeNow } = await admin
+          .from('skill_questions')
+          .select('id', { count: 'exact', head: true })
+          .eq('library_skill_id', librarySkillId)
+          .eq('axis', 'knowledge')
+          .eq('level', level)
+          .eq('status', 'active')
+        const keep = generated.slice(0, Math.max(0, POOL_CAP - (activeNow ?? active.length)))
+        fresh = await storeQuestions(admin, { librarySkillId, level, questions: keep, userId: user.id, source: 'ai' })
+        active = [...active, ...fresh]
+      } catch (err) {
+        // Better a quiz from what's already there than none at all.
+        if (active.length === 0) throw err
+        console.error('generate-diagnostic-quiz top-up failed, serving existing pool:', err)
       }
     }
+  }
 
-    if (active.length === 0) {
-      res.status(422).json({ error: "Couldn't generate a knowledge check for this skill." })
-      return
-    }
-
-    const picked = pickQuestions({ active, servedIds, freshIds: new Set(fresh.map((row) => row.id)) })
-
+  const picked = pickQuestions({ active, servedIds, freshIds: new Set(fresh.map((row) => row.id)) })
+  if (picked.length) {
     const now = new Date().toISOString()
     const { error: recordError } = await admin.from('skill_question_servings').upsert(
       picked.map((row) => ({ user_id: user.id, question_id: row.id, last_served_at: now })),
       { onConflict: 'user_id,question_id' }
     )
     if (recordError) console.error('generate-diagnostic-quiz servings record failed:', recordError)
+  }
+  return { librarySkillId, questions: picked.map(asServed) }
+}
 
-    res.status(200).json({ questions: picked.map(asServed), pooled: true, poolSize: active.length })
+// Starts a round. Without a runId it starts a new run of the check, at the
+// level the server decides from the learner's record (see
+// resolveCheckTarget) -- a few runs per skill a day. With a runId it starts
+// that run's next round, at the level the run's earlier rounds lead to.
+// Either way the questions (with answers) stay on the attempt and the
+// learner is sent them without answers.
+async function start(req, res, { user, accessToken }) {
+  const { skillId, runId } = req.body ?? {}
+  const admin = supabaseAdmin()
+  try {
+    const skill = await loadOwnSkill(admin, user.id, skillId)
+    if (!skill) {
+      res.status(404).json({ error: 'Skill not found.' })
+      return
+    }
+
+    let run
+    if (runId) {
+      const { data: rounds, error } = await admin
+        .from('skill_quiz_attempts')
+        .select('level, passed, status, calibrate, round, settled')
+        .eq('run_id', runId)
+        .eq('user_id', user.id)
+        .eq('skill_id', skill.id)
+        .order('round', { ascending: true })
+      if (error) throw error
+      if (!rounds?.length) {
+        res.status(404).json({ error: 'Knowledge check not found.' })
+        return
+      }
+      if (rounds.some((r) => r.status !== 'completed') || rounds.some((r) => r.settled)) {
+        res.status(409).json({ error: 'This knowledge check can’t continue.' })
+        return
+      }
+      const calibrate = rounds[0].calibrate
+      const level = nextRoundLevel({ calibrate, rounds: rounds.map((r) => ({ level: r.level, passed: r.passed })) })
+      if (!level) {
+        res.status(409).json({ error: 'This knowledge check is already complete.' })
+        return
+      }
+      run = { runId, calibrate, level, round: rounds.length + 1 }
+    } else {
+      const target = await resolveCheckTarget(admin, skill)
+      run = { runId: crypto.randomUUID(), calibrate: target.calibrate, level: target.level, round: 1 }
+    }
+
+    // Reserve the round before any AI work: the database enforces the daily
+    // limit and one-round-at-a-time under a lock (0324), so parallel starts
+    // can't slip past either.
+    const { data: attempt, error } = await admin
+      .from('skill_quiz_attempts')
+      .insert({
+        user_id: user.id,
+        skill_id: skill.id,
+        library_skill_id: skill.library_skill_id,
+        run_id: run.runId,
+        calibrate: run.calibrate,
+        round: run.round,
+        level: run.level,
+        questions: [],
+      })
+      .select('id')
+      .single()
+    if (error) {
+      if (error.code === '54000') {
+        res.status(429).json({ error: 'You’ve taken this knowledge check a few times today. Try again tomorrow.' })
+        return
+      }
+      if (error.code === '23505') {
+        res.status(409).json({ error: 'This round has already started.' })
+        return
+      }
+      throw error
+    }
+
+    let selection
+    try {
+      selection = await selectQuestions(admin, { user, accessToken, skill, level: run.level })
+    } catch (err) {
+      await admin.from('skill_quiz_attempts').delete().eq('id', attempt.id)
+      throw err
+    }
+    if (selection.quotaExceeded || !selection.questions.length) {
+      await admin.from('skill_quiz_attempts').delete().eq('id', attempt.id)
+      if (selection.quotaExceeded) sendQuotaExceeded(res)
+      else res.status(422).json({ error: "Couldn't generate a knowledge check for this skill." })
+      return
+    }
+    const { error: fillError } = await admin
+      .from('skill_quiz_attempts')
+      .update({ questions: selection.questions, library_skill_id: selection.librarySkillId })
+      .eq('id', attempt.id)
+    if (fillError) throw fillError
+    res.status(200).json({
+      runId: run.runId,
+      attemptId: attempt.id,
+      level: run.level,
+      calibrate: run.calibrate,
+      questions: selection.questions.map((q) => questionForLearner(q)),
+    })
   } catch (err) {
     sendError(res, err, 'Failed to generate knowledge check.')
+  }
+}
+
+async function loadOwnAttempt(admin, userId, attemptId) {
+  if (typeof attemptId !== 'string' || !attemptId) return null
+  const { data, error } = await admin
+    .from('skill_quiz_attempts')
+    .select('*')
+    .eq('id', attemptId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Marks one answer, once. The answer and its marking are recorded atomically
+// (record_skill_quiz_answer); only then is the whole question -- right
+// answers and explanation -- revealed. Asking again returns the recorded
+// marking; nothing is revealed for a question left unanswered.
+async function check(req, res, { user }) {
+  const { attemptId, questionId, answer } = req.body ?? {}
+  const admin = supabaseAdmin()
+  try {
+    const attempt = await loadOwnAttempt(admin, user.id, attemptId)
+    if (!attempt) {
+      res.status(404).json({ error: 'Knowledge check not found.' })
+      return
+    }
+    const question = attempt.questions.find((q) => q.id === questionId)
+    if (!question) {
+      res.status(404).json({ error: 'Question not found.' })
+      return
+    }
+    if (attempt.results[question.id]) {
+      res.status(200).json({ correct: Boolean(attempt.results[question.id].correct), question })
+      return
+    }
+    if (attempt.status !== 'in_progress') {
+      res.status(409).json({ error: 'This round has already finished.' })
+      return
+    }
+    const cleaned = cleanAnswer(question, answer)
+    if (cleaned === null) {
+      res.status(400).json({ error: 'Answer the question first.' })
+      return
+    }
+    const correct = markAnswer(question, cleaned)
+    const { data: recorded, error } = await admin.rpc('record_skill_quiz_answer', {
+      p_attempt_id: attempt.id,
+      p_question_id: question.id,
+      p_answer: cleaned,
+      p_correct: correct,
+    })
+    if (error) throw error
+    if (!recorded) {
+      // Another request got there first, or the round just finished.
+      const latest = await loadOwnAttempt(admin, user.id, attempt.id)
+      const stored = latest?.results?.[question.id]
+      if (!stored) {
+        res.status(409).json({ error: 'This round has already finished.' })
+        return
+      }
+      res.status(200).json({ correct: Boolean(stored.correct), question })
+      return
+    }
+    res.status(200).json({ correct, question })
+  } catch (err) {
+    sendError(res, err, 'Failed to check your answer.')
+  }
+}
+
+// Ends a round: closes it first (so no more answers land), scores what was
+// recorded -- unanswered questions count as wrong -- and records the round
+// as evidence on the learner's skill. Finishing again returns the result.
+async function scoreClosedAttempt(admin, attempt) {
+  const total = attempt.questions.length
+  const score = attempt.questions.filter((q) => attempt.results[q.id]?.correct).length
+  const passed = total > 0 && score / total >= PASS_THRESHOLD
+  const { error } = await admin.from('skill_quiz_attempts').update({ score, total, passed }).eq('id', attempt.id)
+  if (error) throw error
+  return { score, total, passed }
+}
+
+async function finish(req, res, { user }) {
+  const { attemptId } = req.body ?? {}
+  const admin = supabaseAdmin()
+  try {
+    const attempt = await loadOwnAttempt(admin, user.id, attemptId)
+    if (!attempt) {
+      res.status(404).json({ error: 'Knowledge check not found.' })
+      return
+    }
+    const { data: closed, error: closeError } = await admin
+      .from('skill_quiz_attempts')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', attempt.id)
+      .eq('status', 'in_progress')
+      .select('*')
+    if (closeError) throw closeError
+    if (!closed?.length) {
+      // Already finished (perhaps by a parallel request). Its answers can't
+      // change once closed, so scoring it again is safe if that step failed.
+      const latest = await loadOwnAttempt(admin, user.id, attempt.id)
+      const scored = latest.passed === null ? await scoreClosedAttempt(admin, latest) : latest
+      res.status(200).json({ score: scored.score, total: scored.total, passed: scored.passed })
+      return
+    }
+    const final = closed[0]
+    const { score, total, passed } = await scoreClosedAttempt(admin, final)
+
+    const skill = await loadOwnSkill(admin, user.id, final.skill_id)
+    if (skill) {
+      try {
+        const statementId = await recordDiagnosticStatement(admin, {
+          user,
+          skill,
+          activityId: `https://learnscope.app/activities/diagnostic/${final.library_skill_id ?? skill.id}/knowledge/${final.level}`,
+          name: `Confirming baseline: ${skill.name} (Knowledge level ${final.level})`,
+          score: { raw: score, min: 0, max: total, scaled: total ? score / total : 0 },
+          extension: {
+            diagnosticType: 'quiz',
+            axis: 'knowledge',
+            attemptId: final.id,
+            runId: final.run_id,
+            calibratedLevel: final.level,
+            confirmedLevel: passed ? final.level : Math.max(1, final.level - 1),
+            markedBy: 'server',
+            answers: final.questions.map((q) => ({
+              questionId: q.id,
+              questionType: q.layout,
+              question: q.title,
+              answer: final.answers[q.id] ?? null,
+              correct: Boolean(final.results[q.id]?.correct),
+            })),
+          },
+        })
+        await admin.from('skill_quiz_attempts').update({ statement_id: statementId }).eq('id', final.id)
+      } catch (err) {
+        // The round's result stands; only its evidence entry is missing.
+        console.error('generate-diagnostic-quiz evidence record failed:', err)
+      }
+    }
+    res.status(200).json({ score, total, passed })
+  } catch (err) {
+    sendError(res, err, 'Failed to finish the knowledge check.')
+  }
+}
+
+// Turns a finished run into the confirmed knowledge level -- the whole run,
+// in order, never a chosen subset of rounds. Settling again returns the
+// level already recorded.
+async function settle(req, res, { user }) {
+  const { runId } = req.body ?? {}
+  if (typeof runId !== 'string' || !runId) {
+    res.status(400).json({ error: 'Missing knowledge check.' })
+    return
+  }
+  const admin = supabaseAdmin()
+  try {
+    const { data: attempts, error } = await admin
+      .from('skill_quiz_attempts')
+      .select('*')
+      .eq('run_id', runId)
+      .eq('user_id', user.id)
+      .order('round', { ascending: true })
+    if (error) throw error
+    if (!attempts?.length) {
+      res.status(404).json({ error: 'Knowledge check not found.' })
+      return
+    }
+    if (attempts.some((a) => a.status !== 'completed' || a.passed === null)) {
+      res.status(409).json({ error: 'Finish every round first.' })
+      return
+    }
+    if (attempts.every((a) => a.settled && a.assessment_id)) {
+      const { data: existing } = await admin.from('skill_assessments').select('level').eq('id', attempts[0].assessment_id).maybeSingle()
+      res.status(200).json({ level: existing?.level ?? null })
+      return
+    }
+    if (attempts.some((a) => a.settled)) {
+      res.status(409).json({ error: 'This knowledge check is already being recorded.' })
+      return
+    }
+    const calibrate = attempts[0].calibrate
+    const rounds = attempts.map((a) => ({ level: a.level, passed: a.passed, score: a.score, total: a.total }))
+    const level = diagnoseLevel({ calibrate, rounds })
+    if (!level) {
+      res.status(400).json({ error: 'This knowledge check isn’t complete yet.' })
+      return
+    }
+    const skill = await loadOwnSkill(admin, user.id, attempts[0].skill_id)
+    if (!skill) {
+      res.status(404).json({ error: 'Skill not found.' })
+      return
+    }
+    // Claim the run so a double-submit can't record two levels.
+    const ids = attempts.map((a) => a.id)
+    const { data: claimed, error: claimError } = await admin
+      .from('skill_quiz_attempts')
+      .update({ settled: true })
+      .in('id', ids)
+      .eq('settled', false)
+      .select('id')
+    if (claimError) throw claimError
+    const release = (claimedIds) =>
+      claimedIds.length ? admin.from('skill_quiz_attempts').update({ settled: false }).in('id', claimedIds) : null
+    if ((claimed ?? []).length !== ids.length) {
+      await release((claimed ?? []).map((row) => row.id))
+      res.status(409).json({ error: 'This knowledge check is already being recorded.' })
+      return
+    }
+    try {
+      const assessmentId = await recordConfirmedKnowledge(admin, {
+        user,
+        skill,
+        level,
+        comments: quizAssessmentComment({ calibrate, rounds, level }),
+      })
+      await admin.from('skill_quiz_attempts').update({ assessment_id: assessmentId }).in('id', ids)
+    } catch (err) {
+      await release(ids)
+      throw err
+    }
+    res.status(200).json({ level })
+  } catch (err) {
+    sendError(res, err, 'Failed to save your knowledge level.')
   }
 }
 
@@ -343,15 +666,29 @@ export default async function handler(req, res) {
     return
   }
 
-  const { level } = req.body ?? {}
-  if (!Number.isInteger(level) || level < 1 || level > 5) {
-    res.status(400).json({ error: 'Missing or invalid level' })
-    return
+  switch (req.body?.mode ?? 'start') {
+    case 'start':
+      await start(req, res, { user, accessToken })
+      return
+    case 'check':
+      await check(req, res, { user })
+      return
+    case 'finish':
+      await finish(req, res, { user })
+      return
+    case 'settle':
+      await settle(req, res, { user })
+      return
+    case 'admin_generate': {
+      const { level } = req.body ?? {}
+      if (!Number.isInteger(level) || level < 1 || level > 5) {
+        res.status(400).json({ error: 'Missing or invalid level' })
+        return
+      }
+      await adminGenerate(req, res, { user })
+      return
+    }
+    default:
+      res.status(400).json({ error: 'Unknown knowledge check action' })
   }
-
-  if (req.body?.mode === 'admin_generate') {
-    await adminGenerate(req, res, { user })
-    return
-  }
-  await serve(req, res, { user, accessToken })
 }

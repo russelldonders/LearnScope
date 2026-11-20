@@ -34,29 +34,41 @@ function questionsFor(level) {
   ]
 }
 
-const inserts = []
-const updates = []
-vi.mock('../lib/supabaseClient', () => ({
-  supabase: {
-    from: (table) => ({
-      insert: (row) => {
-        inserts.push({ table, row })
-        return Promise.resolve({ error: null })
-      },
-      update: (row) => ({
-        eq: () => {
-          updates.push({ table, row })
-          return Promise.resolve({ error: null })
-        },
-      }),
-    }),
-  },
-}))
-const fetchQuestions = vi.fn(({ level }) => Promise.resolve({ questions: questionsFor(level) }))
-const saveAttempt = vi.fn(() => Promise.resolve({ score: 0, total: 2 }))
+// What the learner is sent: the questions without their answers.
+function withoutAnswers(question) {
+  return { id: question.id, type: question.type, title: question.title, layout: question.layout, points: 1, items: question.items.map(({ id, label }) => ({ id, label })) }
+}
+
+// A stand-in for the server, marking answers against the full questions.
+// The server decides each round's level: 3 to start, then up or down a
+// level from the last round's result when calibrating.
+const marked = {}
+let settledLevel = null
+let serverCalibrates = false
+let lastAttempt = null
+const startCheck = vi.fn(({ runId }) => {
+  const level = runId ? lastAttempt.level + (marked[lastAttempt.id].correct === 2 ? 1 : -1) : 3
+  const attemptId = `attempt-${level}`
+  marked[attemptId] = { level, correct: 0, total: 2 }
+  lastAttempt = { id: attemptId, level }
+  return Promise.resolve({ runId: 'run-1', attemptId, level, calibrate: serverCalibrates, questions: questionsFor(level).map(withoutAnswers) })
+})
+const checkAnswer = vi.fn(({ attemptId, questionId, answer }) => {
+  const question = questionsFor(marked[attemptId].level).find((q) => q.id === questionId)
+  const correct = question.items.find((i) => i.correct).id === answer
+  if (correct) marked[attemptId].correct += 1
+  return Promise.resolve({ correct, question })
+})
+const finishCheck = vi.fn(({ attemptId }) => {
+  const { correct, total } = marked[attemptId]
+  return Promise.resolve({ score: correct, total, passed: correct / total >= 0.7 })
+})
+const settleCheck = vi.fn(() => Promise.resolve({ level: settledLevel }))
 vi.mock('../lib/skillDiagnostics', () => ({
-  fetchKnowledgeCheckQuestions: (...a) => fetchQuestions(...a),
-  saveDiagnosticAttempt: (...a) => saveAttempt(...a),
+  startKnowledgeCheck: (...a) => startCheck(...a),
+  checkKnowledgeAnswer: (...a) => checkAnswer(...a),
+  finishKnowledgeCheck: (...a) => finishCheck(...a),
+  settleKnowledgeCheck: (...a) => settleCheck(...a),
 }))
 vi.mock('./GrowthRing', () => ({ default: () => null }))
 vi.mock('../context/LanguageContext', async () => {
@@ -71,10 +83,10 @@ vi.mock('../context/LanguageContext', async () => {
 const { default: ConfirmingBaselineQuizModal } = await import('./ConfirmingBaselineQuizModal')
 
 beforeEach(() => {
-  inserts.length = 0
-  updates.length = 0
-  fetchQuestions.mockClear()
-  saveAttempt.mockClear()
+  for (const mock of [startCheck, checkAnswer, finishCheck, settleCheck]) mock.mockClear()
+  settledLevel = null
+  serverCalibrates = false
+  lastAttempt = null
 })
 afterEach(cleanup)
 
@@ -84,8 +96,6 @@ function renderQuiz(props = {}) {
   render(
     <ConfirmingBaselineQuizModal
       skill={{ id: 's1', name: 'Weight loss', knowledge_level: 3, lifecycle_stage: 'identified', library_skill_id: 'lib1' }}
-      user={{ id: 'me' }}
-      actor={{ name: 'Me', email: 'me@example.com' }}
       latestKnowledgeAssessment={{ level: 3 }}
       onClose={onClose}
       onConfirmed={onConfirmed}
@@ -105,57 +115,56 @@ async function answerRound(right) {
   await screen.findByText('Question 1 of 2')
   fireEvent.click(screen.getByLabelText(right ? 'Right' : 'Wrong', { exact: false }))
   fireEvent.click(screen.getByRole('button', { name: 'Check' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
   await screen.findByText('Question 2 of 2')
   fireEvent.click(screen.getByLabelText(right ? 'True' : 'False', { exact: false }))
   fireEvent.click(screen.getByRole('button', { name: 'Check' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Finish' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Finish' }))
 }
 
 describe('the knowledge check', () => {
-  it('opens on an intro, then shows feedback after each checked answer', async () => {
+  it('opens on an intro, then shows the server’s marking after each answer', async () => {
     renderQuiz()
     expect(await screen.findByText('Quick check: Weight loss')).toBeTruthy()
     await start()
     expect(screen.getByText('Question one at 3')).toBeTruthy()
 
+    // The explanation isn't sent until the answer is marked.
+    expect(screen.queryByText('Because it is.')).toBeNull()
     fireEvent.click(screen.getByLabelText('Wrong', { exact: false }))
     fireEvent.click(screen.getByRole('button', { name: 'Check' }))
-    expect(screen.getByText('Not quite.')).toBeTruthy()
+    expect(await screen.findByText('Not quite.')).toBeTruthy()
     expect(screen.getByText('Because it is.')).toBeTruthy()
+    expect(checkAnswer).toHaveBeenCalledWith({ attemptId: 'attempt-3', questionId: 'L3-q1', answer: 'w' })
   })
 
-  it('confirms the pitched level on a pass and records exactly what was asked', async () => {
+  it('confirms the pitched level on a pass, recorded by the server', async () => {
+    settledLevel = 3
     renderQuiz()
     await start()
     await answerRound(true)
 
     await screen.findByText('Saved as your knowledge level for this skill.')
     expect(screen.getByText('Confirmed!')).toBeTruthy()
-    expect(saveAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        calibratedLevel: 3,
-        confirmedLevel: 3,
-        questions: questionsFor(3),
-        answers: { 'L3-q1': 'r', 'L3-q2': 't' },
-        results: expect.objectContaining({ 'L3-q1': expect.objectContaining({ correct: true }) }),
-      })
-    )
-    expect(inserts[0].row).toEqual(expect.objectContaining({ level: 3, source: 'diagnostic_confirmed' }))
+    expect(finishCheck).toHaveBeenCalledWith({ attemptId: 'attempt-3' })
+    expect(settleCheck).toHaveBeenCalledWith({ runId: 'run-1' })
   })
 
   it('steps down a level, without celebrating, on a fail', async () => {
+    settledLevel = 2
     renderQuiz()
     await start()
     await answerRound(false)
     await screen.findByText('Saved as your knowledge level for this skill.')
     expect(screen.getByText("Here's where you landed")).toBeTruthy()
-    expect(updates).toEqual([{ table: 'skills', row: { knowledge_level: 2 } }])
+    expect(settleCheck).toHaveBeenCalledWith({ runId: 'run-1' })
   })
 })
 
 describe('a knowledge check with no self-assessment to start from', () => {
   it('finds the level and saves it as the skill’s knowledge level without needing Continue', async () => {
+    settledLevel = 3
+    serverCalibrates = true
     const { onClose, onConfirmed } = renderQuiz({
       skill: { id: 's1', name: 'Weight loss', knowledge_level: null, lifecycle_stage: 'identified', library_skill_id: 'lib1' },
       latestKnowledgeAssessment: null,
@@ -170,14 +179,9 @@ describe('a knowledge check with no self-assessment to start from', () => {
     await answerRound(false)
 
     await screen.findByText('Saved as your knowledge level for this skill.')
-    expect(fetchQuestions.mock.calls.map(([args]) => args.level)).toEqual([3, 4])
-    expect(inserts).toEqual([
-      expect.objectContaining({
-        table: 'skill_assessments',
-        row: expect.objectContaining({ level: 3, axis: 'knowledge', source: 'diagnostic_confirmed' }),
-      }),
-    ])
-    expect(updates).toEqual([{ table: 'skills', row: { knowledge_level: 3 } }])
+    expect(startCheck.mock.calls.map(([args]) => args.runId)).toEqual([null, 'run-1'])
+    expect(screen.getAllByText('Familiar').length).toBeGreaterThan(0)
+    expect(settleCheck).toHaveBeenCalledWith({ runId: 'run-1' })
 
     // Closing it any way now reloads the page to show the level.
     fireEvent.keyDown(document, { key: 'Escape' })

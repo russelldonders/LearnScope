@@ -1702,6 +1702,7 @@ export default {
       leave: 'Esci comunque',
       srRightAnswer: 'risposta giusta',
       srWrongAnswer: 'la tua risposta, non giusta',
+      checking: 'Verifica…',
     },
     interview: {
       title: 'Intervistami',

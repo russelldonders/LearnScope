@@ -1701,6 +1701,7 @@ export default {
       leave: 'Quitter quand même',
       srRightAnswer: 'bonne réponse',
       srWrongAnswer: 'votre réponse, incorrecte',
+      checking: 'Vérification…',
     },
     interview: {
       title: 'Interviewez-moi',

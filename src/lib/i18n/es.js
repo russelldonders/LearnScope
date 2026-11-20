@@ -1700,6 +1700,7 @@ export default {
       leave: 'Salir de todos modos',
       srRightAnswer: 'respuesta correcta',
       srWrongAnswer: 'tu respuesta, incorrecta',
+      checking: 'Comprobando…',
     },
     interview: {
       title: 'Entrevístame',

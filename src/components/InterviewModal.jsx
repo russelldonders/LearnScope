@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
-import { fetchOrGenerateInterviewPlan, sendInterviewTurn, saveInterviewAttempt } from '../lib/skillDiagnostics'
+import { saveInterview, sendInterviewAnswer, startInterview } from '../lib/skillDiagnostics'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -47,8 +46,6 @@ const SPARKLES = [
 // they press save.
 export default function InterviewModal({
   skill,
-  user,
-  actor,
   latestKnowledgeAssessment,
   calibrating = false,
   onClose,
@@ -58,7 +55,7 @@ export default function InterviewModal({
   const calibratedLevel = calibrating ? null : (latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1)
 
   const [stage, setStage] = useState('intro') // intro -> chat -> result
-  const [diagnosticContentId, setDiagnosticContentId] = useState(null)
+  const [sessionId, setSessionId] = useState(null)
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingLine, setLoadingLine] = useState(0)
@@ -83,12 +80,12 @@ export default function InterviewModal({
   const currentQuestion = Math.min(MAX_QUESTIONS, answersGiven + 1)
 
   useEffect(() => {
-    fetchOrGenerateInterviewPlan({ skill, level: calibratedLevel, calibrate: calibrating })
-      .then(({ diagnosticContentId: id, content }) => {
-        if (!content?.openingQuestion) throw new Error(t('modals.interview.couldntPrepareInterview'))
-        setDiagnosticContentId(id)
-        setPlan(content)
-        setTranscript([{ role: 'interviewer', text: content.openingQuestion }])
+    startInterview({ skill })
+      .then(({ sessionId: id, openingQuestion, topics }) => {
+        if (!id || !openingQuestion) throw new Error(t('modals.interview.couldntPrepareInterview'))
+        setSessionId(id)
+        setPlan({ topics: topics ?? [] })
+        setTranscript([{ role: 'interviewer', text: openingQuestion }])
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -205,16 +202,8 @@ export default function InterviewModal({
     setError(null)
 
     try {
-      const apiTranscript = updated
-        .slice(1)
-        .map((turn) => ({ role: turn.role === 'learner' ? 'user' : 'assistant', content: turn.text }))
-      const result = await sendInterviewTurn({
-        skillName: skill.name,
-        level: calibratedLevel,
-        calibrate: calibrating,
-        plan,
-        transcript: apiTranscript,
-      })
+      // The server keeps the conversation; only the new answer is sent.
+      const result = await sendInterviewAnswer({ sessionId, answer })
       const closingText = result.message || (result.done ? t('modals.interview.thatsEverythingINeed') : '')
       if (closingText) setTranscript((prev) => [...prev, { role: 'interviewer', text: closingText }])
       if (result.done) {
@@ -223,11 +212,8 @@ export default function InterviewModal({
         setFinished(true)
       }
     } catch (err) {
-      // Roll back the optimistic learner turn -- otherwise a retry appends a
-      // second consecutive learner turn, which breaks the strict user/
-      // assistant alternation the interview-turn API (and Anthropic's
-      // Messages API underneath it) requires, making every further retry
-      // fail the same way with no way out except abandoning the interview.
+      // Roll back the optimistic learner turn (the server gives its copy
+      // back too), so the same answer can simply be sent again.
       setTranscript(previous)
       setInputValue(answer)
       setError(err.message)
@@ -236,38 +222,13 @@ export default function InterviewModal({
     }
   }
 
+  // The server records the confirmed level from the conversation it had --
+  // the browser only asks it to.
   async function handleConfirm() {
     setError(null)
     setSaving(true)
     try {
-      await saveInterviewAttempt({
-        user,
-        actor,
-        skill,
-        diagnosticContentId,
-        calibratedLevel,
-        confirmedLevel,
-        transcript,
-        reasoning,
-      })
-
-      const { error: assessError } = await supabase.from('skill_assessments').insert({
-        skill_id: skill.id,
-        user_id: user.id,
-        level: confirmedLevel,
-        axis: 'knowledge',
-        source: 'diagnostic_confirmed',
-        comments: calibrating
-          ? `Calibrated via conversational interview — no self-assessment existed to pitch at, so this found the level from scratch: ${reasoning}`
-          : `Confirmed via conversational interview: ${reasoning}`,
-      })
-      if (assessError) throw assessError
-
-      const skillUpdate = { knowledge_level: confirmedLevel }
-      if (skill.lifecycle_stage === 'confirming_baseline') skillUpdate.lifecycle_stage = 'identified'
-      const { error: skillError } = await supabase.from('skills').update(skillUpdate).eq('id', skill.id)
-      if (skillError) throw skillError
-
+      await saveInterview({ sessionId })
       onConfirmed()
     } catch (err) {
       setError(err.message)

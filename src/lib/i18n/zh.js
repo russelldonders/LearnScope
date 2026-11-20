@@ -1690,6 +1690,7 @@ export default {
       leave: '仍然离开',
       srRightAnswer: '正确答案',
       srWrongAnswer: '你的答案，不正确',
+      checking: '正在检查…',
     },
     interview: {
       title: '面试我',

@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { useEffect, useMemo, useState } from 'react'
 import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
-import { fetchKnowledgeCheckQuestions, saveDiagnosticAttempt } from '../lib/skillDiagnostics'
-import { scoreTestQuestion, startingOrder } from '../lib/pageBuilder'
+import {
+  checkKnowledgeAnswer,
+  finishKnowledgeCheck,
+  settleKnowledgeCheck,
+  startKnowledgeCheck,
+} from '../lib/skillDiagnostics'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
 
-// A learner is judged to genuinely be at the level they self-assessed if
-// they get at least 70% of the calibrated questions right; below that, the
-// confirmed level steps down one, rather than leaving them at a level the
-// quiz itself just showed they don't yet support.
+// Shown on the intro; the server applies it (api/_lib/knowledgeCheck.js): at
+// least 70% right confirms the level, below that it steps down one.
 const PASS_THRESHOLD = 0.7
 
 const LOADING_LINES = ['loading1', 'loading2', 'loading3']
@@ -25,11 +26,12 @@ const SPARKLES = [
   { dx: '0px', dy: '-56px', color: 'var(--color-moss)' },
 ]
 
-// The Confirming Baseline stage's knowledge check. Questions come from the
-// skill's stored question pool for the level being checked (see
-// api/generate-diagnostic-quiz.js) -- course-builder scored questions in a
-// mix of types, marked with the same scoreTestQuestion() the course player
-// uses. Two modes:
+// The Confirming Baseline stage's knowledge check, run and marked on the
+// server (api/generate-diagnostic-quiz.js, migration 0324). Questions come
+// from the skill's stored question pool for the level being checked --
+// course-builder scored questions in a mix of types -- and arrive without
+// their answers; each answer is marked by the server, which then reveals
+// that question. Only the server records the confirmed level. Two modes:
 //   - Confirming (the normal case): pitched once at the level the learner
 //     already self-assessed (skill.knowledge_level, falling back to their
 //     latest knowledge self-assessment). Pass/fail either confirms that
@@ -43,8 +45,6 @@ const SPARKLES = [
 //     Bounded to 2-3 rounds since there are only 5 levels.
 export default function ConfirmingBaselineQuizModal({
   skill,
-  user,
-  actor,
   latestKnowledgeAssessment,
   calibrating = false,
   onClose,
@@ -60,6 +60,11 @@ export default function ConfirmingBaselineQuizModal({
 
   const [stage, setStage] = useState('intro') // intro -> question -> (roundBreak -> question)* -> result
   const [roundLevel, setRoundLevel] = useState(startLevel)
+  const [roundNumber, setRoundNumber] = useState(1)
+  // The server decides the run's level and mode (it knows the learner's
+  // record); these follow what it says once the first round is served.
+  const [runId, setRunId] = useState(null)
+  const [runCalibrates, setRunCalibrates] = useState(calibrating)
   // Calibration bracket: the highest level confirmed to pass (0 = none yet)
   // and the lowest confirmed to fail (6 = none yet).
   const [lowPass, setLowPass] = useState(0)
@@ -67,7 +72,9 @@ export default function ConfirmingBaselineQuizModal({
   const [roundHistory, setRoundHistory] = useState([])
   const [diagnosedLevel, setDiagnosedLevel] = useState(null)
 
+  const [attemptId, setAttemptId] = useState(null)
   const [questions, setQuestions] = useState(null)
+  const [checking, setChecking] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingLine, setLoadingLine] = useState(0)
   const [error, setError] = useState(null)
@@ -83,10 +90,14 @@ export default function ConfirmingBaselineQuizModal({
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetchKnowledgeCheckQuestions({ skill, level: roundLevel })
-      .then(({ questions: q }) => {
+    startKnowledgeCheck({ skill, runId })
+      .then(({ runId: run, attemptId: id, level, calibrate, questions: q }) => {
         if (cancelled) return
-        if (!q?.length) throw new Error(t('modals.confirmingBaselineQuiz.couldntGenerateCheck'))
+        if (!id || !q?.length) throw new Error(t('modals.confirmingBaselineQuiz.couldntGenerateCheck'))
+        setRunId(run)
+        if (level) setRoundLevel(level)
+        if (typeof calibrate === 'boolean') setRunCalibrates(calibrate)
+        setAttemptId(id)
         setQuestions(q)
         setAnswers(Object.fromEntries(q.map((question) => [question.id, initialAnswer(question)])))
         setResults({})
@@ -101,8 +112,8 @@ export default function ConfirmingBaselineQuizModal({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one set of questions per round level, by design
-  }, [roundLevel])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one set of questions per round, by design
+  }, [roundNumber])
 
   useEffect(() => {
     if (!loading) return undefined
@@ -115,9 +126,25 @@ export default function ConfirmingBaselineQuizModal({
   const answered = question ? isAnswered(question, answers[question.id]) : false
   const answeredAny = Object.keys(results).length > 0 || roundHistory.length > 0
 
-  function checkAnswer() {
-    if (!question || !answered || result) return
-    setResults((prev) => ({ ...prev, [question.id]: scoreTestQuestion(question, answers[question.id]) }))
+  // Marked by the server, which replies with the whole question (right
+  // answers, explanation) so the card can show what was right.
+  async function checkAnswer() {
+    if (!question || !answered || result || checking) return
+    setChecking(true)
+    setError(null)
+    try {
+      const { correct, question: revealed } = await checkKnowledgeAnswer({
+        attemptId,
+        questionId: question.id,
+        answer: answers[question.id],
+      })
+      setQuestions((prev) => prev.map((q) => (q.id === question.id ? { ...revealed, options: q.options } : q)))
+      setResults((prev) => ({ ...prev, [question.id]: { correct } }))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setChecking(false)
+    }
   }
 
   async function nextQuestion() {
@@ -129,24 +156,12 @@ export default function ConfirmingBaselineQuizModal({
   }
 
   async function finishRound() {
-    const total = questions.length
-    const score = questions.filter((q) => results[q.id]?.correct).length
-    const pass = total > 0 && score / total >= PASS_THRESHOLD
-
-    // Every round is its own piece of evidence, saved as soon as it's scored.
     setSavingRound(true)
     setError(null)
+    let round
     try {
-      await saveDiagnosticAttempt({
-        user,
-        actor,
-        skill,
-        questions,
-        answers,
-        results,
-        calibratedLevel: roundLevel,
-        confirmedLevel: pass ? roundLevel : Math.max(1, roundLevel - 1),
-      })
+      const { score, total, passed } = await finishKnowledgeCheck({ attemptId })
+      round = { level: roundLevel, score, total, pass: passed, attemptId }
     } catch (err) {
       setError(err.message)
       setSavingRound(false)
@@ -154,25 +169,26 @@ export default function ConfirmingBaselineQuizModal({
     }
     setSavingRound(false)
 
-    const rounds = [...roundHistory, { level: roundLevel, score, total, pass }]
+    const rounds = [...roundHistory, round]
     setRoundHistory(rounds)
+    const { pass } = round
 
-    if (!calibrating) {
-      settle(pass ? roundLevel : Math.max(1, roundLevel - 1), rounds)
+    if (!runCalibrates) {
+      settle(pass ? roundLevel : Math.max(1, roundLevel - 1))
       return
     }
 
     if (pass) {
       setLowPass(roundLevel)
       if (roundLevel + 1 >= highFail) {
-        settle(roundLevel, rounds)
+        settle(roundLevel)
         return
       }
       startNextRound(roundLevel + 1)
     } else {
       setHighFail(roundLevel)
       if (roundLevel - 1 <= lowPass) {
-        settle(Math.max(1, lowPass), rounds)
+        settle(Math.max(1, lowPass))
         return
       }
       startNextRound(roundLevel - 1)
@@ -182,51 +198,25 @@ export default function ConfirmingBaselineQuizModal({
   function startNextRound(level) {
     setQuestions(null)
     setRoundLevel(level)
+    setRoundNumber((n) => n + 1)
     setStage('roundBreak')
   }
 
-  function buildComments(rounds, level) {
-    if (!calibrating) {
-      const round = rounds[0]
-      return round.pass
-        ? `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, meeting expectations for that level.`
-        : `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, below expectations for that level — adjusted to ${KNOWLEDGE_LEVEL_LABELS[level]}.`
-    }
-    const path = rounds
-      .map((r) => `${KNOWLEDGE_LEVEL_LABELS[r.level]} (${r.score}/${r.total}, ${r.pass ? 'passed' : 'below expectations'})`)
-      .join(' → ')
-    return `Calibrated via knowledge check — no self-assessment existed to pitch at, so this found the level from scratch: ${path}. Diagnosed at ${KNOWLEDGE_LEVEL_LABELS[level]}.`
-  }
-
   // The result becomes the skill's knowledge level as soon as it's known --
-  // closing the result any other way must not drop the level.
-  function settle(level, rounds) {
+  // closing the result any other way must not drop the level. The server
+  // re-derives the level from the rounds it marked and records it.
+  function settle(level) {
     setDiagnosedLevel(level)
     setStage('result')
-    saveLevel(level, rounds)
+    saveLevel()
   }
 
-  async function saveLevel(level, rounds) {
+  async function saveLevel() {
     setError(null)
     setSaving(true)
     try {
-      const { error: assessError } = await supabase.from('skill_assessments').insert({
-        skill_id: skill.id,
-        user_id: user.id,
-        level,
-        axis: 'knowledge',
-        source: 'diagnostic_confirmed',
-        comments: buildComments(rounds, level),
-      })
-      if (assessError) throw assessError
-
-      // Only resolve the confirming_baseline sub-stage back to identified when
-      // that's genuinely where the skill still is.
-      const skillUpdate = { knowledge_level: level }
-      if (skill.lifecycle_stage === 'confirming_baseline') skillUpdate.lifecycle_stage = 'identified'
-      const { error: skillError } = await supabase.from('skills').update(skillUpdate).eq('id', skill.id)
-      if (skillError) throw skillError
-
+      const { level } = await settleKnowledgeCheck({ runId })
+      if (level) setDiagnosedLevel(level)
       setSaved(true)
     } catch (err) {
       setError(err.message)
@@ -297,7 +287,7 @@ export default function ConfirmingBaselineQuizModal({
           index={index}
           results={questions.map((q) => results[q.id])}
           label={t('modals.confirmingBaselineQuiz.questionCounter', { current: index + 1, total: questions.length })}
-          roundLabel={calibrating ? t('modals.confirmingBaselineQuiz.roundLabel', { round: roundHistory.length + 1, level: KNOWLEDGE_LEVEL_LABELS[roundLevel] }) : null}
+          roundLabel={runCalibrates ? t('modals.confirmingBaselineQuiz.roundLabel', { round: roundHistory.length + 1, level: KNOWLEDGE_LEVEL_LABELS[roundLevel] }) : null}
         />
       )}
 
@@ -369,7 +359,7 @@ export default function ConfirmingBaselineQuizModal({
         {stage === 'result' && (
           <ResultView
             t={t}
-            calibrating={calibrating}
+            calibrating={runCalibrates}
             rounds={roundHistory}
             diagnosedLevel={diagnosedLevel}
             saved={saved}
@@ -386,10 +376,10 @@ export default function ConfirmingBaselineQuizModal({
               <button
                 type="button"
                 onClick={checkAnswer}
-                disabled={!answered}
+                disabled={!answered || checking}
                 className="rounded-full bg-moss px-5 py-2.5 font-medium text-paper shadow-sm hover:opacity-95 disabled:opacity-40"
               >
-                {t('modals.confirmingBaselineQuiz.check')}
+                {checking ? t('modals.confirmingBaselineQuiz.checking') : t('modals.confirmingBaselineQuiz.check')}
               </button>
             ) : (
               <button
@@ -415,7 +405,7 @@ export default function ConfirmingBaselineQuizModal({
           {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
           <button
             type="button"
-            onClick={saved ? onConfirmed : () => saveLevel(diagnosedLevel, roundHistory)}
+            onClick={saved ? onConfirmed : () => saveLevel()}
             disabled={saving}
             className="w-full rounded-full bg-moss px-5 py-2.5 font-medium text-paper shadow-sm hover:opacity-95 disabled:opacity-60"
           >
@@ -466,7 +456,8 @@ export default function ConfirmingBaselineQuizModal({
 function initialAnswer(question) {
   if (question.layout === 'multiple') return []
   if (question.layout === 'matching') return {}
-  if (question.layout === 'ordering') return startingOrder(question.items, question.id)
+  // Ordering questions arrive already mixed up.
+  if (question.layout === 'ordering') return question.items.map((item) => item.id)
   return ''
 }
 
@@ -558,10 +549,9 @@ function QuestionCard({ t, question, answer, result, onAnswer }) {
   const checked = Boolean(result)
   const choice = ['single', 'multiple', 'true_false'].includes(question.layout)
   const matchOptions = useMemo(
-    () => shuffleStable(question.items.map((item) => item.detail).filter(Boolean), question.id),
+    () => question.options ?? shuffleStable(question.items.map((item) => item.detail).filter(Boolean), question.id),
     [question]
   )
-  const inputRef = useRef(null)
 
   function choose(id) {
     if (checked) return
@@ -651,7 +641,6 @@ function QuestionCard({ t, question, answer, result, onAnswer }) {
           </label>
           <input
             id={`quiz-answer-${question.id}`}
-            ref={inputRef}
             type={question.layout === 'number' ? 'number' : 'text'}
             step="any"
             autoFocus

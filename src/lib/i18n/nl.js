@@ -1700,6 +1700,7 @@ export default {
       leave: 'Toch verlaten',
       srRightAnswer: 'juist antwoord',
       srWrongAnswer: 'jouw antwoord, niet juist',
+      checking: 'Controleren…',
     },
     interview: {
       title: 'Interview mij',
