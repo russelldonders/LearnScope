@@ -140,6 +140,18 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       }
       setCreatedSkill(skill)
 
+      // Best-effort and not awaited -- prepares the knowledge- and
+      // practical-level definitions straight away (before tag suggestions),
+      // so they're ready by the time the wizard's rating steps open. A
+      // rating step that opens first joins the same request rather than
+      // starting another (see levelGuide.js).
+      ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
+        console.error('Knowledge level guide generation failed:', guideErr)
+      )
+      ensurePracticalLevelGuide(skill).catch((guideErr) =>
+        console.error('Practical level guide generation failed:', guideErr)
+      )
+
       try {
         const suggested = await suggestTags(selected.name, allTags.map((t) => t.name))
         for (const tagName of suggested) {
@@ -148,17 +160,6 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       } catch (tagErr) {
         console.error('Auto-tag suggestion failed:', tagErr)
       }
-
-      // Best-effort and not awaited -- precomputes the knowledge- and
-      // practical-level guidance now so both are already cached by the
-      // time the wizard's rating steps (or the learner, if skipped for now)
-      // open either self-assessment.
-      ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
-        console.error('Knowledge level guide generation failed:', guideErr)
-      )
-      ensurePracticalLevelGuide(skill).catch((guideErr) =>
-        console.error('Practical level guide generation failed:', guideErr)
-      )
 
       if (experienceId) {
         const { error: linkError } = await supabase.from('skill_experience_links').insert({

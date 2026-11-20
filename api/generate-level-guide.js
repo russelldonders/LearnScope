@@ -133,13 +133,25 @@ export default async function handler(req, res) {
     const data = JSON.parse(textBlock.text)
     if (cacheLibraryId && data.statements?.length === 5) {
       // Only fills an empty column, so a slower concurrent generation never
-      // replaces one that already landed.
+      // replaces one that already landed (or an admin's edit) -- and then
+      // answers with whatever is stored, so the caller sees the same
+      // definitions as everyone else rather than its own losing draft.
       const { error } = await supabaseAdmin()
         .from('skill_library')
         .update({ [guideColumn]: data.statements })
         .eq('id', cacheLibraryId)
         .is(guideColumn, null)
       if (error) console.error(`generate-level-guide (${axis}) cache error:`, error)
+      const { data: stored, error: readError } = await supabaseAdmin()
+        .from('skill_library')
+        .select(guideColumn)
+        .eq('id', cacheLibraryId)
+        .maybeSingle()
+      if (readError) console.error(`generate-level-guide (${axis}) cache read error:`, readError)
+      if (stored?.[guideColumn]?.length === 5) {
+        res.status(200).json({ statements: stored[guideColumn] })
+        return
+      }
     }
     res.status(200).json(data)
   } catch (err) {

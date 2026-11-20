@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { prepareLibraryLevelGuides } from './levelGuide'
 
 // Same upsert-in-place-at-a-fixed-path pattern as uploadCourseImage
 // (admin/catalogue.js) -- re-uploading just replaces the file rather than
@@ -127,6 +128,9 @@ export async function findOrCreateLibrarySkill(name, category, userId, isPrivate
     }
     throw error
   }
+  // A brand-new library entry gets its level definitions straight away, so
+  // they exist (and stay the same) from the moment the skill does.
+  prepareLibraryLevelGuides(data.id, trimmed)
   return data.id
 }
 

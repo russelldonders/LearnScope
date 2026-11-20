@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { prepareLibraryLevelGuides } from '../levelGuide'
 
 // The provider console's "Skills" tab shows this organisation's offered-
 // skills roster (organisation_offered_skills, 0076) as the primary list --
@@ -49,6 +50,7 @@ export async function createProviderLibrarySkill(userId, organisationId, { name,
     .single()
   if (error) throw error
   await addOfferedSkill(organisationId, data.id, userId)
+  prepareLibraryLevelGuides(data.id, name.trim())
   return data
 }
 

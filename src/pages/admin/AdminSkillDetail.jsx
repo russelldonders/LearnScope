@@ -6,7 +6,6 @@ import { getLibrarySkill, listCoursesForSkill, promoteSkillToGlobal } from '../.
 import {
   countSkillTrackers,
   getSkillLevelStats,
-  getSkillLevelGuideSample,
   getSkillKnowledgeLevelSourceStats,
 } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
@@ -16,12 +15,11 @@ import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
 import StatusBadge from '../../components/StatusBadge'
 import SkillIconUpload from '../../components/SkillIconUpload'
 import SkillCompositionSection from './SkillCompositionSection'
+import LevelDefinitionsSection from './LevelDefinitionsSection'
 
 // Read-only overview for a platform admin drilling into one skill_library
 // entry -- who owns it, how many people track it at each ability level (with
-// that level's application-guide statement revealed on click, a real
-// learner's already-generated text via the anonymous skill_level_guide_sample
-// RPC -- see 0083 for why this can't be a direct `skills` query), and per
+// that level's shared practical definition revealed on click), and per
 // knowledge level how many self-assessed vs were verified, plus a link into
 // that level's cached test questions. Level stats come from the count-only
 // skill_level_stats / skill_knowledge_level_source_stats RPCs (0076, 0092)
@@ -34,7 +32,6 @@ export default function AdminSkillDetail() {
   const [totalTrackers, setTotalTrackers] = useState(0)
   const [levelStats, setLevelStats] = useState([])
   const [knowledgeStats, setKnowledgeStats] = useState([])
-  const [guideSample, setGuideSample] = useState(null)
   const [relatedCourses, setRelatedCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -52,15 +49,13 @@ export default function AdminSkillDetail() {
       countSkillTrackers(skillId),
       getSkillLevelStats(skillId),
       getSkillKnowledgeLevelSourceStats(skillId),
-      getSkillLevelGuideSample(skillId),
       listCoursesForSkill(skillId),
     ])
-      .then(([skillData, total, stats, knowledgeSourceStats, sample, courses]) => {
+      .then(([skillData, total, stats, knowledgeSourceStats, courses]) => {
         setSkill(skillData)
         setTotalTrackers(total)
         setLevelStats(stats)
         setKnowledgeStats(knowledgeSourceStats)
-        setGuideSample(sample)
         setRelatedCourses(courses)
       })
       .catch((err) => setError(err.message))
@@ -84,16 +79,10 @@ export default function AdminSkillDetail() {
 
   const countByLevel = new Map(levelStats.map((s) => [s.level, s.tracker_count]))
   const knowledgeStatsByLevel = new Map(knowledgeStats.map((s) => [s.level, s]))
-  // Shared library cache (0089) is the current source of truth going
-  // forward; guideSample (0083's per-tracker sample) only still matters for
-  // skills that predate that cache, or unlinked skills that never get a
-  // shared entry.
-  const knowledgeGuide =
-    (skill?.knowledge_level_guide?.length === 5 ? skill.knowledge_level_guide : null) ??
-    (guideSample?.knowledge_level_guide?.length === 5 ? guideSample.knowledge_level_guide : null)
-  const practicalGuide =
-    (skill?.practical_level_guide?.length === 5 ? skill.practical_level_guide : null) ??
-    (guideSample?.practical_level_guide?.length === 5 ? guideSample.practical_level_guide : null)
+  // The shared library copy is the only one learners of this skill see
+  // (src/lib/levelGuide.js), so it's the only one shown -- and edited -- here.
+  const knowledgeGuide = skill?.knowledge_level_guide?.length === 5 ? skill.knowledge_level_guide : null
+  const practicalGuide = skill?.practical_level_guide?.length === 5 ? skill.practical_level_guide : null
 
   return (
     <AdminLayout>
@@ -187,8 +176,7 @@ export default function AdminSkillDetail() {
                             {description && <p className="text-secondary text-xs">{description}</p>}
                             {!practicalGuide && (
                               <p className="text-xs text-secondary mt-1">
-                                No learner has generated an application guide for {skill.name} yet — showing the
-                                generic scale.
+                                No practical level definitions for {skill.name} yet — showing the generic scale.
                               </p>
                             )}
                           </div>
@@ -199,6 +187,8 @@ export default function AdminSkillDetail() {
                 </ul>
               </div>
             </div>
+
+            <LevelDefinitionsSection skill={skill} onSkillChange={setSkill} />
 
             <div>
               <h3 className="font-display text-lg text-ink mb-2">
@@ -257,7 +247,7 @@ export default function AdminSkillDetail() {
               </div>
               {!knowledgeGuide && (
                 <p className="text-xs text-secondary mt-1">
-                  No learner has generated a knowledge guide for {skill.name} yet.
+                  No knowledge level definitions for {skill.name} yet.
                 </p>
               )}
             </div>

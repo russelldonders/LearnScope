@@ -62,15 +62,16 @@ export function useSkillDetailData(id) {
     if (error || !data) {
       setNotFound(true)
     } else {
-      // The per-instance columns stay authoritative for a fully custom skill
-      // (no library_skill_id); for a library-linked one they're only ever
-      // populated pre-0089, so fall back to the shared library cache -- same
-      // guide text either way, just resolved without an extra round trip if
-      // it's already sitting in the join above.
+      // A library skill's level definitions are the shared library copy
+      // (which platform admins can edit) -- any personal copy left on the
+      // skills row from before 0089 is ignored so everyone tracking the
+      // skill sees the same text. Only a fully custom skill, or one whose
+      // library entry isn't readable, uses its own copy. See levelGuide.js.
+      const library = data.library_skill_id ? data.skill_library : null
       setSkill({
         ...data,
-        knowledge_level_guide: data.knowledge_level_guide ?? data.skill_library?.knowledge_level_guide ?? null,
-        practical_level_guide: data.practical_level_guide ?? data.skill_library?.practical_level_guide ?? null,
+        knowledge_level_guide: library ? library.knowledge_level_guide ?? null : data.knowledge_level_guide,
+        practical_level_guide: library ? library.practical_level_guide ?? null : data.practical_level_guide,
       })
     }
     setLoadingSkill(false)
