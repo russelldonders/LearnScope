@@ -249,6 +249,23 @@ body {
   .page-block-controls button:hover { background: var(--color-paper); color: var(--color-ink); }
   .page-block-controls button:disabled { opacity: 0.35; }
 
+  /* On phones the floating controls would sit over the block's own text (and
+     over "Insert at top" for the first block), so they take their own row
+     above the block instead -- only for the block being edited, not on a
+     touch screen's sticky hover. */
+  @media (max-width: 639px) {
+    .page-block-controls {
+      position: static;
+      width: fit-content;
+      margin: 0 0 0.6rem auto;
+      flex-wrap: wrap;
+      box-shadow: none;
+    }
+    .page-inline-block:hover .page-block-controls { display: none; }
+    .page-inline-block.is-active .page-block-controls,
+    .page-block-controls:focus-within { display: flex; }
+  }
+
   .page-inline-editable {
     min-height: 1.5em;
     border-radius: 4px;
