@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getOrganisation } from '../../lib/admin/organisations'
@@ -9,7 +10,10 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   HIDEABLE_SECTIONS,
   LIMITS,
+  addCustomPage,
+  findCustomPage,
   getLearnerWorkspaceSettings,
+  removeCustomPage,
   saveLearnerWorkspaceSettings,
   sectionHeading,
   sectionLabel,
@@ -19,6 +23,7 @@ import {
 import {
   LearnerWorkspaceNav,
   WorkspaceAnnouncement,
+  WorkspaceCustomPage,
   WorkspaceHelp,
   WorkspaceIntro,
 } from './LearnerWorkspaceParts'
@@ -87,6 +92,10 @@ export function LearnerWorkspaceSettings({ organisationId }) {
   const [errors, setErrors] = useState([])
   const [message, setMessage] = useState(null)
   const [saving, setSaving] = useState(false)
+  // The page waiting on "are you sure?" before it's taken out of the draft,
+  // and the one just added (its name field takes focus).
+  const [deletingPageId, setDeletingPageId] = useState(null)
+  const [addedPageId, setAddedPageId] = useState(null)
 
   useEffect(() => {
     let live = true
@@ -134,6 +143,27 @@ export function LearnerWorkspaceSettings({ organisationId }) {
     update({ sectionLabels: value ? { ...others, [section]: value } : others })
   }
 
+  function displayName(section) {
+    const page = findCustomPage(draft, section)
+    if (page) return page.title.trim() || 'Untitled section'
+    return draft.sectionLabels[section]?.trim() || SECTION_NAMES[section]
+  }
+
+  function setPage(id, changes) {
+    update({ customPages: draft.customPages.map((page) => (page.id === id ? { ...page, ...changes } : page)) })
+  }
+
+  function addPage() {
+    const next = addCustomPage(draft)
+    setAddedPageId(next.customPages[next.customPages.length - 1].id)
+    update(next)
+  }
+
+  function confirmDeletePage() {
+    update(removeCustomPage(draft, deletingPageId))
+    setDeletingPageId(null)
+  }
+
   function setLink(index, changes) {
     update({ pinnedLinks: draft.pinnedLinks.map((link, i) => (i === index ? { ...link, ...changes } : link)) })
   }
@@ -171,18 +201,27 @@ export function LearnerWorkspaceSettings({ organisationId }) {
         <form onSubmit={save} className="space-y-6" noValidate>
           <fieldset className={fieldsetClass}>
             <legend className={legendClass}>Sections</legend>
-            <p className="text-sm text-secondary mb-4">Show, hide, rename and reorder the sections. Home is always shown.</p>
+            <p className="text-sm text-secondary mb-4">Show, hide, rename and reorder the sections, or add your own. Home is always shown.</p>
             <ol className="space-y-3">
               {draft.sectionOrder.map((section, index) => {
                 const shown = !draft.hiddenSections.includes(section)
-                const name = SECTION_NAMES[section]
+                const page = findCustomPage(draft, section)
+                const name = displayName(section)
                 return (
                   <li key={section} className="rounded-md border border-hairline p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium text-ink">{name}</span>
+                      <span className="font-medium text-ink">
+                        {name}
+                        {page && <span className="ml-2 rounded-full bg-paper px-2 py-0.5 text-xs font-normal text-secondary">Your section</span>}
+                      </span>
                       <div className="flex items-center gap-2">
                         <button type="button" className={smallButtonClass} onClick={() => move(section, -1)} disabled={index === 0} aria-label={`Move ${name} up`}>↑</button>
                         <button type="button" className={smallButtonClass} onClick={() => move(section, 1)} disabled={index === draft.sectionOrder.length - 1} aria-label={`Move ${name} down`}>↓</button>
+                        {page && (
+                          <button type="button" className={smallButtonClass} onClick={() => setDeletingPageId(section)} aria-label={`Delete ${name}`}>
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
@@ -190,31 +229,62 @@ export function LearnerWorkspaceSettings({ organisationId }) {
                         <input
                           type="checkbox"
                           checked={shown}
-                          disabled={!HIDEABLE_SECTIONS.includes(section)}
+                          disabled={!page && !HIDEABLE_SECTIONS.includes(section)}
                           onChange={(event) => setShown(section, event.target.checked)}
                         />
                         Show {name}
                       </label>
-                      <label className="block text-sm text-secondary">
-                        Name shown to members (optional)
-                        <input
-                          className={inputClass}
-                          value={draft.sectionLabels[section] ?? ''}
-                          placeholder={name}
-                          maxLength={LIMITS.sectionLabel}
-                          onChange={(event) => setLabel(section, event.target.value)}
+                      {page ? (
+                        <label className="block text-sm text-secondary">
+                          Section name
+                          <input
+                            className={inputClass}
+                            value={page.title}
+                            required
+                            maxLength={LIMITS.pageTitle}
+                            autoFocus={section === addedPageId}
+                            onChange={(event) => setPage(section, { title: event.target.value })}
+                          />
+                        </label>
+                      ) : (
+                        <label className="block text-sm text-secondary">
+                          Name shown to members (optional)
+                          <input
+                            className={inputClass}
+                            value={draft.sectionLabels[section] ?? ''}
+                            placeholder={SECTION_NAMES[section]}
+                            maxLength={LIMITS.sectionLabel}
+                            onChange={(event) => setLabel(section, event.target.value)}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    {page && (
+                      <label className="mt-3 block text-sm text-secondary">
+                        Page content
+                        <textarea
+                          className={`${inputClass} min-h-28`}
+                          value={page.body}
+                          maxLength={LIMITS.pageBody}
+                          placeholder="Starts empty. Write what members should see here. Paragraphs and line breaks are kept."
+                          onChange={(event) => setPage(section, { body: event.target.value })}
                         />
                       </label>
-                    </div>
+                    )}
                   </li>
                 )
               })}
             </ol>
+            {draft.customPages.length < LIMITS.pages ? (
+              <button type="button" className={`${buttonClass} mt-3`} onClick={addPage}>Add a section</button>
+            ) : (
+              <p className="mt-3 text-xs text-secondary">You’ve added the most sections you can ({LIMITS.pages}).</p>
+            )}
             <label className="block text-sm text-secondary mt-4">
               Members land on
               <select className={inputClass} value={draft.landingSection} onChange={(event) => update({ landingSection: event.target.value })}>
                 {visibleSections(draft).map((section) => (
-                  <option key={section} value={section}>{draft.sectionLabels[section]?.trim() || SECTION_NAMES[section]}</option>
+                  <option key={section} value={section}>{displayName(section)}</option>
                 ))}
               </select>
             </label>
@@ -274,8 +344,9 @@ export function LearnerWorkspaceSettings({ organisationId }) {
                       type="button"
                       className={`${buttonClass} sm:mb-0.5`}
                       onClick={() => update({ pinnedLinks: draft.pinnedLinks.filter((_, i) => i !== index) })}
+                      aria-label={`Remove link ${index + 1}`}
                     >
-                      Remove<span className="sr-only"> link {index + 1}</span>
+                      Remove
                     </button>
                   </li>
                 ))}
@@ -341,6 +412,14 @@ export function LearnerWorkspaceSettings({ organisationId }) {
           <LearnerWorkspacePreview settings={draft} organisation={organisation} />
         </div>
       </div>
+      {deletingPageId && (
+        <ConfirmDialog
+          message={`Delete the “${displayName(deletingPageId)}” section and its content? Members stop seeing it once you save.`}
+          confirmLabel="Delete section"
+          onConfirm={confirmDeletePage}
+          onCancel={() => setDeletingPageId(null)}
+        />
+      )}
     </>
   )
 }
@@ -394,6 +473,7 @@ export function LearnerWorkspacePreview({ settings, organisation }) {
             </>
           )}
           {section === 'role' && placeholder(PREVIEW_PLACEHOLDERS.role)}
+          {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} />}
         </div>
       </div>
     </div>

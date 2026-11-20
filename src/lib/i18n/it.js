@@ -3334,6 +3334,7 @@ export default {
     contactHeading: 'Il tuo referente',
     linksHeading: 'Link utili',
     opensInNewTab: '(si apre in una nuova scheda)',
+    emptyPage: 'Qui non è ancora stato aggiunto nulla.',
   },
   roleAlignment: {
     summary: {

@@ -128,6 +128,44 @@ end
 $$;
 reset role;
 
+-- Custom pages (0326): an admin can add one, place it, hide it or land on it,
+-- but the order, hidden list and landing section must stay consistent.
+select set_config('request.jwt.claim.sub', '73000000-0000-0000-0000-000000000001', true);
+set local role authenticated;
+update public.organisation_learner_workspace_settings set
+  custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "Benefits", "body": ""}]',
+  section_order = array['home', 'page-11111111-1111-4111-8111-111111111111', 'learning', 'catalogue', 'role'],
+  hidden_sections = array['catalogue'],
+  landing_section = 'page-11111111-1111-4111-8111-111111111111';
+update public.organisation_learner_workspace_settings set
+  hidden_sections = array['catalogue', 'page-11111111-1111-4111-8111-111111111111'],
+  landing_section = 'home';
+do $$
+declare
+  bad record;
+begin
+  for bad in
+    select * from (values
+      ('a page missing from the order', $q$update public.organisation_learner_workspace_settings set section_order = array['home', 'learning', 'catalogue', 'role']$q$),
+      ('an unknown section in the order', $q$update public.organisation_learner_workspace_settings set section_order = array['home', 'page-22222222-2222-4222-8222-222222222222', 'learning', 'catalogue', 'role']$q$),
+      ('landing on a hidden page', $q$update public.organisation_learner_workspace_settings set landing_section = 'page-11111111-1111-4111-8111-111111111111'$q$),
+      ('hiding an unknown page', $q$update public.organisation_learner_workspace_settings set hidden_sections = array['page-22222222-2222-4222-8222-222222222222']$q$),
+      ('removing a page still in the order', $q$update public.organisation_learner_workspace_settings set custom_pages = '[]'$q$),
+      ('a badly formed page id', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "home", "title": "Home again", "body": ""}]', section_order = array['home', 'learning', 'catalogue', 'role']$q$),
+      ('a page without a title', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": " ", "body": ""}]'$q$),
+      ('the same page twice', $q$update public.organisation_learner_workspace_settings set custom_pages = '[{"id": "page-11111111-1111-4111-8111-111111111111", "title": "A", "body": ""}, {"id": "page-11111111-1111-4111-8111-111111111111", "title": "B", "body": ""}]'$q$)
+    ) as cases(label, statement)
+  loop
+    begin
+      execute bad.statement;
+      raise exception 'accepted %', bad.label;
+    exception when check_violation then null;
+    end;
+  end loop;
+end
+$$;
+reset role;
+
 -- Another organisation's admin can't see, take over or move onto this row.
 select set_config('request.jwt.claim.sub', '73000000-0000-0000-0000-000000000005', true);
 set local role authenticated;

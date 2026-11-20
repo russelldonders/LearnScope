@@ -123,3 +123,33 @@ describe('EmployerHome follows the organisation’s workspace settings', () => {
     expect(await screen.findByTestId('catalogue-panel')).toHaveAttribute('data-enrolment', 'browse_only')
   })
 })
+
+describe('EmployerHome shows the organisation’s own sections', () => {
+  const benefits = 'page-11111111-1111-4111-8111-111111111111'
+  const policies = 'page-22222222-2222-4222-8222-222222222222'
+  const withPages = normaliseWorkspaceSettings({
+    custom_pages: [
+      { id: benefits, title: 'Benefits', body: 'Pension details\nCycle to work' },
+      { id: policies, title: 'Policies', body: '' },
+    ],
+    section_order: ['home', benefits, 'learning', 'catalogue', 'role', policies],
+  })
+
+  it('lists them in the nav and opens their content', async () => {
+    settingsMock.mockResolvedValue(withPages)
+    render(<MemoryRouter initialEntries={[`/organisation/learning?org=acme&section=${benefits}`]}><EmployerHome /></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Benefits' })).toBeInTheDocument()
+    expect(screen.getByText(/Pension details/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Benefits' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Policies' })).toHaveAttribute('href', `/organisation/learning?org=acme&section=${policies}`)
+  })
+
+  it('says so when a section has no content yet', async () => {
+    settingsMock.mockResolvedValue(withPages)
+    render(<MemoryRouter initialEntries={[`/organisation/learning?org=acme&section=${policies}`]}><EmployerHome /></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Policies' })).toBeInTheDocument()
+    expect(screen.getByText('Nothing has been added here yet.')).toBeInTheDocument()
+  })
+})

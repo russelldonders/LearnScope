@@ -8,6 +8,7 @@ import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 import EmployerCataloguePanel from './EmployerCataloguePanel'
 import { useLanguage } from '../../context/LanguageContext'
 import {
+  findCustomPage,
   getLearnerWorkspaceSettings,
   isSectionVisible,
   sectionHeading,
@@ -18,6 +19,7 @@ import {
   LearnerWorkspaceNav,
   WorkspaceAnnouncement,
   WorkspaceHelp,
+  WorkspaceCustomPage,
   WorkspaceIntro,
 } from './LearnerWorkspaceParts'
 
@@ -165,6 +167,7 @@ export default function EmployerHome() {
               />
             )}
             {section === 'role' && <LearnerRoleAlignmentContainer employerId={employer.id} />}
+            {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} />}
           </>
         ) : (
           <p className="text-secondary">{t('common.loading')}</p>

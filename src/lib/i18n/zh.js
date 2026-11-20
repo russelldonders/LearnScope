@@ -3313,6 +3313,7 @@ export default {
     contactHeading: '你的联系人',
     linksHeading: '实用链接',
     opensInNewTab: '（在新标签页中打开）',
+    emptyPage: '这里还没有添加任何内容。',
   },
   roleAlignment: {
     summary: {

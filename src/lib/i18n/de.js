@@ -3334,6 +3334,7 @@ export default {
     contactHeading: 'Deine Ansprechperson',
     linksHeading: 'Nützliche Links',
     opensInNewTab: '(öffnet in einem neuen Tab)',
+    emptyPage: 'Hier wurde noch nichts hinzugefügt.',
   },
   roleAlignment: {
     summary: {

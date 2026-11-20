@@ -97,7 +97,7 @@ export function WorkspaceHelp({ settings }) {
                     className="text-sm text-ink underline underline-offset-4 decoration-hairline hover:decoration-current"
                   >
                     {link.label}
-                    <span className="sr-only"> {t('employerHome.opensInNewTab')}</span>
+                    {' '}<span className="sr-only">{t('employerHome.opensInNewTab')}</span>
                   </a>
                 </li>
               ))}
@@ -107,4 +107,18 @@ export function WorkspaceHelp({ settings }) {
       </div>
     </section>
   )
+}
+
+// One of the organisation's own sections (custom_pages, 0326): its plain-text
+// content, line breaks kept, or a short note while it's still empty.
+export function WorkspaceCustomPage({ page }) {
+  const { t } = useLanguage()
+  if (!page.body.trim()) {
+    return (
+      <div className="rounded-lg border border-dashed border-hairline p-8 text-center">
+        <p className="text-secondary">{t('employerHome.emptyPage')}</p>
+      </div>
+    )
+  }
+  return <div className="max-w-2xl text-ink leading-relaxed whitespace-pre-line break-words">{page.body}</div>
 }

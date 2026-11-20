@@ -4,6 +4,11 @@ import { supabase } from './supabaseClient'
 // its members -- organisation_learner_workspace_settings, 0325. Presentation
 // only: hiding a section never changes what anyone can access, and nothing
 // here touches a learner's personal workspace. No row means the defaults.
+//
+// Besides the four built-in sections, an organisation can add its own pages
+// (custom_pages, 0326): { id: 'page-<uuid>', title, body }, where body is
+// plain text. Their ids sit in sectionOrder/hiddenSections/landingSection
+// alongside the built-in section keys.
 
 export const WORKSPACE_SECTIONS = ['home', 'learning', 'catalogue', 'role']
 export const HIDEABLE_SECTIONS = ['learning', 'catalogue', 'role']
@@ -20,6 +25,19 @@ export const LIMITS = {
   linkLabel: 60,
   linkUrl: 500,
   links: 5,
+  pageTitle: 30,
+  pageBody: 10000,
+  pages: 10,
+}
+
+const CUSTOM_PAGE_ID = /^page-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+export function isCustomPageId(section) {
+  return CUSTOM_PAGE_ID.test(section ?? '')
+}
+
+export function findCustomPage(settings, section) {
+  return settings.customPages.find((page) => page.id === section) ?? null
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS = Object.freeze({
@@ -35,19 +53,26 @@ export const DEFAULT_WORKSPACE_SETTINGS = Object.freeze({
   pinnedLinks: [],
   catalogueEnrolment: 'self_enrol',
   assignedTrainingFraming: 'assigned',
+  customPages: [],
 })
 
-const COLUMNS = 'section_order, hidden_sections, landing_section, section_labels, welcome_message, announcement, contact_name, contact_role, contact_email, pinned_links, catalogue_enrolment, assigned_training_framing'
+const COLUMNS = 'section_order, hidden_sections, landing_section, section_labels, welcome_message, announcement, contact_name, contact_role, contact_email, pinned_links, catalogue_enrolment, assigned_training_framing, custom_pages'
 
 // Tolerant of a missing row or a partial/stale one, so the workspace always
 // renders something coherent: every section exactly once, Home never
 // hidden, and a landing section that's actually shown.
 export function normaliseWorkspaceSettings(row) {
   if (!row) return { ...DEFAULT_WORKSPACE_SETTINGS }
-  const order = (row.section_order ?? []).filter((s, i, all) => WORKSPACE_SECTIONS.includes(s) && all.indexOf(s) === i)
-  const sectionOrder = [...order, ...WORKSPACE_SECTIONS.filter((s) => !order.includes(s))]
-  const hiddenSections = (row.hidden_sections ?? []).filter((s) => HIDEABLE_SECTIONS.includes(s))
-  const landingSection = WORKSPACE_SECTIONS.includes(row.landing_section) && !hiddenSections.includes(row.landing_section)
+  const customPages = (Array.isArray(row.custom_pages) ? row.custom_pages : [])
+    .filter((page, i, all) => isCustomPageId(page?.id) && typeof page.title === 'string' && page.title.trim()
+      && all.findIndex((other) => other?.id === page.id) === i)
+    .map((page) => ({ id: page.id, title: page.title, body: typeof page.body === 'string' ? page.body : '' }))
+  const pageIds = customPages.map((page) => page.id)
+  const known = [...WORKSPACE_SECTIONS, ...pageIds]
+  const order = (row.section_order ?? []).filter((s, i, all) => known.includes(s) && all.indexOf(s) === i)
+  const sectionOrder = [...order, ...known.filter((s) => !order.includes(s))]
+  const hiddenSections = (row.hidden_sections ?? []).filter((s, i, all) => [...HIDEABLE_SECTIONS, ...pageIds].includes(s) && all.indexOf(s) === i)
+  const landingSection = known.includes(row.landing_section) && !hiddenSections.includes(row.landing_section)
     ? row.landing_section
     : 'home'
   const sectionLabels = Object.fromEntries(
@@ -66,6 +91,7 @@ export function normaliseWorkspaceSettings(row) {
     pinnedLinks: Array.isArray(row.pinned_links) ? row.pinned_links.filter((l) => l?.label && isValidHttpsUrl(l?.url)) : [],
     catalogueEnrolment: CATALOGUE_ENROLMENT_MODES.includes(row.catalogue_enrolment) ? row.catalogue_enrolment : 'self_enrol',
     assignedTrainingFraming: ASSIGNED_TRAINING_FRAMINGS.includes(row.assigned_training_framing) ? row.assigned_training_framing : 'assigned',
+    customPages,
   }
 }
 
@@ -75,16 +101,44 @@ export function visibleSections(settings) {
 }
 
 export function isSectionVisible(settings, section) {
-  return section === 'home' || (WORKSPACE_SECTIONS.includes(section) && !settings.hiddenSections.includes(section))
+  if (section === 'home') return true
+  const exists = WORKSPACE_SECTIONS.includes(section) || Boolean(findCustomPage(settings, section))
+  return exists && !settings.hiddenSections.includes(section)
+}
+
+// A new, empty page at the end of the order. Not saved until the form is.
+export function addCustomPage(settings, title = 'New section') {
+  const id = `page-${crypto.randomUUID()}`
+  return {
+    ...settings,
+    customPages: [...settings.customPages, { id, title, body: '' }],
+    sectionOrder: [...settings.sectionOrder, id],
+  }
+}
+
+// Takes the page out of the settings entirely -- order, hidden list, and the
+// landing section (which falls back to Home).
+export function removeCustomPage(settings, id) {
+  return {
+    ...settings,
+    customPages: settings.customPages.filter((page) => page.id !== id),
+    sectionOrder: settings.sectionOrder.filter((s) => s !== id),
+    hiddenSections: settings.hiddenSections.filter((s) => s !== id),
+    landingSection: settings.landingSection === id ? 'home' : settings.landingSection,
+  }
 }
 
 // A section's name for members: the organisation's own, else the
 // translated default (the i18n keys live under employerHome).
 export function sectionLabel(t, settings, section) {
+  const page = findCustomPage(settings, section)
+  if (page) return page.title.trim()
   return settings.sectionLabels[section] || t(`employerHome.nav.${section}`)
 }
 
 export function sectionHeading(t, settings, section) {
+  const page = findCustomPage(settings, section)
+  if (page) return page.title.trim()
   return settings.sectionLabels[section] || t(`employerHome.headings.${section}`)
 }
 
@@ -117,6 +171,13 @@ export function validateWorkspaceSettings(settings) {
     else if (link.label.trim().length > LIMITS.linkLabel) errors.push(`Link ${n}’s name must be ${LIMITS.linkLabel} characters or fewer.`)
     if (!isValidHttpsUrl(link.url.trim()) || link.url.trim().length > LIMITS.linkUrl) errors.push(`Link ${n} needs a full web address starting with https://`)
   })
+  if (settings.customPages.length > LIMITS.pages) errors.push(`You can add up to ${LIMITS.pages} of your own sections.`)
+  settings.customPages.forEach((page, index) => {
+    const n = index + 1
+    if (!page.title.trim()) errors.push(`Your section ${n} needs a name.`)
+    else if (page.title.trim().length > LIMITS.pageTitle) errors.push(`The name of “${page.title.trim()}” must be ${LIMITS.pageTitle} characters or fewer.`)
+    if (page.body.length > LIMITS.pageBody) errors.push(`The content of “${page.title.trim() || `section ${n}`}” must be ${LIMITS.pageBody} characters or fewer.`)
+  })
   return errors
 }
 
@@ -137,6 +198,7 @@ function toRow(settings) {
     pinned_links: settings.pinnedLinks.map((link) => ({ label: link.label.trim(), url: link.url.trim() })),
     catalogue_enrolment: settings.catalogueEnrolment,
     assigned_training_framing: settings.assignedTrainingFraming,
+    custom_pages: settings.customPages.map((page) => ({ id: page.id, title: page.title.trim(), body: page.body.trimEnd() })),
   }
 }
 

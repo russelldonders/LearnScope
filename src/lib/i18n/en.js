@@ -3331,6 +3331,7 @@ export default {
     contactHeading: 'Your contact',
     linksHeading: 'Useful links',
     opensInNewTab: '(opens in a new tab)',
+    emptyPage: 'Nothing has been added here yet.',
   },
   roleAlignment: {
     summary: {

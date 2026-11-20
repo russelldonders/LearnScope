@@ -3333,6 +3333,7 @@ export default {
     contactHeading: 'Tu contacto',
     linksHeading: 'Enlaces útiles',
     opensInNewTab: '(se abre en una pestaña nueva)',
+    emptyPage: 'Todavía no se ha añadido nada aquí.',
   },
   roleAlignment: {
     summary: {

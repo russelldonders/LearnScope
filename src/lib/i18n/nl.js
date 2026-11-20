@@ -3332,6 +3332,7 @@ export default {
     contactHeading: 'Je contactpersoon',
     linksHeading: 'Handige links',
     opensInNewTab: '(opent in een nieuw tabblad)',
+    emptyPage: 'Hier is nog niets toegevoegd.',
   },
   roleAlignment: {
     summary: {

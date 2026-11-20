@@ -87,6 +87,37 @@ describe('LearnerWorkspaceSettingsPage', () => {
     }))
   })
 
+  it('adds an empty section of the admin’s own, which they can name, fill and delete', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Learner workspace' })
+    const preview = screen.getByRole('region', { name: 'Member workspace preview' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a section' }))
+    const nameField = screen.getByRole('textbox', { name: 'Section name' })
+    expect(nameField).toHaveValue('New section')
+    expect(screen.getByRole('textbox', { name: 'Page content' })).toHaveValue('')
+
+    fireEvent.click(within(preview).getByRole('button', { name: 'New section' }))
+    expect(within(preview).getByText('Nothing has been added here yet.')).toBeInTheDocument()
+
+    fireEvent.change(nameField, { target: { value: 'Benefits' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Page content' }), { target: { value: 'Pension details' } })
+    expect(within(preview).getByText('Pension details')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByRole('status')
+    const saved = saveSettingsMock.mock.calls[0][1]
+    expect(saved.customPages).toEqual([{ id: expect.stringMatching(/^page-/), title: 'Benefits', body: 'Pension details' }])
+    expect(saved.sectionOrder.at(-1)).toBe(saved.customPages[0].id)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Benefits' }))
+    expect(screen.getByText(/Delete the “Benefits” section and its content\?/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete section' }))
+    expect(screen.queryByRole('textbox', { name: 'Section name' })).not.toBeInTheDocument()
+    expect(within(preview).queryByRole('button', { name: 'Benefits' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
   it('stops a link without an https address from being saved', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Learner workspace' })
