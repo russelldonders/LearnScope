@@ -319,6 +319,18 @@ function normalizeInteractiveBlock(block) {
   }
 }
 
+// A generated scored question in the page builder's stored shape, or null
+// when it can't be used or isn't one of the allowed types. Shared with the
+// skill knowledge-check question pool (api/generate-diagnostic-quiz.js), so
+// pool questions are exactly the course builder's scored questions.
+export function normalizeAssessmentQuestion(block, questionTypes = ASSESSMENT_QUESTION_TYPES) {
+  if (block?.type !== 'test_question') return null
+  const normalized = normalizeInteractiveBlock(block)
+  return normalized && questionTypes.includes(normalized.layout) ? normalized : null
+}
+
+export { ASSESSMENT_QUESTION_TYPES }
+
 export function isUsableAssessmentQuestion(block, questionTypes = ASSESSMENT_QUESTION_TYPES) {
   if (block?.type !== 'test_question') return false
   const normalized = normalizeInteractiveBlock(block)

@@ -4,9 +4,12 @@ import { insertStatementSkillLinks } from './activitySkillLinks'
 
 const DIAGNOSTIC_VERB_IRI = 'https://learnscope.app/xapi/verbs/assessed'
 
-// Server decides cache-hit vs. generate -- the client never writes to
-// skill_diagnostic_content directly (see api/generate-diagnostic-quiz.js).
-export async function fetchOrGenerateDiagnosticQuiz({ skill, level }) {
+// Ten knowledge-check questions for this skill at this level, picked (and
+// when needed generated and stored) by the server from the skill's question
+// pool -- see api/generate-diagnostic-quiz.js and migration 0323. Each is a
+// course-builder scored question (page-builder `test_question` block) whose
+// id is the stored question's id.
+export async function fetchKnowledgeCheckQuestions({ skill, level }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -25,47 +28,46 @@ export async function fetchOrGenerateDiagnosticQuiz({ skill, level }) {
   return res.json()
 }
 
-// One xAPI statement per completed attempt, using the shared content row's
-// id as the Activity id so every learner's attempt against the same cached
-// quiz refers to the same Activity, per xAPI's own Activity concept. This
-// is a distinct statement shape from xapiStatement.js's buildStatement(),
-// which is purpose-built for the freeform Record Activity flow.
+// One xAPI statement per completed round, recording exactly which pool
+// questions were asked and how each was answered and marked -- so a
+// confirmed level stays traceable to the questions behind it even after a
+// question is later edited or deactivated.
 export async function saveDiagnosticAttempt({
   user,
   actor,
   skill,
-  diagnosticContentId,
-  content,
+  questions,
   answers,
+  results,
   calibratedLevel,
   confirmedLevel,
 }) {
-  const total = content.questions.length
-  const scoredAnswers = content.questions.map((q, i) => ({
+  const total = questions.length
+  const score = questions.filter((q) => results[q.id]?.correct).length
+  const scoredAnswers = questions.map((q) => ({
     questionId: q.id,
-    chosenChoiceId: answers[i] ?? null,
-    correct: q.correctResponsesPattern[0] === answers[i],
+    questionType: q.layout,
+    question: q.title,
+    answer: answers[q.id] ?? null,
+    correct: Boolean(results[q.id]?.correct),
   }))
-  const score = scoredAnswers.filter((a) => a.correct).length
 
   const statement = {
     id: crypto.randomUUID(),
     actor: { objectType: 'Agent', name: actor.name, mbox: `mailto:${actor.email}` },
     verb: { id: DIAGNOSTIC_VERB_IRI, display: { 'en-US': 'Assessed' } },
     object: {
-      id: `https://learnscope.app/activities/diagnostic/${diagnosticContentId ?? crypto.randomUUID()}`,
+      id: `https://learnscope.app/activities/diagnostic/${skill.library_skill_id ?? skill.id}/knowledge/${calibratedLevel}`,
       objectType: 'Activity',
       definition: {
         type: 'http://adlnet.gov/expapi/activities/assessment',
         name: { 'en-US': `Confirming baseline: ${skill.name} (Knowledge level ${calibratedLevel})` },
-        interactionType: 'choice',
       },
     },
     result: {
       score: { raw: score, min: 0, max: total, scaled: total ? score / total : 0 },
       extensions: {
         [DIAGNOSTIC_EXTENSION_IRI]: {
-          diagnosticContentId,
           diagnosticType: 'quiz',
           axis: 'knowledge',
           calibratedLevel,

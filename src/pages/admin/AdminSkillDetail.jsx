@@ -16,6 +16,7 @@ import StatusBadge from '../../components/StatusBadge'
 import SkillIconUpload from '../../components/SkillIconUpload'
 import SkillCompositionSection from './SkillCompositionSection'
 import LevelDefinitionsSection from './LevelDefinitionsSection'
+import { countSkillQuestionsByLevel } from '../../lib/admin/skillQuestions'
 
 // Read-only overview for a platform admin drilling into one skill_library
 // entry -- who owns it, how many people track it at each ability level (with
@@ -37,6 +38,7 @@ export default function AdminSkillDetail() {
   const [error, setError] = useState(null)
   const [openAbilityLevel, setOpenAbilityLevel] = useState(null)
   const [questionsLevel, setQuestionsLevel] = useState(null)
+  const [questionCounts, setQuestionCounts] = useState({})
   const [confirmingPromote, setConfirmingPromote] = useState(false)
   const [promoting, setPromoting] = useState(false)
   const [promoteError, setPromoteError] = useState(null)
@@ -60,6 +62,17 @@ export default function AdminSkillDetail() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+  }, [skillId])
+
+  function loadQuestionCounts() {
+    countSkillQuestionsByLevel(skillId)
+      .then(setQuestionCounts)
+      .catch((err) => console.error('Failed to count skill questions:', err))
+  }
+
+  useEffect(() => {
+    loadQuestionCounts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per skill
   }, [skillId])
 
   async function handlePromote() {
@@ -237,7 +250,7 @@ export default function AdminSkillDetail() {
                             onClick={() => setQuestionsLevel(level)}
                             className="rounded-md border border-hairline text-ink py-1 px-2.5 text-xs font-medium hover:bg-paper"
                           >
-                            View test questions
+                            Test questions ({questionCounts[level]?.active ?? 0})
                           </button>
                         </div>
                       </li>
@@ -259,6 +272,8 @@ export default function AdminSkillDetail() {
             librarySkillId={skillId}
             skillName={skill?.name}
             level={questionsLevel}
+            userId={user.id}
+            onCountsChange={loadQuestionCounts}
             onClose={() => setQuestionsLevel(null)}
           />
         )}
