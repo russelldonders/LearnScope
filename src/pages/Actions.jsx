@@ -504,7 +504,7 @@ export default function Actions() {
                 ? `${actionableCount} item${actionableCount === 1 ? '' : 's'} need${actionableCount === 1 ? 's' : ''} your response`
                 : 'Nothing needs a response right now'}
               {unseenRatings.length > 0
-                ? `${actionableCount > 0 ? ' · ' : ''}${unseenRatings.length} new rating${unseenRatings.length === 1 ? '' : 's'} received`
+                ? ` · ${unseenRatings.length} new rating${unseenRatings.length === 1 ? '' : 's'} received`
                 : ''}
             </p>
           )}
