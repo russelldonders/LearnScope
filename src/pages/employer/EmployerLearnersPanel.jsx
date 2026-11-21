@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
-import { listEmployerMembers, addEmployerMember, removeEmployerMember, requestEmployerDataAccess, listEmployerDataAccessRequests, listFieldDefinitionsForEmployer, listEmployerMemberFieldValues, upsertEmployerMemberFieldValue } from '../../lib/admin/employers'
+import { addEmployerMember, removeEmployerMember, requestEmployerDataAccess, upsertEmployerMemberFieldValue } from '../../lib/admin/employers'
+import { useEmployerLearnersData } from './useEmployerLearnersData'
 import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
 import EmployerMemberFieldInputs from '../../components/EmployerMemberFieldInputs'
 import EmployerMemberDetailModal from '../../components/EmployerMemberDetailModal'
@@ -23,12 +24,23 @@ import MutationFeedback from '../../components/MutationFeedback'
 
 export function EmployerLearnersPanel({ employer, searchParams, setSearchParams, attachedProviderOrg }) {
   const { isPlatformAdmin, user } = useAuth()
-  const [members, setMembers] = useState([])
-  const [trainingStaff, setTrainingStaff] = useState([])
-  const [trainingStaffError, setTrainingStaffError] = useState(null)
-  const [trainingStaffLoading, setTrainingStaffLoading] = useState(Boolean(attachedProviderOrg))
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const {
+    members,
+    trainingStaff,
+    setTrainingStaff,
+    trainingStaffError,
+    setTrainingStaffError,
+    trainingStaffLoading,
+    loading,
+    error,
+    setError,
+    dataAccessByLearner,
+    setDataAccessByLearner,
+    fieldDefinitions,
+    fieldValuesByMember,
+    setFieldValuesByMember,
+    load,
+  } = useEmployerLearnersData(employer.id, attachedProviderOrg)
 
   // Keyed by field_definition_id, same shape EmployerMemberFieldsModal
   // already uses for editing an existing member -- the add form captures
@@ -57,19 +69,9 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [assignModal, setAssignModal] = useState(null)
   const [assignResult, setAssignResult] = useState(null)
 
-  // Phase 5: employer-side view of each member's data-access consent state.
-  // Keyed by learner_id -- there's at most one row per (employer, learner)
-  // pair (unique constraint), so a plain map is enough.
-  const [dataAccessByLearner, setDataAccessByLearner] = useState({})
   const [dataAccessRequestingId, setDataAccessRequestingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
 
-  // Roster field values (20260911130000) -- the employer's own record about
-  // each member, separate from their actual LearnScope profile. Keyed by
-  // employer_member_id (not user_id) since that's what the values table
-  // itself is keyed to.
-  const [fieldDefinitions, setFieldDefinitions] = useState([])
-  const [fieldValuesByMember, setFieldValuesByMember] = useState({})
   const [editingFieldsMember, setEditingFieldsMember] = useState(null)
   const [viewingMember, setViewingMember] = useState(null)
   const [managingRoleProfilesMember, setManagingRoleProfilesMember] = useState(null)
@@ -119,20 +121,6 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
     ]
   }, [members, trainingStaff])
 
-  useEffect(() => {
-    let cancelled = false
-    setTrainingStaff([])
-    setTrainingStaffError(null)
-    setTrainingStaffLoading(Boolean(attachedProviderOrg))
-    if (attachedProviderOrg) {
-      listOrganisationMembers(attachedProviderOrg.id)
-        .then((staff) => { if (!cancelled) setTrainingStaff(staff) })
-        .catch((err) => { if (!cancelled) setTrainingStaffError(err.message) })
-        .finally(() => { if (!cancelled) setTrainingStaffLoading(false) })
-    }
-    return () => { cancelled = true }
-  }, [attachedProviderOrg])
-
   const filteredMembers = useMemo(
     () => (q ? users.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(q)) : users),
     [users, q]
@@ -156,36 +144,6 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
     () => eligibleMembers.filter((m) => selection.selected.has(m.user_id)),
     [eligibleMembers, selection.selected]
   )
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
-  }, [employer.id])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [membersData, dataAccessData, fields, values] = await Promise.all([
-        listEmployerMembers(employer.id),
-        listEmployerDataAccessRequests(employer.id),
-        listFieldDefinitionsForEmployer(employer.id),
-        listEmployerMemberFieldValues(employer.id),
-      ])
-      setMembers(membersData)
-      setDataAccessByLearner(Object.fromEntries(dataAccessData.map((r) => [r.learner_id, r])))
-      setFieldDefinitions(fields)
-      const byMember = {}
-      for (const v of values) {
-        byMember[v.employer_member_id] = { ...byMember[v.employer_member_id], [v.field_definition_id]: v.value }
-      }
-      setFieldValuesByMember(byMember)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Saves every field one at a time (not a single batched call) so a
   // failure on one field doesn't silently drop edits to the others -- same
