@@ -3,12 +3,9 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useLanguage } from '../context/LanguageContext'
-import AssignedPlansList from '../components/AssignedPlansList'
 import { listMyPlanAssignments } from '../lib/organisationPlans'
 import AppHeader from '../components/AppHeader'
-import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings, markPeerRatingsSeen, getProfiles } from '../lib/connections'
-import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
@@ -22,9 +19,7 @@ import {
 import { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion } from '../lib/managerSkillActions'
 import { supabase } from '../lib/supabaseClient'
 import EmployerDataAccessConsentDialog from '../components/EmployerDataAccessConsentDialog'
-import { requestedDataSummary } from '../lib/employerDataAccess'
 import CohortPickerModal from '../components/CohortPickerModal'
-import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
 import {
   decideManagerTeamInvite,
   listMyManagerTeamInvites,
@@ -32,6 +27,10 @@ import {
 import { loadActionSources } from '../lib/actionLoading'
 import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
 import { listIncomingPlanInvitations, respondToPlanInvitation } from '../lib/learnerPlans'
+import { PlanInvitationsSection, ConnectionRequestsSection, SkillAccessRequestsSection, ProviderInvitationsSection, EmployerInvitationsSection, ManagerTeamInvitationsSection } from './actions/ActionInvitationSections'
+import { RateInvitesSection, RecommendInvitesSection, ValidationRequestsSection, RatingsReceivedSection } from './actions/ActionLinkSections'
+import { DataAccessRequestsSection, AssignedTrainingSection, AssignedPlansSection } from './actions/ActionAssignmentSections'
+import SkillSuggestionsSection from './actions/SkillSuggestionsSection'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -539,519 +538,119 @@ export default function Actions() {
         <div className="space-y-10">
 
         {planInvites.length > 0 && (
-          <section id="plan-invitations" aria-labelledby="plan-invitations-heading">
-            <h2 id="plan-invitations-heading" className="mb-6 font-display text-xl text-ink">{t('actions.planInvitations')}</h2>
-            <div className="space-y-3">
-              {planInvites.map((invite) => (
-                <div key={invite.id} className="rounded-lg border border-hairline bg-card p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{invite.inviter_name}</strong>{' '}
-                    {t('actions.invitedToFollowPlan')}{' '}
-                    <strong>{invite.plan_title}</strong>
-                  </p>
-                  {invite.plan_description && <p className="mt-1 text-sm text-secondary">{invite.plan_description}</p>}
-                  <p className="mt-2 text-xs text-secondary">{t('actions.planInvitePrivateCopy')}</p>
-                  <p className="mt-1 font-mono text-xs text-secondary">{new Date(invite.created_at).toLocaleDateString()}</p>
-                  {planInviteError?.id === invite.id && <p className="mt-2 text-xs text-red-700">{planInviteError.message}</p>}
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handlePlanInviteResponse(invite, true)}
-                      disabled={planInviteDecidingId === invite.id}
-                      className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60"
-                    >
-                      {t('actions.acceptPlanInvite')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePlanInviteResponse(invite, false)}
-                      disabled={planInviteDecidingId === invite.id}
-                      className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper disabled:opacity-60"
-                    >
-                      {t('actions.declinePlanInvite')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PlanInvitationsSection
+            handlePlanInviteResponse={handlePlanInviteResponse}
+            planInviteDecidingId={planInviteDecidingId}
+            planInviteError={planInviteError}
+            planInvites={planInvites}
+          />
         )}
 
         {incomingRateInvites.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.invitationsToRate')}</h2>
-            <div className="space-y-3">
-              {incomingRateInvites.map((invite) => (
-                <Link
-                  key={invite.id}
-                  to={`/rate/${invite.share_code}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{invite.inviter_name || 'Someone'}</strong> wants your rating on their skill:{' '}
-                    <strong>{invite.skill_name}</strong>
-                    {invite.skill_category ? ` (${invite.skill_category})` : ''}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(invite.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <RateInvitesSection
+            incomingRateInvites={incomingRateInvites}
+          />
         )}
 
         {incomingRecommendInvites.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillRecommendations')}</h2>
-            <div className="space-y-3">
-              {incomingRecommendInvites.map((invite) => (
-                <Link
-                  key={invite.id}
-                  to={`/recommend/${invite.share_code}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{invite.inviter_name || 'Someone'}</strong> recommends you start tracking:{' '}
-                    <strong>{invite.skill_name}</strong>
-                    {invite.skill_category ? ` (${invite.skill_category})` : ''}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(invite.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <RecommendInvitesSection
+            incomingRecommendInvites={incomingRecommendInvites}
+          />
         )}
 
         {connectionRequests.length > 0 && (
-          <div id="connection-requests">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.connectionRequests')}</h2>
-            <div className="space-y-3">
-              {connectionRequests.map((request) => (
-                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong>
-                    {request.skills?.name ? (
-                      <>
-                        {' '}wants to connect over <strong>{request.skills.name}</strong>
-                      </>
-                    ) : (
-                      ' wants to connect'
-                    )}
-                  </p>
-                  {request.message && <p className="text-sm text-secondary mt-1">{request.message}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                  {respondError?.id === request.id && (
-                    <p className="text-xs text-red-700 mt-1">{respondError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleRequestResponse(request.id, true)}
-                      disabled={respondingId === request.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRequestResponse(request.id, false)}
-                      disabled={respondingId === request.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ConnectionRequestsSection
+            connectionRequests={connectionRequests}
+            handleRequestResponse={handleRequestResponse}
+            profiles={profiles}
+            respondError={respondError}
+            respondingId={respondingId}
+          />
         )}
 
         {skillAccessRequests.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillAccessRequests')}</h2>
-            <div className="space-y-3">
-              {skillAccessRequests.map((request) => (
-                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong> would like you to
-                    consider sharing some of your skills with them.
-                  </p>
-                  {request.message && <p className="text-sm text-secondary mt-1">{request.message}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                  {respondError?.id === request.id && (
-                    <p className="text-xs text-red-700 mt-1">{respondError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <Link
-                      to="/profile/privacy"
-                      onClick={() => handleRequestResponse(request.id, true)}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-                    >
-                      Manage sharing
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleRequestResponse(request.id, false)}
-                      disabled={respondingId === request.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <SkillAccessRequestsSection
+            handleRequestResponse={handleRequestResponse}
+            profiles={profiles}
+            respondError={respondError}
+            respondingId={respondingId}
+            skillAccessRequests={skillAccessRequests}
+          />
         )}
 
         {orgInvites.length > 0 && (
-          <div id="provider-invitations">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.providerInvitations')}</h2>
-            <div className="space-y-3">
-              {orgInvites.map((invite) => (
-                <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{invite.organisations?.name || 'A provider organisation'}</strong> wants to add you as{' '}
-                    {invite.role === 'admin' ? 'an admin' : 'a trainer'}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(invite.created_at).toLocaleDateString()}
-                  </p>
-                  {orgInviteError?.id === invite.id && (
-                    <p className="text-xs text-red-700 mt-1">{orgInviteError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOrgInviteResponse(invite.id, true)}
-                      disabled={orgInviteDecidingId === invite.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOrgInviteResponse(invite.id, false)}
-                      disabled={orgInviteDecidingId === invite.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ProviderInvitationsSection
+            handleOrgInviteResponse={handleOrgInviteResponse}
+            orgInviteDecidingId={orgInviteDecidingId}
+            orgInviteError={orgInviteError}
+            orgInvites={orgInvites}
+          />
         )}
 
         {employerInvites.length > 0 && (
-          <div id="employer-invitations">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.employerInvitations')}</h2>
-            <div className="space-y-3">
-              {employerInvites.map((invite) => (
-                <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{invite.employers?.name || 'An employer'}</strong> wants to add you as{' '}
-                    {invite.role === 'admin' ? 'an admin' : 'a member'}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(invite.created_at).toLocaleDateString()}
-                  </p>
-                  {employerInviteError?.id === invite.id && (
-                    <p className="text-xs text-red-700 mt-1">{employerInviteError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleEmployerInviteResponse(invite.id, true)}
-                      disabled={employerInviteDecidingId === invite.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEmployerInviteResponse(invite.id, false)}
-                      disabled={employerInviteDecidingId === invite.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <EmployerInvitationsSection
+            employerInviteDecidingId={employerInviteDecidingId}
+            employerInviteError={employerInviteError}
+            employerInvites={employerInvites}
+            handleEmployerInviteResponse={handleEmployerInviteResponse}
+          />
         )}
 
         {managerTeamInvites.length > 0 && (
-          <section id="manager-team-invitations" aria-labelledby="manager-team-invitations-heading">
-            <h2 id="manager-team-invitations-heading" className="font-display text-xl text-ink mb-6">
-              {t('actions.managerTeamInvitations')}
-            </h2>
-            <div className="space-y-3">
-              {managerTeamInvites.map((invite) => (
-                <ManagerTeamInviteCard
-                  key={invite.id}
-                  invite={invite}
-                  submitting={managerInviteDecidingId === invite.id}
-                  error={managerInviteError?.id === invite.id ? managerInviteError.message : null}
-                  onAccept={() => handleManagerTeamInviteResponse(invite.id, true)}
-                  onDecline={() => handleManagerTeamInviteResponse(invite.id, false)}
-                />
-              ))}
-            </div>
-          </section>
+          <ManagerTeamInvitationsSection
+            handleManagerTeamInviteResponse={handleManagerTeamInviteResponse}
+            managerInviteDecidingId={managerInviteDecidingId}
+            managerInviteError={managerInviteError}
+            managerTeamInvites={managerTeamInvites}
+          />
         )}
 
         {dataAccessRequests.length > 0 && (
-          <div id="data-access-requests">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.dataAccessRequests')}</h2>
-            <div className="space-y-3">
-              {dataAccessRequests.map((request) => (
-                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{request.employers?.name || 'An employer'}</strong> would like access to: {' '}
-                    {requestedDataSummary(request)}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                  {request.request_comment && <blockquote className="text-sm text-secondary whitespace-pre-wrap mt-2">{request.request_comment}</blockquote>}
-                  {dataAccessError?.id === request.id && (
-                    <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAcceptDataAccess(request)}
-                      disabled={dataAccessDecidingId === request.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Review request
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDataAccessDecline(request.id)}
-                      disabled={dataAccessDecidingId === request.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DataAccessRequestsSection
+            dataAccessDecidingId={dataAccessDecidingId}
+            dataAccessError={dataAccessError}
+            dataAccessRequests={dataAccessRequests}
+            handleDataAccessDecline={handleDataAccessDecline}
+            handleOpenAcceptDataAccess={handleOpenAcceptDataAccess}
+          />
         )}
 
         {courseAssignments.length > 0 && (
-          <div id="assigned-training">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.assignedTraining')}</h2>
-            <div className="space-y-3">
-              {courseAssignments.map((assignment) => (
-                <div key={assignment.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{assignment.employers?.name || 'An employer'}</strong> assigned you a course:{' '}
-                    <strong>{assignment.course_catalogue?.name}</strong>
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(assignment.created_at).toLocaleDateString()}
-                  </p>
-                  {assignmentError?.id === assignment.id && (
-                    <p className="text-xs text-red-700 mt-1">{assignmentError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleAssignmentResponse(assignment, true)}
-                      disabled={assignmentActingId === assignment.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Start
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAssignmentResponse(assignment, false)}
-                      disabled={assignmentActingId === assignment.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <AssignedTrainingSection
+            assignmentActingId={assignmentActingId}
+            assignmentError={assignmentError}
+            courseAssignments={courseAssignments}
+            handleAssignmentResponse={handleAssignmentResponse}
+          />
         )}
 
         {planAssignments.length > 0 && (
-          <div id="assigned-plans">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.assignedPlans')}</h2>
-            <div className="bg-card border border-hairline rounded-lg p-4">
-              <AssignedPlansList
-                assignments={planAssignments}
-                onChanged={() => listMyPlanAssignments()
-                  .then((rows) => setPlanAssignments(rows.filter((a) => a.status === 'assigned')))
-                  .catch(() => {})}
-              />
-            </div>
-          </div>
+          <AssignedPlansSection
+            planAssignments={planAssignments}
+            setPlanAssignments={setPlanAssignments}
+          />
         )}
 
         {skillSuggestions.length > 0 && (
-          <div id="skill-suggestions">
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillSuggestions')}</h2>
-            <div className="space-y-3">
-              {skillSuggestions.map((suggestion) => (
-                <div key={suggestion.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{suggestion.sourceLabel}</strong> suggested you develop:{' '}
-                    <strong>{suggestion.skillName}</strong>
-                  </p>
-                  {(suggestion.suggestedTargetLevel || suggestion.targetDate) && (
-                    <p className="text-sm text-secondary mt-1">
-                      {suggestion.suggestedTargetLevel && `Suggested target: ${LEVEL_LABELS[suggestion.suggestedTargetLevel]}`}
-                      {suggestion.suggestedTargetLevel && suggestion.targetDate && ' by '}
-                      {suggestion.targetDate && new Date(`${suggestion.targetDate}T00:00:00`).toLocaleDateString()}
-                    </p>
-                  )}
-                  {suggestion.comments && <p className="text-sm text-secondary mt-1">{suggestion.comments}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(suggestion.createdAt).toLocaleDateString()}
-                  </p>
-                  {suggestionError?.id === suggestion.id && (
-                    <p className="text-xs text-red-700 mt-1">{suggestionError.message}</p>
-                  )}
-
-                  {adoptingSuggestion === suggestion.id ? (
-                    <div className="mt-3 pt-3 border-t border-hairline space-y-3">
-                      <label className="flex items-center gap-2 text-sm text-ink">
-                        <input
-                          type="checkbox"
-                          checked={adoptForm.setTarget}
-                          onChange={(e) => setAdoptForm((f) => ({ ...f, setTarget: e.target.checked }))}
-                          className="size-4 accent-moss"
-                        />
-                        Also set a target
-                      </label>
-                      {adoptForm.setTarget && (
-                        <div className="flex flex-wrap items-end gap-3">
-                          <div>
-                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptLevel-${suggestion.id}`}>
-                              Target level
-                            </label>
-                            <select
-                              id={`adoptLevel-${suggestion.id}`}
-                              value={adoptForm.targetLevel}
-                              onChange={(e) => setAdoptForm((f) => ({ ...f, targetLevel: e.target.value }))}
-                              className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                            >
-                              {LEVELS.map((l) => (
-                                <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptDate-${suggestion.id}`}>
-                              Achieve by
-                            </label>
-                            <input
-                              id={`adoptDate-${suggestion.id}`}
-                              type="date"
-                              value={adoptForm.targetDate}
-                              onChange={(e) => setAdoptForm((f) => ({ ...f, targetDate: e.target.value }))}
-                              className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-[180px]">
-                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptComments-${suggestion.id}`}>
-                              Comments
-                            </label>
-                            <input
-                              id={`adoptComments-${suggestion.id}`}
-                              value={adoptForm.comments}
-                              onChange={(e) => setAdoptForm((f) => ({ ...f, comments: e.target.value }))}
-                              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAdoptSuggestion(suggestion)}
-                          disabled={suggestionActingId === suggestion.id}
-                          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                        >
-                          {suggestionActingId === suggestion.id ? 'Saving…' : 'Confirm and add'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelAdopt}
-                          disabled={suggestionActingId === suggestion.id}
-                          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-3">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAdoptForm(suggestion)}
-                        disabled={suggestionActingId === suggestion.id}
-                        className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                      >
-                        Add to my skills
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDismissSuggestion(suggestion)}
-                        disabled={suggestionActingId === suggestion.id}
-                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <SkillSuggestionsSection
+            adoptForm={adoptForm}
+            adoptingSuggestion={adoptingSuggestion}
+            handleAdoptSuggestion={handleAdoptSuggestion}
+            handleCancelAdopt={handleCancelAdopt}
+            handleDismissSuggestion={handleDismissSuggestion}
+            handleOpenAdoptForm={handleOpenAdoptForm}
+            setAdoptForm={setAdoptForm}
+            skillSuggestions={skillSuggestions}
+            suggestionActingId={suggestionActingId}
+            suggestionError={suggestionError}
+          />
         )}
 
         {validationRequests.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.requestsToValidate')}</h2>
-            <div className="space-y-3">
-              {validationRequests.map((request) => (
-                <Link
-                  key={request.id}
-                  to={`/validate-request/${request.id}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong> asked you to confirm{' '}
-                    they've reached <strong>{LEVEL_LABELS[request.target_level]}</strong> on{' '}
-                    <strong>{request.skills?.name}</strong>
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <ValidationRequestsSection
+            profiles={profiles}
+            validationRequests={validationRequests}
+          />
         )}
         </div>
         )}
@@ -1059,27 +658,9 @@ export default function Actions() {
         {unseenRatings.length > 0 && (
         <div className={actionableCount > 0 ? 'pt-10 border-t border-hairline' : ''}>
         <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-4">For your information</p>
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.ratingsReceived')}</h2>
-            <div className="space-y-3">
-              {unseenRatings.map((rating) => (
-                <Link
-                  key={rating.id}
-                  to={`/skills/${rating.skill_id}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{rating.rater_name || 'A connection'}</strong> rated your skill{' '}
-                    <strong>{rating.skill_name}</strong>: {LEVEL_LABELS[rating.level]}
-                  </p>
-                  {rating.comments && <p className="text-sm text-secondary mt-1">{rating.comments}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1" title={formatAbsoluteDate(rating.rated_at)}>
-                    {formatRelativeDate(rating.rated_at)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <RatingsReceivedSection
+            unseenRatings={unseenRatings}
+          />
         </div>
         )}
       </main>
