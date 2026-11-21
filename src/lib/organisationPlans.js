@@ -105,7 +105,10 @@ export async function reorderOrganisationPlanSteps(itemIds) {
 
 // Library skills an organisation plan can use: the organisation's own, and
 // the shared library's public ones.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function searchPlanLibrarySkills(organisationId, query) {
+  if (!UUID.test(organisationId)) throw new Error('Unknown organisation')
   let request = supabase
     .from('skill_library')
     .select('id, name, category')
@@ -118,6 +121,26 @@ export async function searchPlanLibrarySkills(organisationId, query) {
   const { data, error } = await request
   throwIfError(error)
   return data ?? []
+}
+
+// Catalogue courses an organisation plan can use: the organisation's own
+// current courses, and those shared with it by linked providers.
+export async function listPlanCatalogueCourses(organisationId) {
+  const [own, shared] = await Promise.all([
+    supabase
+      .from('course_catalogue')
+      .select('id, name')
+      .eq('organisation_id', organisationId)
+      .eq('is_current_published', true)
+      .order('name'),
+    supabase.rpc('list_employer_shared_courses', { p_employer: organisationId }),
+  ])
+  throwIfError(own.error)
+  const byId = new Map()
+  for (const course of [...(own.data ?? []), ...(shared.error ? [] : shared.data ?? [])]) {
+    if (!byId.has(course.id)) byId.set(course.id, { id: course.id, name: course.name })
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function assignOrganisationPlan(planId, userIds) {

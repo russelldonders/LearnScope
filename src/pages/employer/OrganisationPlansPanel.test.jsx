@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OrganisationPlansPanel from './OrganisationPlansPanel'
-import { listEmployerCatalogueCourses, listEmployerMembers } from '../../lib/admin/employers'
+import { listEmployerMembers } from '../../lib/admin/employers'
 import {
   addOrganisationPlanStep,
   assignOrganisationPlan,
@@ -9,11 +9,12 @@ import {
   getOrganisationPlan,
   listOrganisationPlanProgress,
   listOrganisationPlans,
+  listPlanCatalogueCourses,
 } from '../../lib/organisationPlans'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
-vi.mock('../../lib/admin/employers', () => ({ listEmployerCatalogueCourses: vi.fn(), listEmployerMembers: vi.fn() }))
+vi.mock('../../lib/admin/employers', () => ({ listEmployerMembers: vi.fn() }))
 vi.mock('../../lib/organisationPlans', async (importOriginal) => {
   const actual = await importOriginal()
   return {
@@ -31,6 +32,7 @@ vi.mock('../../lib/organisationPlans', async (importOriginal) => {
     assignOrganisationPlan: vi.fn(),
     withdrawPlanAssignment: vi.fn(),
     listOrganisationPlanProgress: vi.fn(),
+    listPlanCatalogueCourses: vi.fn(),
   }
 })
 
@@ -47,7 +49,7 @@ beforeEach(() => {
   listOrganisationPlans.mockResolvedValue([])
   getOrganisationPlan.mockResolvedValue(PLAN)
   createOrganisationPlan.mockResolvedValue('plan-1')
-  listEmployerCatalogueCourses.mockResolvedValue([{ id: 'course-2', name: 'Feedback that lands' }])
+  listPlanCatalogueCourses.mockResolvedValue([{ id: 'course-2', name: 'Feedback that lands' }])
   listEmployerMembers.mockResolvedValue([
     { user_id: 'user-1', email: 'sam@example.com', status: 'active' },
     { user_id: 'user-2', email: 'pending@example.com', status: 'pending' },
@@ -55,7 +57,7 @@ beforeEach(() => {
   assignOrganisationPlan.mockResolvedValue(1)
   listOrganisationPlanProgress.mockResolvedValue([
     {
-      user_id: 'user-1', name: 'Sam', assignment_id: 'a-1', assignment_status: 'started', joined_at: '2026-11-20T10:00:00Z',
+      user_id: 'user-1', name: 'Sam', is_member: true, assignment_id: 'a-1', assignment_status: 'started', joined_at: '2026-11-20T10:00:00Z',
       progress_done: 1, progress_total: 2, progress_items: [{ item_id: 'item-2', status: 'done' }, { item_id: 'item-1', status: 'in_progress' }],
     },
   ])

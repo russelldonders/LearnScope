@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { formatFullDate } from '../../lib/dates'
 import { LEVEL_LABELS, LEVELS } from '../../lib/levels'
-import { listEmployerCatalogueCourses, listEmployerMembers } from '../../lib/admin/employers'
+import { listEmployerMembers } from '../../lib/admin/employers'
 import {
   addOrganisationPlanStep,
   archiveOrganisationPlan,
@@ -12,6 +12,7 @@ import {
   getOrganisationPlan,
   listOrganisationPlanProgress,
   listOrganisationPlans,
+  listPlanCatalogueCourses,
   removeOrganisationPlanStep,
   reorderOrganisationPlanSteps,
   searchPlanLibrarySkills,
@@ -329,7 +330,7 @@ function AddStepForm({ organisationId, disabled, onAdd }) {
 
   useEffect(() => {
     if (type !== 'course' || courses) return
-    listEmployerCatalogueCourses(organisationId).then(setCourses).catch((err) => setError(err.message))
+    listPlanCatalogueCourses(organisationId).then(setCourses).catch((err) => setError(err.message))
   }, [type, courses, organisationId])
 
   useEffect(() => {
@@ -541,7 +542,7 @@ function PlanProgressSection({ plan }) {
                   <div className="min-w-0">
                     <p className="text-sm text-ink">{person.name}</p>
                     <p className="text-xs text-secondary">
-                      {started ? `Started ${formatFullDate(person.joined_at)}` : ASSIGNMENT_LABELS[person.assignment_status] ?? 'Left the plan'}
+                      {person.is_member === false ? 'Left the organisation' : started ? `Started ${formatFullDate(person.joined_at)}` : ASSIGNMENT_LABELS[person.assignment_status] ?? 'Left the plan'}
                       {person.progress_total != null && ` · ${person.progress_done} of ${person.progress_total} done`}
                       {started && person.progress_total == null && ' · No progress recorded yet'}
                     </p>

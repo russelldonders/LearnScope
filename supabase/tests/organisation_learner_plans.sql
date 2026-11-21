@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(35);
+select plan(39);
 
 -- a: admin of Org One   m: member who is assigned   n: member, not assigned
 -- o: outsider           x: admin of Org Two
@@ -60,6 +60,17 @@ select is((select count(*)::integer from public.learner_plans where id = '830000
   'the admin can see the organisation plan');
 select is(jsonb_array_length(public.get_my_learner_plans('83000000-0000-0000-0000-0000000000e1')), 0,
   'it is not in the admin''s own plans');
+
+-- The admin can read a new plan back in the same statement (as the console does).
+create temporary table returned_plan on commit drop as select null::uuid as id;
+grant all on returned_plan to authenticated;
+with created as (
+  insert into public.learner_plans (organisation_id, title)
+  values ('83000000-0000-0000-0000-000000000010', 'Read back')
+  returning id
+)
+insert into returned_plan select id from created;
+select is((select count(*)::integer from returned_plan where id is not null), 1, 'a new organisation plan is returned to the admin who made it');
 
 insert into public.learner_plan_items (id, plan_id, item_type, catalogue_course_id, position)
 values ('83000000-0000-0000-0000-0000000000a1', '83000000-0000-0000-0000-0000000000e1', 'course', '83000000-0000-0000-0000-0000000000c1', 0);
@@ -200,6 +211,9 @@ select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000a
 set local role authenticated;
 select is((select progress_done from public.list_organisation_learner_plan_progress('83000000-0000-0000-0000-0000000000e1')
   where user_id = '83000000-0000-0000-0000-00000000000b'), null::integer, 'a former member''s progress is hidden');
+select is((select is_member from public.list_organisation_learner_plan_progress('83000000-0000-0000-0000-0000000000e1')
+  where user_id = '83000000-0000-0000-0000-00000000000b'), false, 'and they are shown as no longer a member');
+reset role;
 reset role;
 select is((select progress_items from public.learner_plan_members
   where plan_id = '83000000-0000-0000-0000-0000000000e1' and user_id = '83000000-0000-0000-0000-00000000000b'), null::jsonb,
@@ -224,6 +238,18 @@ select throws_ok(
   '23514', null, 'a personal plan cannot point at the catalogue directly'
 );
 reset role;
+
+-- Nobody can clear who made a plan or added a step while that account exists.
+update public.learner_plans set created_by = null where id = '83000000-0000-0000-0000-0000000000e1';
+update public.learner_plan_items set added_by = null where id = '83000000-0000-0000-0000-0000000000a3';
+select is((select created_by::text || '/' || (select added_by::text from public.learner_plan_items where id = '83000000-0000-0000-0000-0000000000a3')
+  from public.learner_plans where id = '83000000-0000-0000-0000-0000000000e1'),
+  '83000000-0000-0000-0000-00000000000a/83000000-0000-0000-0000-00000000000a', 'creator and step author cannot be cleared by hand');
+
+-- Deleting the account of the admin who made the plan keeps the plan.
+delete from auth.users where id = '83000000-0000-0000-0000-00000000000a';
+select is((select created_by from public.learner_plans where id = '83000000-0000-0000-0000-0000000000e1'), null::uuid,
+  'the organisation plan stays when its creator''s account is deleted');
 
 select * from finish();
 rollback;
