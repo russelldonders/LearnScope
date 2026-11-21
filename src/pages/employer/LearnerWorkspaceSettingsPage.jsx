@@ -434,6 +434,7 @@ export function LearnerWorkspaceSettings({ organisationId }) {
       </div>
       {editingPageId && findCustomPage(draft, editingPageId) && (
         <PageBuilderModal
+          panelBlocks
           organisationId={organisationId}
           userId={user?.id}
           resource={{ title: findCustomPage(draft, editingPageId).title, page_content: findCustomPage(draft, editingPageId).content }}
@@ -503,7 +504,7 @@ export function LearnerWorkspacePreview({ settings, organisation }) {
             </>
           )}
           {section === 'role' && placeholder(PREVIEW_PLACEHOLDERS.role)}
-          {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} compact />}
+          {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} sample compact />}
         </div>
       </div>
     </div>

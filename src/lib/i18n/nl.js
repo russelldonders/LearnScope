@@ -3334,6 +3334,21 @@ export default {
     opensInNewTab: '(opent in een nieuw tabblad)',
     emptyPage: 'Hier is nog niets toegevoegd.',
   },
+  workspacePanels: {
+    goalsTitle: 'Je doelen',
+    skillsTitle: 'Je nieuwste vaardigheden',
+    level: 'Niveau {level} ({label})',
+    goalTarget: '{level} vóór {date}',
+    yourLevel: 'jij: {level}',
+    rated: 'beoordeeld op {level} op {date}',
+    goal: 'doel {level}',
+    completed: 'Voltooid',
+    noGoals: 'Hier zijn nog geen doelen voor je vastgesteld.',
+    noSkills: 'Hier is nog geen van je vaardigheden beoordeeld of van een doel voorzien.',
+    loading: 'Laden…',
+    loadError: 'Dit kon niet worden geladen. Probeer het later opnieuw.',
+    sample: 'Voorbeeld — leden zien hun eigen gegevens',
+  },
   roleAlignment: {
     summary: {
       eyebrow: 'Ontwikkeling in je rol',

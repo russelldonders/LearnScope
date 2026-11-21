@@ -36,7 +36,34 @@ export const BLOCK_LAYOUTS = {
   animation: ['flow', 'cycle', 'build'],
 }
 
-export const BLOCK_TYPES = ['heading', 'text', 'callout', 'quote', 'divider', 'columns', 'image', 'video', ...Object.keys(INTERACTIVE_BLOCKS)]
+// LearnScope panels: live lists of the viewer's own records, offered only on
+// an organisation's learner-workspace pages, where each shows the member
+// what belongs to that organisation (see lib/workspacePanels.js). A panel
+// holds settings only, never the records. Anywhere else nothing draws them.
+//   title  the panel's heading (blank uses its default)
+//   limit  how many to show
+//   show   goals only: 'active', or 'all' to include completed goals
+export const PANEL_BLOCKS = {
+  goals_panel: { label: 'Goals', description: 'Goals your organisation set for the member.' },
+  skills_panel: { label: 'Latest skills', description: 'Skills your organisation rated or set a goal on.' },
+}
+export const PANEL_LIMITS = { min: 1, max: 20, default: 5 }
+export const GOAL_PANEL_SHOW = ['active', 'all']
+
+export function newPanelBlock(type) {
+  return { id: crypto.randomUUID(), type, title: '', limit: PANEL_LIMITS.default, ...(type === 'goals_panel' ? { show: 'active' } : {}) }
+}
+
+function normalisePanel(block) {
+  const limit = Math.round(Number(block.limit))
+  return {
+    title: plainText(block.title, 120),
+    limit: Number.isFinite(limit) ? Math.max(PANEL_LIMITS.min, Math.min(PANEL_LIMITS.max, limit)) : PANEL_LIMITS.default,
+    ...(block.type === 'goals_panel' ? { show: GOAL_PANEL_SHOW.includes(block.show) ? block.show : 'active' } : {}),
+  }
+}
+
+export const BLOCK_TYPES = ['heading', 'text', 'callout', 'quote', 'divider', 'columns', 'image', 'video', ...Object.keys(INTERACTIVE_BLOCKS), ...Object.keys(PANEL_BLOCKS)]
 
 const PLAIN_TEXT_LIMITS = { title: 300, label: 300, detail: 1200, caption: 500, unit: 30 }
 
@@ -174,6 +201,10 @@ export function normalisePageDocument(document) {
       id: String(block.id || crypto.randomUUID()),
       type: block.type,
       ...normaliseInteractive(block),
+    } : PANEL_BLOCKS[block.type] ? {
+      id: String(block.id || crypto.randomUUID()),
+      type: block.type,
+      ...normalisePanel(block),
     } : {
       id: String(block.id || crypto.randomUUID()),
       type: BLOCK_TYPES.includes(block.type) ? block.type : 'text',

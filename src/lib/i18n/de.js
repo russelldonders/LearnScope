@@ -3336,6 +3336,21 @@ export default {
     opensInNewTab: '(öffnet in einem neuen Tab)',
     emptyPage: 'Hier wurde noch nichts hinzugefügt.',
   },
+  workspacePanels: {
+    goalsTitle: 'Deine Ziele',
+    skillsTitle: 'Deine neuesten Fähigkeiten',
+    level: 'Stufe {level} ({label})',
+    goalTarget: '{level} bis {date}',
+    yourLevel: 'du: {level}',
+    rated: 'bewertet mit {level} am {date}',
+    goal: 'Ziel {level}',
+    completed: 'Erledigt',
+    noGoals: 'Hier wurden noch keine Ziele für dich festgelegt.',
+    noSkills: 'Hier wurde noch keine deiner Fähigkeiten bewertet oder mit einem Ziel versehen.',
+    loading: 'Wird geladen…',
+    loadError: 'Das konnte nicht geladen werden. Versuche es später erneut.',
+    sample: 'Beispiel – Mitglieder sehen ihre eigenen',
+  },
   roleAlignment: {
     summary: {
       eyebrow: 'Entwicklung in der Rolle',

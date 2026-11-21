@@ -244,3 +244,34 @@ it('offers a new tab by default when linking selected words', () => {
   expect(screen.getByRole('radio', { name: 'A new tab' })).toBeChecked()
   expect(screen.queryByLabelText('Text to show')).not.toBeInTheDocument()
 })
+
+it('offers LearnScope panels only on an organisation’s workspace pages', () => {
+  render(<PageBuilderModal organisationId="org-1" userId="me" initialTitle="Listening" onClose={vi.fn()} onSaved={vi.fn()} />)
+  const menus = screen.getAllByRole('button', { name: /Add content/ })
+  fireEvent.click(menus[menus.length - 1])
+  expect(screen.queryByText('From LearnScope')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Goals panel' })).toBeNull()
+})
+
+it('adds a goals panel to a workspace page, configures it, and saves its settings only', async () => {
+  const saveResource = vi.fn().mockResolvedValue({})
+  render(<PageBuilderModal panelBlocks organisationId="org-1" userId="me" resource={{ title: 'Home', page_content: { version: 1, blocks: [] } }} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
+
+  fireEvent.click(screen.getByRole('button', { name: /Add content/ }))
+  expect(screen.getByText('From LearnScope')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Latest skills panel' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Goals panel' }))
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Panel heading' }), { target: { value: 'Goals from Acme' } })
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'How many to show' }), { target: { value: '8' } })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Which goals' }), { target: { value: 'all' } })
+  // The example beside the settings uses made-up rows.
+  expect(screen.getByRole('heading', { name: 'Goals from Acme' })).toBeInTheDocument()
+  expect(screen.getByText('Example — members see their own')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save page' }))
+  await waitFor(() => expect(saveResource).toHaveBeenCalled())
+  expect(saveResource.mock.calls[0][1].blocks).toEqual([
+    { id: expect.any(String), type: 'goals_panel', title: 'Goals from Acme', limit: 8, show: 'all' },
+  ])
+})

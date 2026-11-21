@@ -3315,6 +3315,21 @@ export default {
     opensInNewTab: '（在新标签页中打开）',
     emptyPage: '这里还没有添加任何内容。',
   },
+  workspacePanels: {
+    goalsTitle: '你的目标',
+    skillsTitle: '你最新的技能',
+    level: '等级 {level}（{label}）',
+    goalTarget: '{date} 前达到{level}',
+    yourLevel: '你：{level}',
+    rated: '{date} 评为{level}',
+    goal: '目标{level}',
+    completed: '已完成',
+    noGoals: '这里还没有为你设定目标。',
+    noSkills: '这里还没有对你的任何技能进行评级或设定目标。',
+    loading: '加载中…',
+    loadError: '无法加载，请稍后再试。',
+    sample: '示例——成员看到的是自己的内容',
+  },
   roleAlignment: {
     summary: {
       eyebrow: '岗位发展',

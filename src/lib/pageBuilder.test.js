@@ -105,3 +105,18 @@ describe('page builder content', () => {
     expect(scoreTestQuestion({ id: 'm', type: 'test_question', title: 'Match', layout: 'matching', points: 3, items: [{ id: 'x', label: 'X', detail: 'One' }] }, { x: 'One' }).earned).toBe(3)
   })
 })
+
+describe('LearnScope panel blocks', () => {
+  it('keeps a panel as settings only, with its heading as plain text and its count in range', () => {
+    const { blocks } = normalisePageDocument({ blocks: [
+      { id: 'g', type: 'goals_panel', title: '<b>Team</b> goals', limit: 99, show: 'all', records: [{ id: 'x' }] },
+      { id: 's', type: 'skills_panel', title: '', limit: 'lots', show: 'all' },
+      { id: 'g2', type: 'goals_panel', limit: 0, show: 'everything' },
+    ] })
+    expect(blocks).toEqual([
+      { id: 'g', type: 'goals_panel', title: 'Team goals', limit: 20, show: 'all' },
+      { id: 's', type: 'skills_panel', title: '', limit: 5 },
+      { id: 'g2', type: 'goals_panel', title: '', limit: 1, show: 'active' },
+    ])
+  })
+})

@@ -1,4 +1,4 @@
-import { normaliseMediaUrl, normalisePageDocument, scoreTestQuestion, startingOrder } from '../lib/pageBuilder'
+import { PANEL_BLOCKS, normaliseMediaUrl, normalisePageDocument, scoreTestQuestion, startingOrder } from '../lib/pageBuilder'
 import { useEffect, useMemo, useState } from 'react'
 import { Accordion, Animation, Chart, Diagram, FlipCards, Hotspots, KnowledgeCheck, Ordering, ScoredQuestion } from './PageInteractiveBlocks'
 
@@ -21,7 +21,10 @@ function RichText({ html, className = '' }) {
 const HEADING_CLASS = { 1: 'page-heading', 2: 'page-subheading', 3: 'page-subheading page-subheading--sm' }
 const ALIGN_CLASS = { left: '', center: 'page-align-center', right: 'page-align-right' }
 
-export default function PageContent({ document, compact = false, onScore }) {
+// `panels` maps a LearnScope panel type (PANEL_BLOCKS) to the component that
+// draws it, given `panelProps` too. Only an organisation's workspace pages
+// pass it; anywhere else a panel block draws nothing.
+export default function PageContent({ document, compact = false, onScore, panels = null, panelProps = null }) {
   const page = normalisePageDocument(document)
   const questions = useMemo(() => page.blocks.filter((block) => block.type === 'test_question'), [page])
   const questionKey = questions.map((question) => `${question.id}:${question.layout}:${question.items.map((item) => item.id).join(',')}`).join('|')
@@ -122,6 +125,10 @@ export default function PageContent({ document, compact = false, onScore }) {
           if (testRendered) return null
           testRendered = true
           return <div key="scored-test">{renderTest()}</div>
+        }
+        if (PANEL_BLOCKS[block.type]) {
+          const Panel = panels?.[block.type]
+          return Panel ? <Panel key={block.id} block={block} {...panelProps} /> : null
         }
         const Interactive = INTERACTIVE_COMPONENTS[block.type]
         if (Interactive) return block.items.length > 0 ? <Interactive key={block.id} block={block} /> : null

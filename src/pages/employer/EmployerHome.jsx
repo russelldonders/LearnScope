@@ -167,7 +167,7 @@ export default function EmployerHome() {
               />
             )}
             {section === 'role' && <LearnerRoleAlignmentContainer employerId={employer.id} />}
-            {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} />}
+            {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} organisationId={employer.id} />}
           </>
         ) : (
           <p className="text-secondary">{t('common.loading')}</p>

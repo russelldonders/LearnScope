@@ -3,16 +3,21 @@ import { contentFileUrl, createPageResource, listOrganisationResources, removePa
 import {
   CALLOUT_VARIANTS,
   EMPTY_PAGE_DOCUMENT,
+  GOAL_PANEL_SHOW,
   INTERACTIVE_BLOCKS,
   MEDIA_SIZES,
+  PANEL_BLOCKS,
+  PANEL_LIMITS,
   TEXT_ALIGNMENTS,
   newInteractiveBlock,
+  newPanelBlock,
   normalisePageDocument,
   pageDocumentWordCount,
   pageHasScoredTest,
   sanitiseRichText,
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
+import { SampleGoalsPanel, SampleSkillsPanel } from './WorkspacePanels'
 import PageInteractiveEditor from './PageInteractiveEditor'
 import AccessibleDialog from './AccessibleDialog'
 import ConfirmDialog from './ConfirmDialog'
@@ -29,7 +34,10 @@ const BLOCK_LABELS = {
   columns: 'Two columns',
   divider: 'Divider',
   ...Object.fromEntries(Object.entries(INTERACTIVE_BLOCKS).map(([type, spec]) => [type, spec.label])),
+  ...Object.fromEntries(Object.entries(PANEL_BLOCKS).map(([type, spec]) => [type, `${spec.label} panel`])),
 }
+
+const SAMPLE_PANELS = { goals_panel: SampleGoalsPanel, skills_panel: SampleSkillsPanel }
 
 const BLOCK_PLACEHOLDERS = {
   heading: 'Write a heading…',
@@ -42,6 +50,7 @@ const ALIGN_LABELS = { left: 'Left', center: 'Center', right: 'Right' }
 
 function newBlock(type) {
   if (INTERACTIVE_BLOCKS[type]) return newInteractiveBlock(type)
+  if (PANEL_BLOCKS[type]) return newPanelBlock(type)
   if (type === 'divider') return { id: crypto.randomUUID(), type }
   if (type === 'columns') return { id: crypto.randomUUID(), type, content: 'First column', secondaryContent: 'Second column', align: 'left' }
   if (type === 'image' || type === 'video') return { id: crypto.randomUUID(), type, url: '', alt: '', caption: '', size: 'full' }
@@ -326,7 +335,9 @@ function Editable({ value, onChange, label, className = '', onFocus, placeholder
   )
 }
 
-function InsertMenu({ onInsert, label = 'Add content' }) {
+// `panelBlocks` adds the LearnScope panels, offered only on an
+// organisation's learner-workspace pages.
+function InsertMenu({ onInsert, label = 'Add content', panelBlocks = false }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="page-insert-menu">
@@ -335,15 +346,59 @@ function InsertMenu({ onInsert, label = 'Add content' }) {
       </button>
       {open && (
         <div className="page-insert-options">
-          {Object.entries(BLOCK_LABELS).filter(([type]) => !INTERACTIVE_BLOCKS[type]).map(([type, blockLabel]) => (
+          {Object.entries(BLOCK_LABELS).filter(([type]) => !INTERACTIVE_BLOCKS[type] && !PANEL_BLOCKS[type]).map(([type, blockLabel]) => (
             <button key={type} type="button" onClick={() => { onInsert(type); setOpen(false) }}>{blockLabel}</button>
           ))}
           <span className="page-insert-options__group">Interactive and visual</span>
           {Object.entries(INTERACTIVE_BLOCKS).map(([type, spec]) => (
             <button key={type} type="button" onClick={() => { onInsert(type); setOpen(false) }}>{spec.label}</button>
           ))}
+          {panelBlocks && (
+            <>
+              <span className="page-insert-options__group">From LearnScope</span>
+              {Object.entries(PANEL_BLOCKS).map(([type, spec]) => (
+                <button key={type} type="button" title={spec.description} onClick={() => { onInsert(type); setOpen(false) }}>{BLOCK_LABELS[type]}</button>
+              ))}
+            </>
+          )}
         </div>
       )}
+    </div>
+  )
+}
+
+// A LearnScope panel's settings, above an example of how it looks. Each
+// member sees their own records for this organisation in its place.
+function PanelBlockEditor({ block, onChange, onChangeWithHistory }) {
+  const Sample = SAMPLE_PANELS[block.type]
+  const fieldClass = 'w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss'
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-secondary">{PANEL_BLOCKS[block.type].description} Each member sees only their own, and only what belongs to this organisation.</p>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+        <label className="block text-xs text-secondary">
+          Panel heading
+          <input value={block.title} onChange={(event) => onChange({ title: event.target.value })} maxLength={120}
+            placeholder={block.type === 'goals_panel' ? 'Your goals' : 'Your latest skills'} className={`mt-1 ${fieldClass}`} />
+        </label>
+        <label className="block text-xs text-secondary">
+          How many to show
+          <input type="number" min={PANEL_LIMITS.min} max={PANEL_LIMITS.max} value={block.limit}
+            onChange={(event) => onChangeWithHistory({ limit: Math.max(PANEL_LIMITS.min, Math.min(PANEL_LIMITS.max, Number(event.target.value) || PANEL_LIMITS.min)) })}
+            className={`mt-1 ${fieldClass}`} />
+        </label>
+      </div>
+      {block.type === 'goals_panel' && (
+        <label className="block text-xs text-secondary">
+          Which goals
+          <select value={block.show} onChange={(event) => onChangeWithHistory({ show: event.target.value })} className={`mt-1 ${fieldClass}`}>
+            {GOAL_PANEL_SHOW.map((value) => (
+              <option key={value} value={value}>{value === 'all' ? 'Open and completed goals' : 'Open goals only'}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {Sample && <Sample block={block} />}
     </div>
   )
 }
@@ -352,7 +407,7 @@ function InsertMenu({ onInsert, label = 'Add content' }) {
 // persistence (update the given resource in place / create a new page) --
 // the course editor uses it to save an edit to a published page as a new
 // page version linked into that course instead (see CourseSections).
-export default function PageBuilderModal({ organisationId, userId, resource, initialTitle, onClose, onSaved, saveResource = null }) {
+export default function PageBuilderModal({ organisationId, userId, resource, initialTitle, onClose, onSaved, saveResource = null, panelBlocks = false }) {
   const [title, setTitle] = useState(resource?.title || initialTitle?.trim() || 'Untitled page')
   const [pageDocument, setPageDocument] = useState(() => normalisePageDocument(resource?.page_content || EMPTY_PAGE_DOCUMENT))
   const [saving, setSaving] = useState(false)
@@ -762,7 +817,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
         {previewing ? (
           <main className="min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8 sm:py-10">
             <div className="page-live-canvas mx-auto min-h-full max-w-4xl bg-card px-5 py-10 sm:px-14 sm:py-14">
-              <PageContent document={pageDocument} />
+              <PageContent document={pageDocument} panels={panelBlocks ? SAMPLE_PANELS : null} />
             </div>
           </main>
         ) : (
@@ -775,7 +830,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           <div className="page-live-canvas mx-auto min-h-full max-w-4xl bg-card px-5 py-10 sm:px-14 sm:py-14">
             <article className="page-content mx-auto w-full max-w-[70ch]">
               {pageDocument.blocks.length > 0 && (
-                <InsertMenu label="Insert at top" onInsert={(type) => insertBlock(type, 0)} />
+                <InsertMenu label="Insert at top" panelBlocks={panelBlocks} onInsert={(type) => insertBlock(type, 0)} />
               )}
               {pageDocument.blocks.map((block, index) => {
                 const isActive = activeBlockId === block.id
@@ -867,6 +922,13 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                           onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)}
                         />
                       )}
+                      {PANEL_BLOCKS[block.type] && (
+                        <PanelBlockEditor
+                          block={block}
+                          onChange={(changes) => updateBlock(block.id, changes)}
+                          onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)}
+                        />
+                      )}
                       {isMedia && (
                         <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)}
                           onUpload={(file) => uploadMedia(block, file)} uploading={uploadingBlockId === block.id}
@@ -879,12 +941,12 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                         />
                       )}
                     </section>
-                    {isActive && <InsertMenu label="Insert below" onInsert={(type) => insertBlock(type, index + 1)} />}
+                    {isActive && <InsertMenu label="Insert below" panelBlocks={panelBlocks} onInsert={(type) => insertBlock(type, index + 1)} />}
                   </div>
                 )
               })}
-              {pageDocument.blocks.length === 0 && <div className="py-16 text-center"><p className="mb-4 text-secondary">This page is empty.</p><InsertMenu onInsert={insertBlock} /></div>}
-              {pageDocument.blocks.length > 0 && <InsertMenu onInsert={insertBlock} />}
+              {pageDocument.blocks.length === 0 && <div className="py-16 text-center"><p className="mb-4 text-secondary">This page is empty.</p><InsertMenu panelBlocks={panelBlocks} onInsert={insertBlock} /></div>}
+              {pageDocument.blocks.length > 0 && <InsertMenu panelBlocks={panelBlocks} onInsert={insertBlock} />}
             </article>
           </div>
         </main>

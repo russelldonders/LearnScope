@@ -14,6 +14,12 @@ vi.mock('../../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: () =
 vi.mock('../../lib/learnerWorkspaceSettings', async (importOriginal) => ({ ...(await importOriginal()), getLearnerWorkspaceSettings: settingsMock }))
 vi.mock('./EmployerAssignedTrainingPanel', () => ({ default: (props) => <div data-testid="learning-panel" data-variant={props.variant || 'full'} data-framing={props.framing}>{props.employerName}</div> }))
 vi.mock('./EmployerCataloguePanel', () => ({ default: (props) => <div data-testid="catalogue-panel" data-enrolment={props.enrolment}>{props.employerName}</div> }))
+vi.mock('../../components/WorkspacePanels', () => ({
+  GoalsPanel: (props) => <div data-testid="goals-panel" data-org={props.organisationId} data-limit={props.block.limit} />,
+  SkillsPanel: (props) => <div data-testid="skills-panel" data-org={props.organisationId} />,
+  SampleGoalsPanel: () => null,
+  SampleSkillsPanel: () => null,
+}))
 vi.mock('../roles/LearnerRoleAlignmentContainer', () => ({ default: (props) => <div data-testid="role-panel" data-variant={props.variant || 'full'} /> }))
 
 beforeEach(() => settingsMock.mockResolvedValue(normaliseWorkspaceSettings(null)))
@@ -153,5 +159,20 @@ describe('EmployerHome shows the organisation’s own sections', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Policies' })).toBeInTheDocument()
     expect(screen.getByText('Nothing has been added here yet.')).toBeInTheDocument()
+  })
+
+  it('shows its LearnScope panels with this organisation’s records', async () => {
+    settingsMock.mockResolvedValue(normaliseWorkspaceSettings({
+      custom_pages: [{ id: benefits, title: 'Progress', content: { version: 1, blocks: [
+        { id: 'p1', type: 'goals_panel', title: '', limit: 3, show: 'active' },
+        { id: 'p2', type: 'skills_panel', title: '', limit: 5 },
+      ] } }],
+      section_order: ['home', benefits, 'learning', 'catalogue', 'role'],
+    }))
+    render(<MemoryRouter initialEntries={[`/organisation/learning?org=acme&section=${benefits}`]}><EmployerHome /></MemoryRouter>)
+
+    expect(await screen.findByTestId('goals-panel')).toHaveAttribute('data-org', 'employer-1')
+    expect(screen.getByTestId('goals-panel')).toHaveAttribute('data-limit', '3')
+    expect(screen.getByTestId('skills-panel')).toHaveAttribute('data-org', 'employer-1')
   })
 })

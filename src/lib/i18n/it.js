@@ -3336,6 +3336,21 @@ export default {
     opensInNewTab: '(si apre in una nuova scheda)',
     emptyPage: 'Qui non è ancora stato aggiunto nulla.',
   },
+  workspacePanels: {
+    goalsTitle: 'I tuoi obiettivi',
+    skillsTitle: 'Le tue competenze più recenti',
+    level: 'Livello {level} ({label})',
+    goalTarget: '{level} entro il {date}',
+    yourLevel: 'tu: {level}',
+    rated: 'valutata {level} il {date}',
+    goal: 'obiettivo {level}',
+    completed: 'Completato',
+    noGoals: 'Qui non sono ancora stati fissati obiettivi per te.',
+    noSkills: 'Qui nessuna delle tue competenze è ancora stata valutata o ha un obiettivo.',
+    loading: 'Caricamento…',
+    loadError: 'Impossibile caricare. Riprova più tardi.',
+    sample: 'Esempio: ogni membro vede i propri',
+  },
   roleAlignment: {
     summary: {
       eyebrow: 'Sviluppo nel ruolo',
