@@ -16,6 +16,22 @@ move active work to **In progress** and completed work to **Done**.
   experience-type labels, duplicate-skill messages, and generated AI content
   stay English unless that product decision changes.
 
+- Organisation plans and workspace panels (0328/0329), follow-ups:
+  - Browser-check the organisation console's Plans section and a member
+    starting an assigned plan against Staging; only unit, pgTAP and the
+    existing e2e suites cover them so far.
+  - The Goals and Latest skills panels leave out goals and ratings set by a
+    team manager: team rows carry no organisation, and members can't read
+    their team's workspace. Showing them needs a definer function that
+    resolves a team to its workspace's organisation.
+  - Assigned plans don't appear in the /actions inbox the way assigned
+    courses do, only in the organisation's workspace.
+  - Organisation plans have no sections or prerequisites in the console yet,
+    and the assign list shows members by email (the members API has no
+    names).
+  - The Plans panel shows all of the member's plans from the organisation;
+    it can't yet be set to particular plans.
+
 ## In progress
 
 - Splitting the largest page files into focused files (started 2026-11-17).
