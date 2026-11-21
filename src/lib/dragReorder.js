@@ -37,3 +37,21 @@ export function findDropTarget(refsMap, clientX, clientY) {
   }
   return nearest
 }
+
+// `side` picks the insertion point relative to a target: 'before' the
+// target's midpoint or 'after' it. Reordering always removes the dragged
+// item first, so an insertion index computed against the *original* list
+// has to shift left by one once the removal point is above it.
+export function reorderById(list, draggedId, targetId, idKey, side = 'before') {
+  if (!targetId || targetId === draggedId) return list
+  const fromIndex = list.findIndex((item) => item[idKey] === draggedId)
+  const targetIndex = list.findIndex((item) => item[idKey] === targetId)
+  if (fromIndex < 0 || targetIndex < 0) return list
+  let toIndex = side === 'after' ? targetIndex + 1 : targetIndex
+  if (fromIndex < toIndex) toIndex -= 1
+  if (fromIndex === toIndex) return list
+  const reordered = [...list]
+  const [dragged] = reordered.splice(fromIndex, 1)
+  reordered.splice(toIndex, 0, dragged)
+  return reordered
+}
