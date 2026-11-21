@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import { listCourseCohorts, createCourseCohort, updateCourseCohort, deleteCourseCohort, addCohortSession, updateCohortSession, deleteCohortSession, listCohortTrainers, setCohortTrainers, listOrganisationTrainerCandidates, cohortDisplayName, formatCohortDateRange } from '../../lib/courseCatalogue'
+import { createGoogleMeet, getGoogleConnection, getSessionAttendanceReview, listGoogleMeetDetails, startGoogleMeetConnection, syncGoogleMeetAttendance } from '../../lib/googleMeet'
 
 // Shared by the course-level trainer list (CourseTrainers) and each
 // cohort's own trainer list (inside CohortForm) -- a trainer is always
@@ -62,6 +63,10 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
   const [deletingCohort, setDeletingCohort] = useState(null)
   const [deletingSession, setDeletingSession] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [googleConnection, setGoogleConnection] = useState(null)
+  const [meetings, setMeetings] = useState(new Map())
+  const [meetingBusyId, setMeetingBusyId] = useState(null)
+  const [attendanceReviews, setAttendanceReviews] = useState(new Map())
 
   useEffect(() => {
     load()
@@ -72,9 +77,10 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
     setLoading(true)
     setError(null)
     try {
-      const [cohortRows, candidateRows] = await Promise.all([
+      const [cohortRows, candidateRows, connection] = await Promise.all([
         listCourseCohorts(courseCatalogueId),
         organisationId ? listOrganisationTrainerCandidates(organisationId) : Promise.resolve([]),
+        getGoogleConnection(),
       ])
       // Sessions come back nested from listCourseCohorts' own join;
       // trainers can't (see namesByUserId's comment in courseCatalogue.js),
@@ -82,10 +88,74 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
       const trainersByCohort = await Promise.all(cohortRows.map((c) => listCohortTrainers(c.id)))
       setCohorts(cohortRows.map((c, i) => ({ ...c, trainers: trainersByCohort[i] })))
       setTrainerCandidates(candidateRows)
+      setGoogleConnection(connection)
+      setMeetings(await listGoogleMeetDetails(cohortRows.flatMap((cohort) => cohort.sessions.map((session) => session.id))))
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleConnectGoogle() {
+    setError(null)
+    try {
+      await startGoogleMeetConnection(`${window.location.pathname}${window.location.search}`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleCreateGoogleMeet(sessionId) {
+    setMeetingBusyId(sessionId)
+    setError(null)
+    try {
+      await createGoogleMeet(sessionId)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setMeetingBusyId(null)
+    }
+  }
+
+  async function loadAttendanceReview(sessionId) {
+    const review = await getSessionAttendanceReview(sessionId)
+    setAttendanceReviews((current) => new Map(current).set(sessionId, review))
+  }
+
+  async function handleToggleAttendance(sessionId) {
+    if (attendanceReviews.has(sessionId)) {
+      setAttendanceReviews((current) => {
+        const next = new Map(current)
+        next.delete(sessionId)
+        return next
+      })
+      return
+    }
+    setMeetingBusyId(sessionId)
+    setError(null)
+    try {
+      await loadAttendanceReview(sessionId)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setMeetingBusyId(null)
+    }
+  }
+
+  async function handleSyncAttendance(sessionId) {
+    setMeetingBusyId(sessionId)
+    setError(null)
+    try {
+      await syncGoogleMeetAttendance(sessionId)
+      await loadAttendanceReview(sessionId)
+      const allSessions = cohorts.flatMap((cohort) => cohort.sessions.map((session) => session.id))
+      setMeetings(await listGoogleMeetDetails(allSessions))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setMeetingBusyId(null)
     }
   }
 
@@ -210,6 +280,26 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
         )}
       </div>
 
+      {canManage && (
+        <div className="flex flex-col gap-2 border-y border-hairline py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-ink">Google Meet</p>
+            <p className="text-xs text-secondary">
+              {googleConnection?.status === 'active'
+                ? 'Connected. You can create meetings and import attendance for scheduled sessions.'
+                : googleConnection
+                  ? 'Reconnect the Google account that organises these meetings.'
+                  : 'Connect the Google account that will organise these meetings.'}
+            </p>
+          </div>
+          {googleConnection?.status !== 'active' && (
+            <button type="button" onClick={handleConnectGoogle} className="shrink-0 rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper">
+              {googleConnection ? 'Reconnect Google' : 'Connect Google'}
+            </button>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-700">{error}</p>}
 
       {cohorts.length === 0 ? (
@@ -310,18 +400,40 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
                           />
                         </li>
                       ) : (
-                        <li key={session.id} className="flex items-start justify-between gap-3 text-sm">
-                          <div className="min-w-0">
+                        <li key={session.id} className="border-b border-hairline pb-3 last:border-b-0 last:pb-0">
+                          <div className="flex items-start justify-between gap-3 text-sm">
+                          <div className="min-w-0 flex-1">
                             <p className="text-ink">
                               {session.title ? `${session.title} · ` : ''}
                               {formatSessionDateTime(session.starts_at, session.ends_at)}
                             </p>
-                            {session.location_or_link && (
+                            {meetings.get(session.id) ? (
+                              <a href={meetings.get(session.id).meeting_uri} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-medium text-moss underline decoration-hairline underline-offset-4 hover:decoration-current">
+                                Open Google Meet <span className="sr-only">(opens in a new tab)</span>
+                              </a>
+                            ) : session.location_or_link && (
                               <p className="text-xs text-secondary mt-0.5 break-words">{session.location_or_link}</p>
+                            )}
+                            {canManage && googleConnection?.status === 'active' && !meetings.has(session.id) && !session.ends_at && (
+                              <p className="mt-1 text-xs text-secondary">Add an end time to create a tracked Google Meet.</p>
                             )}
                           </div>
                           {canManage && (
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 shrink-0">
+                              {meetings.get(session.id) ? (
+                                <>
+                                  <button type="button" disabled={meetingBusyId === session.id} onClick={() => handleSyncAttendance(session.id)} className="text-xs text-moss font-medium hover:opacity-80 disabled:opacity-50">
+                                    {meetingBusyId === session.id ? 'Refreshing…' : 'Refresh attendance'}
+                                  </button>
+                                  <button type="button" disabled={meetingBusyId === session.id} onClick={() => handleToggleAttendance(session.id)} className="text-xs text-moss font-medium hover:opacity-80 disabled:opacity-50">
+                                    {attendanceReviews.has(session.id) ? 'Hide attendance' : 'View attendance'}
+                                  </button>
+                                </>
+                              ) : googleConnection?.status === 'active' && session.ends_at ? (
+                                <button type="button" disabled={meetingBusyId === session.id} onClick={() => handleCreateGoogleMeet(session.id)} className="text-xs text-moss font-medium hover:opacity-80 disabled:opacity-50">
+                                  {meetingBusyId === session.id ? 'Creating…' : 'Create Google Meet'}
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => setEditingSessionId(session.id)}
@@ -337,6 +449,10 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
                                 Delete
                               </button>
                             </div>
+                          )}
+                          </div>
+                          {attendanceReviews.has(session.id) && (
+                            <AttendanceReview review={attendanceReviews.get(session.id)} />
                           )}
                         </li>
                       )
@@ -391,6 +507,57 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
           onConfirm={handleDeleteSession}
           onCancel={() => setDeletingSession(null)}
         />
+      )}
+    </div>
+  )
+}
+
+function formatAttendanceDuration(seconds) {
+  const minutes = Math.round(Number(seconds ?? 0) / 60)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const remaining = minutes % 60
+  return remaining ? `${hours} hr ${remaining} min` : `${hours} hr`
+}
+
+function AttendanceReview({ review }) {
+  return (
+    <div className="mt-3 border-t border-hairline pt-3">
+      <h5 className="text-sm font-medium text-ink">Learner attendance</h5>
+      {review.learners.length === 0 ? (
+        <p className="mt-1 text-xs text-secondary">No attendance has been imported yet.</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[32rem] text-left text-sm">
+            <thead>
+              <tr className="border-b border-hairline text-xs text-secondary">
+                <th scope="col" className="py-2 pr-4 font-medium">Learner</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Attendance</th>
+                <th scope="col" className="py-2 pr-4 font-medium">Time present</th>
+                <th scope="col" className="py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {review.learners.map((learner) => (
+                <tr key={learner.user_id} className="border-b border-hairline last:border-b-0">
+                  <td className="py-2 pr-4 text-ink">{learner.name}</td>
+                  <td className="py-2 pr-4 font-mono text-xs tabular-nums text-ink">{Number(learner.attendance_percent).toFixed(1)}%</td>
+                  <td className="py-2 pr-4 text-secondary">{formatAttendanceDuration(learner.attended_seconds)}</td>
+                  <td className="py-2 text-secondary">{learner.calculation_status === 'final' ? 'Final' : 'Provisional'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {review.unresolved.length > 0 && (
+        <div className="mt-3 border-t border-hairline pt-3">
+          <p className="text-xs font-medium text-ink">Needs matching</p>
+          <p className="mt-0.5 text-xs text-secondary">These attendees joined anonymously or by telephone and could not be matched automatically.</p>
+          <ul className="mt-1 text-xs text-secondary">
+            {review.unresolved.map((participant) => <li key={participant.google_participant_name}>{participant.display_name}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   )

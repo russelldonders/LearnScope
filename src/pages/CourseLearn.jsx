@@ -32,6 +32,7 @@ import PageContent from '../components/PageContent'
 import { pageHasScoredTest } from '../lib/pageBuilder'
 import Chevron from '../components/Chevron'
 import { useLanguage } from '../context/LanguageContext'
+import { getGoogleConnection, launchGoogleMeet, listGoogleMeetDetails, listMySessionAttendance, startGoogleMeetConnection, syncGoogleMeetAttendance } from '../lib/googleMeet'
 
 // The fixed back-link labels callers pass in location.state (everything else
 // they pass is a record's own name, shown as-is).
@@ -247,6 +248,12 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
   // (courses.cohort_id, 20260902270000) -- shows that cohort's own schedule
   // so an enrolled learner can see when their live sessions actually are.
   const [cohort, setCohort] = useState(null)
+  const [sessionMeetings, setSessionMeetings] = useState(new Map())
+  const [sessionAttendance, setSessionAttendance] = useState(new Map())
+  const [googleConnection, setGoogleConnection] = useState(null)
+  const [meetingBusyId, setMeetingBusyId] = useState(null)
+  const [meetingError, setMeetingError] = useState(null)
+  const attendanceSyncAttemptedRef = useRef(new Set())
 
   useEffect(() => {
     load()
@@ -297,8 +304,58 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
     }
 
-    setCohort(data.cohort_id ? await getCourseCohort(data.cohort_id) : null)
+    const cohortRow = data.cohort_id ? await getCourseCohort(data.cohort_id) : null
+    setCohort(cohortRow)
+    const sessionIds = cohortRow?.sessions.map((session) => session.id) ?? []
+    if (sessionIds.length > 0) {
+      const [meetingRows, attendanceRows, connection] = await Promise.all([
+        listGoogleMeetDetails(sessionIds),
+        listMySessionAttendance(sessionIds, user.id),
+        getGoogleConnection(),
+      ])
+      setSessionMeetings(meetingRows)
+      setSessionAttendance(attendanceRows)
+      setGoogleConnection(connection)
+    } else {
+      setSessionMeetings(new Map())
+      setSessionAttendance(new Map())
+      setGoogleConnection(null)
+    }
     setLoading(false)
+  }
+
+  useEffect(() => {
+    if (!cohort || sessionMeetings.size === 0) return
+    const dueSessionIds = cohort.sessions
+      .filter((session) => session.ends_at && new Date(session.ends_at) <= new Date() && sessionMeetings.has(session.id))
+      .map((session) => session.id)
+      .filter((sessionId) => !attendanceSyncAttemptedRef.current.has(sessionId))
+    if (dueSessionIds.length === 0) return
+    dueSessionIds.forEach((sessionId) => attendanceSyncAttemptedRef.current.add(sessionId))
+    Promise.allSettled(dueSessionIds.map((sessionId) => syncGoogleMeetAttendance(sessionId)))
+      .then(() => listMySessionAttendance(cohort.sessions.map((session) => session.id), user.id))
+      .then(setSessionAttendance)
+      .catch(() => {})
+  }, [cohort, sessionMeetings, user.id])
+
+  async function handleConnectGoogle() {
+    setMeetingError(null)
+    try {
+      await startGoogleMeetConnection(`${window.location.pathname}${window.location.search}`)
+    } catch (err) {
+      setMeetingError(err.message)
+    }
+  }
+
+  async function handleJoinMeeting(sessionId) {
+    setMeetingBusyId(sessionId)
+    setMeetingError(null)
+    try {
+      await launchGoogleMeet(sessionId)
+    } catch (err) {
+      setMeetingError(err.message)
+      setMeetingBusyId(null)
+    }
   }
 
   // A freeform course (no catalogue link) has no provider/creator, so its
@@ -592,24 +649,53 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
 
         {cohort && (
           <div className="bg-card border border-hairline rounded-lg p-4 mb-6">
-            <p className="text-sm font-medium text-ink">{cohortDisplayName(cohort)}</p>
-            <p className="text-xs text-secondary mt-0.5">
-              {cohort.start_date ? t('courseLearn.startedOn', { date: formatCohortDateTime(cohort.start_date) }) : t('courseLearn.startTbc')}
-            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-ink">{cohortDisplayName(cohort)}</p>
+                <p className="text-xs text-secondary mt-0.5">
+                  {cohort.start_date ? t('courseLearn.startedOn', { date: formatCohortDateTime(cohort.start_date) }) : t('courseLearn.startTbc')}
+                </p>
+              </div>
+              {sessionMeetings.size > 0 && googleConnection?.status !== 'active' && (
+                <button type="button" onClick={handleConnectGoogle} className="shrink-0 text-left text-xs font-medium text-moss underline decoration-hairline underline-offset-4 hover:decoration-current sm:text-right">
+                  {googleConnection ? 'Reconnect Google to match attendance' : 'Connect Google to match attendance'}
+                </button>
+              )}
+            </div>
+            {meetingError && <p role="alert" className="mt-2 text-xs text-red-700">{meetingError}</p>}
             {cohort.sessions.length > 0 ? (
-              <ul className="mt-3 space-y-1.5">
+              <ul className="mt-3 divide-y divide-hairline border-t border-hairline">
                 {cohort.sessions.map((session) => (
-                  <li key={session.id} className="text-sm text-ink">
-                    {new Date(session.starts_at).toLocaleString(undefined, {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                    {session.title ? ` · ${session.title}` : ''}
-                    {session.location_or_link && (
-                      <span className="block text-xs text-secondary mt-0.5 break-words">{session.location_or_link}</span>
+                  <li key={session.id} className="flex flex-col gap-2 py-3 text-sm text-ink sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p>
+                        {new Date(session.starts_at).toLocaleString(undefined, {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                        {session.title ? ` · ${session.title}` : ''}
+                      </p>
+                      {sessionAttendance.has(session.id) && (
+                        <p className="mt-0.5 text-xs text-secondary">
+                          Attendance: <span className="font-mono tabular-nums text-ink">{Number(sessionAttendance.get(session.id).attendance_percent).toFixed(1)}%</span>
+                          {' · '}{sessionAttendance.get(session.id).calculation_status === 'final' ? 'Final' : 'Provisional'}
+                        </p>
+                      )}
+                      {!sessionMeetings.has(session.id) && session.location_or_link && (
+                        /^https?:\/\//i.test(session.location_or_link) ? (
+                          <a href={session.location_or_link} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-words text-xs text-moss underline decoration-hairline underline-offset-4 hover:decoration-current">
+                            Open meeting link <span className="sr-only">(opens in a new tab)</span>
+                          </a>
+                        ) : <span className="block text-xs text-secondary mt-0.5 break-words">{session.location_or_link}</span>
+                      )}
+                    </div>
+                    {sessionMeetings.has(session.id) && (
+                      <button type="button" disabled={meetingBusyId === session.id} onClick={() => handleJoinMeeting(session.id)} className="shrink-0 rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60">
+                        {meetingBusyId === session.id ? 'Opening…' : 'Join Google Meet'}
+                      </button>
                     )}
                   </li>
                 ))}

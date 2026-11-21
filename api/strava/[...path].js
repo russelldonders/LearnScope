@@ -1,10 +1,10 @@
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+import { handleGoogleMeetAction } from '../_lib/googleMeet.js'
 
-// One catch-all file for the whole Strava connector (connect/sync/
-// disconnect) -- same "one file, many routes" shape as api/xapi/[...path].js,
-// needed to stay within Vercel's Hobby 12-function cap (see api/interview.js,
-// which was merged from two files to free this slot).
+// One catch-all function for external connectors. It serves Strava plus
+// Google Meet so adding Meet does not exceed Vercel Hobby's 12-function cap
+// (see vercel.json, which routes both public URL families here).
 //
 // Tokens live only in the external_connections table, which has zero RLS
 // policies granted to authenticated/anon (see the migration) -- every read
@@ -251,6 +251,10 @@ export default async function handler(req, res) {
   const action = path[0]
 
   try {
+    if (action === 'google-meet') {
+      await handleGoogleMeetAction(req, res, user, supabaseAdmin(), path[1])
+      return
+    }
     if (action === 'connect') {
       await handleConnect(req, res, user)
       return
@@ -265,7 +269,11 @@ export default async function handler(req, res) {
     }
     res.status(404).json({ error: 'Not found' })
   } catch (err) {
-    console.error(`strava (${action}) error:`, err)
-    res.status(500).json({ error: 'Strava request failed.' })
+    const connector = action === 'google-meet' ? 'google meet' : 'strava'
+    console.error(`${connector} (${path[1] ?? action}) error:`, err)
+    res.status(err.status >= 400 && err.status < 500 ? err.status : 500).json({
+      error: err.reauthRequired ? 'Reconnect Google to continue.' : err.message || 'External service request failed.',
+      reauthRequired: Boolean(err.reauthRequired),
+    })
   }
 }

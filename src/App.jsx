@@ -40,6 +40,7 @@ const ExperienceDetail = lazyRoute(() => import('./pages/ExperienceDetail'))
 const Profile = lazyRoute(() => import('./pages/Profile'))
 const ProfilePrivacy = lazyRoute(() => import('./pages/ProfilePrivacy'))
 const ConnectedAccounts = lazyRoute(() => import('./pages/ConnectedAccounts'))
+const GoogleMeetCallback = lazyRoute(() => import('./pages/GoogleMeetCallback'))
 const ProfileImport = lazyRoute(() => import('./pages/ProfileImport'))
 const ProfileExport = lazyRoute(() => import('./pages/ProfileExport'))
 const Help = lazyRoute(() => import('./pages/Help'))
@@ -110,6 +111,14 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/google-meet/callback"
+            element={
+              <ProtectedRoute>
+                <GoogleMeetCallback />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
           <Route path="/recommend/:code" element={<Recommend />} />

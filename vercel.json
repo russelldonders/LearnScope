@@ -90,6 +90,7 @@
     },
     { "src": "/api/xapi/(.*)", "dest": "/api/xapi/[...path]?path=$1" },
     { "src": "/api/strava/(.*)", "dest": "/api/strava/[...path]?path=$1" },
+    { "src": "/api/google-meet/(.*)", "dest": "/api/strava/[...path]?path=google-meet/$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

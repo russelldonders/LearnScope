@@ -55,7 +55,7 @@ export function WorkspaceAnnouncement({ settings }) {
   return (
     <aside
       aria-labelledby="workspace-announcement-heading"
-      className="mb-8 rounded-lg border border-[var(--org-primary,var(--color-moss))] border-l-4 bg-card px-4 py-3"
+      className="mb-8 rounded-lg border border-hairline bg-card px-4 py-3"
     >
       <h2 id="workspace-announcement-heading" className="text-xs font-medium uppercase tracking-[0.12em] text-secondary">
         {t('employerHome.announcement')}
