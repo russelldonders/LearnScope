@@ -13,6 +13,7 @@ import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
 import SkillGoalModal from '../components/SkillGoalModal'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listActiveGoalsForAttention } from '../lib/skillGoals'
+import { settledValue } from '../lib/settledValue'
 import { todayDateString } from '../lib/checkin'
 
 // Drives the "add your current role" banner, dismissible on its own. (The
@@ -30,10 +31,6 @@ async function countRows(table, userId, narrow = (query) => query) {
       .eq('user_id', userId),
   )
   return count ?? 0
-}
-
-export function dashboardResultValue(results, index, fallback) {
-  return results[index].status === 'fulfilled' ? results[index].value : fallback
 }
 
 // Home: logging what you did and your goals. Where to take each skill next
@@ -98,7 +95,7 @@ export default function Dashboard() {
       loadCurrentRoleBannerState(),
       listActiveGoalsForAttention(user.id),
     ])
-    const valueOr = (index, fallback) => dashboardResultValue(results, index, fallback)
+    const valueOr = (index, fallback) => settledValue(results, index, fallback)
     setCounts({ skills: valueOr(0, 0), courses: valueOr(1, 0), experience: valueOr(2, 0), connections: valueOr(3, 0) })
     setBannerState(valueOr(4, null))
     showGoals(valueOr(5, []))

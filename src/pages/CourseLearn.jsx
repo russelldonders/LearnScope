@@ -32,15 +32,12 @@ import PageContent from '../components/PageContent'
 import { pageHasScoredTest } from '../lib/pageBuilder'
 import Chevron from '../components/Chevron'
 import { useLanguage } from '../context/LanguageContext'
+import { isContentComplete } from '../lib/contentProgress'
 import { getGoogleConnection, launchGoogleMeet, listGoogleMeetDetails, listMySessionAttendance, startGoogleMeetConnection, syncGoogleMeetAttendance } from '../lib/googleMeet'
 
 // The fixed back-link labels callers pass in location.state (everything else
 // they pass is a record's own name, shown as-is).
 const BACK_LABEL_KEYS = { Dashboard: 'dashboard', Learning: 'learning', Training: 'training' }
-
-export function isContentComplete(status) {
-  return status === 'completed' || status === 'passed' || status === 'failed'
-}
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting

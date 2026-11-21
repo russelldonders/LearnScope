@@ -13,7 +13,7 @@ const SHOWN_SKILLS = 3
 // independently privacy-checked server-side and shouldn't need extra trust.
 // Level labels stay English, as everywhere else they're shown. Read out to
 // screen readers in place of the visual layout below.
-export function describeActivityEvent(event, t) {
+function describeActivityEvent(event, t) {
   const level = event.level ? LEVEL_LABELS[event.level] : null
   const additionalSkills = (event.skills?.length ?? 1) - 1
   const skill = additionalSkills > 0

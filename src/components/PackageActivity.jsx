@@ -6,7 +6,7 @@ import { PackageSessions } from './ActivityTimeline'
 
 // A package's verb in words: its own display text, else the end of its IRI
 // ("…/verbs/passed" -> "Passed").
-export function packageVerbText(statement) {
+function packageVerbText(statement) {
   const display = statement?.verb?.display
   const shown = display && (display['en-US'] ?? display['en-GB'] ?? display.en ?? Object.values(display)[0])
   if (typeof shown === 'string' && shown.trim()) return shown.trim()
@@ -16,7 +16,7 @@ export function packageVerbText(statement) {
 
 // What it was about: the object's own name, else the package itself when it
 // was the package launched, else nothing.
-export function packageObjectText(statement, resource) {
+function packageObjectText(statement, resource) {
   const names = statement?.object?.definition?.name
   const named = names && (names['en-US'] ?? names['en-GB'] ?? names.en ?? Object.values(names)[0])
   if (typeof named === 'string' && named.trim()) return named.trim()

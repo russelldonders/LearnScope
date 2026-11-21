@@ -18,6 +18,7 @@ import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { saveActivity } from '../lib/activitySkillLinks'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
+import { settledValue } from '../lib/settledValue'
 import { formatRelativeDate, formatAbsoluteDate, formatFullDate } from '../lib/dates'
 
 // How far ahead a due date has to be before it's worth interrupting the
@@ -208,10 +209,6 @@ async function loadUpNextRecommendations(userId) {
   return recommendations
 }
 
-function settled(results, index, fallback) {
-  return results[index].status === 'fulfilled' ? results[index].value : fallback
-}
-
 // The top of the Skills page: one recommended next step and the latest
 // progress, with any earlier progress one tap away. What needs attention and
 // other useful next steps across skills are on Home (NeedsYourAttention and
@@ -227,8 +224,8 @@ export default function SkillsMomentum() {
     let active = true
     Promise.allSettled([loadRecentGrowth(user.id), loadUpNextRecommendations(user.id)]).then((results) => {
       if (!active) return
-      setRecentGrowth(settled(results, 0, []))
-      setUpNext(settled(results, 1, []))
+      setRecentGrowth(settledValue(results, 0, []))
+      setUpNext(settledValue(results, 1, []))
       setLoading(false)
     })
     return () => {
@@ -820,7 +817,7 @@ export function NeedsYourAttention({ onLogGoal = null }) {
       loadPendingReviewTasks(user.id),
     ]).then((results) => {
       if (!active) return
-      const [selfAssessments, targets, goals, reviews] = [0, 1, 2, 3].map((i) => settled(results, i, []))
+      const [selfAssessments, targets, goals, reviews] = [0, 1, 2, 3].map((i) => settledValue(results, i, []))
       const today = todayDateString()
       const dueItems = [
         ...selfAssessments.map((skill) => ({

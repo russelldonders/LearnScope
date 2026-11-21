@@ -12,7 +12,8 @@ vi.mock('../context/LanguageContext', () => import('../test/languageMock'))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../lib/device', () => ({ useIsDesktop: () => true }))
 
-import CourseLearn, { CourseItemPlayer, isContentComplete } from './CourseLearn'
+import CourseLearn, { CourseItemPlayer } from './CourseLearn'
+import { isContentComplete } from '../lib/contentProgress'
 
 afterEach(cleanup)
 

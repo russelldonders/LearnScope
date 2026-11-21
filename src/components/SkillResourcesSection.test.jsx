@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatFullDate } from '../lib/dates'
 
 const lib = vi.hoisted(() => ({
   listMyResources: vi.fn(),
