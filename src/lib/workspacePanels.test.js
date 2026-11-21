@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { belongsToOrganisation, listOrganisationGoals, shapeOrganisationGoals, shapeOrganisationSkills } from './workspacePanels'
 import { supabase } from './supabaseClient'
 
-vi.mock('./supabaseClient', () => ({ supabase: { from: vi.fn() } }))
+vi.mock('./supabaseClient', () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } }))
 
-const ORG = 'org-1'
+const ORG = '11111111-1111-4111-8111-111111111111'
+const TEAM = '22222222-2222-4222-8222-222222222222'
 const SKILLS = [
   { id: 'skill-a', name: 'Data analysis', level: 3, library_skill_id: 'lib-a' },
   { id: 'skill-b', name: 'Giving feedback', level: 2, library_skill_id: 'lib-b' },
@@ -23,7 +24,9 @@ describe('belongsToOrganisation', () => {
   it('only counts rows set in this organisation’s own context', () => {
     expect(belongsToOrganisation(goal({}), ORG)).toBe(true)
     expect(belongsToOrganisation(goal({ employer_id: 'org-2' }), ORG)).toBe(false)
-    expect(belongsToOrganisation(goal({ context_type: 'team', employer_id: null }), ORG)).toBe(false)
+    expect(belongsToOrganisation(goal({ context_type: 'team', employer_id: null, team_id: TEAM }), ORG)).toBe(false)
+    expect(belongsToOrganisation(goal({ context_type: 'team', employer_id: null, team_id: TEAM }), ORG, new Set([TEAM]))).toBe(true)
+    expect(belongsToOrganisation(goal({ context_type: 'team', employer_id: null, team_id: 'other' }), ORG, new Set([TEAM]))).toBe(false)
     expect(belongsToOrganisation(goal({}), null)).toBe(false)
   })
 })
@@ -86,15 +89,18 @@ describe('listOrganisationGoals', () => {
       const chain = {
         select: () => chain,
         eq: (column, value) => { calls.push([column, value]); return chain },
+        or: (value) => { calls.push(['or', value]); return chain },
         in: () => chain,
-        or: () => chain,
         then: (resolve) => resolve(result),
       }
       return chain
     }
+    supabase.rpc.mockResolvedValue({ data: [TEAM], error: null })
     supabase.from.mockImplementation((table) => query(table === 'skills' ? { data: SKILLS, error: null } : { data: [goal({})], error: null }))
     const goals = await listOrganisationGoals('user-1', ORG, { limit: 5 })
     expect(goals).toHaveLength(1)
-    expect(calls).toEqual(expect.arrayContaining([['learner_id', 'user-1'], ['employer_id', ORG], ['user_id', 'user-1']]))
+    expect(supabase.rpc).toHaveBeenCalledWith('list_my_organisation_skill_teams', { p_organisation_id: ORG })
+    expect(calls).toContainEqual(['or', `employer_id.eq.${ORG},team_id.in.(${TEAM})`])
+    expect(calls).toEqual(expect.arrayContaining([['learner_id', 'user-1'], ['user_id', 'user-1']]))
   })
 })
