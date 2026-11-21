@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(29);
+select plan(35);
 
 -- a: admin of Org One   m: member who is assigned   n: member, not assigned
 -- o: outsider           x: admin of Org Two
@@ -43,8 +43,8 @@ grant select on public.learner_plan_assignments, public.learner_plan_item_links 
 select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000b', true);
 set local role authenticated;
 select throws_ok(
-  $$insert into public.learner_plans (id, user_id, organisation_id, title)
-    values ('83000000-0000-0000-0000-0000000000e0', '83000000-0000-0000-0000-00000000000b', '83000000-0000-0000-0000-000000000010', 'Not allowed')$$,
+  $$insert into public.learner_plans (id, organisation_id, title)
+    values ('83000000-0000-0000-0000-0000000000e0', '83000000-0000-0000-0000-000000000010', 'Not allowed')$$,
   '42501', null, 'a member cannot create an organisation plan'
 );
 reset role;
@@ -52,8 +52,8 @@ reset role;
 -- The admin makes one, and isn't put on it as a person.
 select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000a', true);
 set local role authenticated;
-insert into public.learner_plans (id, user_id, organisation_id, title, description)
-values ('83000000-0000-0000-0000-0000000000e1', '83000000-0000-0000-0000-00000000000a', '83000000-0000-0000-0000-000000000010', 'New manager plan', 'Your first 90 days');
+insert into public.learner_plans (id, organisation_id, title, description)
+values ('83000000-0000-0000-0000-0000000000e1', '83000000-0000-0000-0000-000000000010', 'New manager plan', 'Your first 90 days');
 select is((select count(*)::integer from public.learner_plan_members where plan_id = '83000000-0000-0000-0000-0000000000e1'), 0,
   'the creating admin is not a member of the organisation plan');
 select is((select count(*)::integer from public.learner_plans where id = '83000000-0000-0000-0000-0000000000e1'), 1,
@@ -175,6 +175,24 @@ select is((select jsonb_array_length(progress_items) from public.list_organisati
   where user_id = '83000000-0000-0000-0000-00000000000b'), 2, 'and each step''s status, ignoring unknown statuses');
 reset role;
 
+-- Nobody can be made an owner of an organisation plan, and admins read
+-- progress only through the organisation's own view.
+select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000a', true);
+set local role authenticated;
+select throws_ok(
+  $$select public.set_learner_plan_member_role('83000000-0000-0000-0000-0000000000e1', '83000000-0000-0000-0000-00000000000b', 'owner')$$,
+  '23514', null, 'a member cannot be made an owner of an organisation plan'
+);
+select is((select count(*)::integer from public.learner_plan_members where plan_id = '83000000-0000-0000-0000-0000000000e1'), 0,
+  'admins cannot read members'' rows directly');
+select throws_ok(
+  $$select * from public.list_learner_plan_members('83000000-0000-0000-0000-0000000000e1')$$,
+  '42501', null, 'the personal-plan members list refuses an organisation plan'
+);
+reset role;
+select is((select array[user_id::text, created_by::text] from public.learner_plans where id = '83000000-0000-0000-0000-0000000000e1'),
+  array[null, '83000000-0000-0000-0000-00000000000a'], 'an organisation plan has no personal owner, and records who made it');
+
 -- Once the member leaves the organisation, their progress is no longer shown.
 delete from public.employer_members
 where employer_id = '83000000-0000-0000-0000-000000000010' and user_id = '83000000-0000-0000-0000-00000000000b';
@@ -183,6 +201,17 @@ set local role authenticated;
 select is((select progress_done from public.list_organisation_learner_plan_progress('83000000-0000-0000-0000-0000000000e1')
   where user_id = '83000000-0000-0000-0000-00000000000b'), null::integer, 'a former member''s progress is hidden');
 reset role;
+select is((select progress_items from public.learner_plan_members
+  where plan_id = '83000000-0000-0000-0000-0000000000e1' and user_id = '83000000-0000-0000-0000-00000000000b'), null::jsonb,
+  'leaving the organisation clears their recorded progress');
+select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000b', true);
+set local role authenticated;
+select public.record_learner_plan_progress(jsonb_build_array(jsonb_build_object(
+  'plan_id', '83000000-0000-0000-0000-0000000000e1', 'done', 2, 'total', 3)));
+reset role;
+select is((select progress_done from public.learner_plan_members
+  where plan_id = '83000000-0000-0000-0000-0000000000e1' and user_id = '83000000-0000-0000-0000-00000000000b'), null::integer,
+  'and a former member''s browser no longer records it');
 
 -- Personal plans still work as before.
 select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000c', true);
