@@ -3,34 +3,21 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useLanguage } from '../context/LanguageContext'
-import { listMyPlanAssignments } from '../lib/organisationPlans'
 import AppHeader from '../components/AppHeader'
-import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings, markPeerRatingsSeen, getProfiles } from '../lib/connections'
-import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
-import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
-import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
-import { listMyPendingEmployerInvites, decideEmployerInvite, listMyPendingDataAccessRequests, decideEmployerDataAccessRequest } from '../lib/admin/employers'
-import {
-  listMyCourseAssignments,
-  respondToCourseAssignment,
-  listCourseCohorts,
-  respondToCourseAssignmentWithCohort,
-} from '../lib/courseCatalogue'
-import { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion } from '../lib/managerSkillActions'
-import { supabase } from '../lib/supabaseClient'
+import { respondToConnectionRequest } from '../lib/skillDiscovery'
+import { decideOrgInvite } from '../lib/organisationInvites'
+import { decideEmployerInvite, decideEmployerDataAccessRequest } from '../lib/admin/employers'
+import { respondToCourseAssignment, listCourseCohorts, respondToCourseAssignmentWithCohort } from '../lib/courseCatalogue'
+import { adoptManagerSkillSuggestion, dismissManagerSkillSuggestion } from '../lib/managerSkillActions'
 import EmployerDataAccessConsentDialog from '../components/EmployerDataAccessConsentDialog'
 import CohortPickerModal from '../components/CohortPickerModal'
-import {
-  decideManagerTeamInvite,
-  listMyManagerTeamInvites,
-} from '../lib/managerTeams'
-import { loadActionSources } from '../lib/actionLoading'
-import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
-import { listIncomingPlanInvitations, respondToPlanInvitation } from '../lib/learnerPlans'
+import { decideManagerTeamInvite } from '../lib/managerTeams'
+import { respondToPlanInvitation } from '../lib/learnerPlans'
 import { PlanInvitationsSection, ConnectionRequestsSection, SkillAccessRequestsSection, ProviderInvitationsSection, EmployerInvitationsSection, ManagerTeamInvitationsSection } from './actions/ActionInvitationSections'
 import { RateInvitesSection, RecommendInvitesSection, ValidationRequestsSection, RatingsReceivedSection } from './actions/ActionLinkSections'
 import { DataAccessRequestsSection, AssignedTrainingSection, AssignedPlansSection } from './actions/ActionAssignmentSections'
 import SkillSuggestionsSection from './actions/SkillSuggestionsSection'
+import { useActionsData } from './useActionsData'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -47,30 +34,45 @@ export default function Actions() {
   const { t } = useLanguage()
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
-  const [workspaceContext, setWorkspaceContext] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [incomingRateInvites, setIncomingRateInvites] = useState([])
-  const [incomingRecommendInvites, setIncomingRecommendInvites] = useState([])
-  const [unseenRatings, setUnseenRatings] = useState([])
-  const [validationRequests, setValidationRequests] = useState([])
-  const [incomingRequests, setIncomingRequests] = useState([])
-  const [orgInvites, setOrgInvites] = useState([])
+  const {
+    workspaceContext,
+    loading,
+    error,
+    incomingRateInvites,
+    incomingRecommendInvites,
+    unseenRatings,
+    validationRequests,
+    incomingRequests,
+    setIncomingRequests,
+    orgInvites,
+    setOrgInvites,
+    employerInvites,
+    setEmployerInvites,
+    managerTeamInvites,
+    setManagerTeamInvites,
+    dataAccessRequests,
+    setDataAccessRequests,
+    mySkills,
+    courseAssignments,
+    setCourseAssignments,
+    planAssignments,
+    setPlanAssignments,
+    skillSuggestions,
+    setSkillSuggestions,
+    profiles,
+    planInvites,
+    setPlanInvites,
+    load,
+  } = useActionsData(user, employerMemberships, orgSlug, refreshPendingActionCount)
   const [orgInviteDecidingId, setOrgInviteDecidingId] = useState(null)
   const [orgInviteError, setOrgInviteError] = useState(null)
-  const [employerInvites, setEmployerInvites] = useState([])
   const [employerInviteDecidingId, setEmployerInviteDecidingId] = useState(null)
   const [employerInviteError, setEmployerInviteError] = useState(null)
-  const [managerTeamInvites, setManagerTeamInvites] = useState([])
   const [managerInviteDecidingId, setManagerInviteDecidingId] = useState(null)
   const [managerInviteError, setManagerInviteError] = useState(null)
-  const [dataAccessRequests, setDataAccessRequests] = useState([])
   const [dataAccessDecidingId, setDataAccessDecidingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
   const [acceptingDataAccessRequest, setAcceptingDataAccessRequest] = useState(null)
-  const [mySkills, setMySkills] = useState([])
-  const [courseAssignments, setCourseAssignments] = useState([])
-  const [planAssignments, setPlanAssignments] = useState([])
   const [assignmentActingId, setAssignmentActingId] = useState(null)
   const [assignmentError, setAssignmentError] = useState(null)
   // Set once an assigned course with at least one cohort is about to be
@@ -79,15 +81,12 @@ export default function Actions() {
   const [cohortPicker, setCohortPicker] = useState(null)
   const [cohortEnrolling, setCohortEnrolling] = useState(false)
   const [cohortError, setCohortError] = useState(null)
-  const [skillSuggestions, setSkillSuggestions] = useState([])
   const [adoptingSuggestion, setAdoptingSuggestion] = useState(null)
   const [adoptForm, setAdoptForm] = useState({ setTarget: false, targetLevel: 3, targetDate: '', comments: '' })
   const [suggestionActingId, setSuggestionActingId] = useState(null)
   const [suggestionError, setSuggestionError] = useState(null)
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
-  const [profiles, setProfiles] = useState({})
-  const [planInvites, setPlanInvites] = useState([])
   const [planInviteDecidingId, setPlanInviteDecidingId] = useState(null)
   const [planInviteError, setPlanInviteError] = useState(null)
   const [acceptedPlan, setAcceptedPlan] = useState(null)
@@ -97,114 +96,6 @@ export default function Actions() {
     document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
   }, [loading, location.hash])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!orgSlug || employerMemberships === null) {
-      setWorkspaceContext(null)
-      return () => { cancelled = true }
-    }
-
-    getEmployerLoginContext(orgSlug).then((employer) => {
-      if (cancelled) return
-      const isMember = employer && employerMemberships.some((membership) => membership.employer_id === employer.id)
-      setWorkspaceContext(isMember ? { employer, branding: employer.branding ?? null } : null)
-    }).catch(() => {
-      if (!cancelled) setWorkspaceContext(null)
-    })
-
-    return () => { cancelled = true }
-  }, [employerMemberships, orgSlug])
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const { values, failures } = await loadActionSources([
-        { key: 'rateInvites', label: 'rating invitations', fallback: [], load: listIncomingRateInvites },
-        { key: 'recommendInvites', label: 'skill recommendations', fallback: [], load: listIncomingRecommendInvites },
-        { key: 'unseenRatings', label: 'ratings received', fallback: [], load: () => listUnseenPeerRatings(user.id) },
-        { key: 'validationRequests', label: 'validation requests', fallback: [], load: () => listIncomingPendingValidationRequests(user.id) },
-        { key: 'connectionRequests', label: 'connection requests', fallback: [], load: () => listIncomingConnectionRequests(user.id) },
-        { key: 'organisationInvites', label: 'organisation invitations', fallback: [], load: () => listMyPendingOrgInvites(user.id) },
-        { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(user.id) },
-        { key: 'managerInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
-        { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
-        { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
-        { key: 'planAssignments', label: 'assigned plans', fallback: [], load: async () => (await listMyPlanAssignments()).filter((a) => a.status === 'assigned') },
-        { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(user.id) },
-        { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },
-        {
-          key: 'skills',
-          label: 'skills available to share',
-          fallback: [],
-          load: async () => {
-            const { data, error: skillsError } = await supabase
-              .from('skills')
-              .select('id, name, library_skill_id')
-              .eq('user_id', user.id)
-              .order('name', { ascending: true })
-            if (skillsError) throw skillsError
-            return data ?? []
-          },
-        },
-      ])
-      const incomingRateInvitesData = values.rateInvites
-      const incomingRecommendInvitesData = values.recommendInvites
-      const validationRequestsData = values.validationRequests
-      const incomingRequestsData = values.connectionRequests
-      const orgInvitesData = values.organisationInvites
-      const employerInvitesData = values.employerInvites
-      const managerTeamInvitesData = values.managerInvites
-      const dataAccessRequestsData = values.dataAccessRequests
-      const courseAssignmentsData = values.courseAssignments
-      // Suggestions from an organisation and from a team leader arrive as one
-      // list (manager_skill_suggestions), already newest first and labelled
-      // with where each came from.
-      const skillSuggestionsData = values.skillSuggestions
-      setIncomingRateInvites(incomingRateInvitesData)
-      setIncomingRecommendInvites(incomingRecommendInvitesData)
-      setValidationRequests(validationRequestsData)
-      setIncomingRequests(incomingRequestsData)
-      setOrgInvites(orgInvitesData)
-      setEmployerInvites(employerInvitesData)
-      setManagerTeamInvites(managerTeamInvitesData)
-      setDataAccessRequests(dataAccessRequestsData)
-      setCourseAssignments(courseAssignmentsData)
-      setPlanAssignments(values.planAssignments)
-      setSkillSuggestions(skillSuggestionsData)
-      setMySkills(values.skills)
-      setUnseenRatings(values.unseenRatings)
-      setPlanInvites(values.planInvites)
-      if (failures.length > 0) {
-        setError(`Some actions could not be loaded (${failures.map(({ label }) => label).join(', ')}). Other actions are shown below.`)
-      }
-      // Seeing them here is what clears the bell -- best-effort, since a
-      // failure to mark seen just means the badge count stays put, not that
-      // anything is lost (the ratings themselves stay visible either way).
-      if (values.unseenRatings.length > 0) {
-        markPeerRatingsSeen()
-          .then(refreshPendingActionCount)
-          .catch(() => {})
-      }
-      const requesterIds = validationRequestsData.map((r) => r.requester_id)
-      const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
-      try {
-        setProfiles(await getProfiles([...requesterIds, ...requestSenderIds]))
-      } catch {
-        setProfiles({})
-        setError((current) => current ?? 'Some profile names could not be loaded. Other actions are shown below.')
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   async function handleOrgInviteResponse(memberId, accept) {
     setOrgInviteError(null)
