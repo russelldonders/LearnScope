@@ -8,24 +8,8 @@ import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import BackLink from '../components/BackLink'
 import GrowthRing from '../components/GrowthRing'
-import SkillNetworkSection, { RatingsFromOthers } from '../components/SkillNetworkSection'
-import SkillLearningSection from '../components/SkillLearningSection'
-import SkillResourcesSection from '../components/SkillResourcesSection'
-import ConfirmDialog from '../components/ConfirmDialog'
-import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
-import { computeGoalProgress } from '../lib/skillGoalProgress'
-import {
-  cancelCourse,
-  enrolInCatalogueCourse,
-  enrolInCourseCohort,
-  listCourseCohorts,
-  planCatalogueCourse,
-  removePlannedCourse,
-} from '../lib/courseCatalogue'
-import CohortPickerModal from '../components/CohortPickerModal'
-import CourseOverlay from '../components/CourseOverlay'
-import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
+import { enrolInCatalogueCourse, enrolInCourseCohort, listCourseCohorts, removePlannedCourse } from '../lib/courseCatalogue'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { isDiagnosticStatement, isPeerRatingStatement, packageSessionFromStatement } from '../lib/xapiStatement'
@@ -33,30 +17,19 @@ import { saveActivity } from '../lib/activitySkillLinks'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
-import InviteRaterModal from '../components/InviteRaterModal'
-import RecommendSkillModal from '../components/RecommendSkillModal'
-import RecordActivityModal from '../components/RecordActivityModal'
-import AssessBaselineModal from '../components/AssessBaselineModal'
-import SetTargetModal from '../components/SetTargetModal'
-import ValidateSkillModal from '../components/ValidateSkillModal'
-import RequestValidationModal from '../components/RequestValidationModal'
-import ConfirmingBaselineQuizModal from '../components/ConfirmingBaselineQuizModal'
-import InterviewModal from '../components/InterviewModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { computeTrustStatus, isPersonValidated, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
-import CompositeSkillProgress from '../components/CompositeSkillProgress'
-import SkillGoalsSection from '../components/SkillGoalsSection'
-import { HistorySection, TimelineDetailModal } from './SkillHistorySection'
+import { HistorySection } from './SkillHistorySection'
 import { useSkillDetailData, useSkillRelatedData } from './useSkillDetailData'
-import { LevelDetail, NestedSkillPanel, SkillPanel } from './SkillDetailPanels'
-import { ActivitiesModal, SelfAssessModal } from './SkillDetailModals'
-import ActivityTimeline from '../components/ActivityTimeline'
+import SkillKnowledgeTab from './SkillKnowledgeTab'
+import SkillApplicationTab from './SkillApplicationTab'
+import SkillNetworkTab from './SkillNetworkTab'
+import SkillDetailDialogs from './SkillDetailDialogs'
 import { timelineRows } from '../lib/activityTimeline'
 
 const DEMONSTRATE_TIMELINE_LENGTH = 5
-import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
 // Knowing about the skill (level, quizzes, learning), doing it (level,
 // activities, ratings, goals), who else has it, and everything that's
@@ -645,507 +618,153 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
 
             {tab === 'knowledge' && (
-            <div id="skill-detail-panel-knowledge" role="tabpanel" aria-labelledby="skill-detail-tab-knowledge">
-            <div className="mt-4 pt-4 border-t border-hairline">
-              <SkillPanel
-                title={t('skillDetail.knowledge')}
-                accent="slate"
-                status={
-                  <LevelDetail
-                    skill={skill}
-                    axis="knowledge"
-                    level={displayedKnowledgeLevel}
-                    trustStatus={knowledgeVerification}
-                    trustLabel={knowledgeVerification ?? t('skillDetail.knowledgeFoundation')}
-                    milestoneLevel={knowledgeMilestone}
-                    onSelfAssess={() => setSelfAssessKnowledgeOpen(true)}
-                    onAssess={() => setConfirmingBaselineOpen(true)}
-                    onInterview={() => setInterviewOpen(true)}
-                    onGuideGenerated={(statements) =>
-                      setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
-                    }
-                  />
-                }
-                actions={[]}
-              />
-            </div>
-
-            {learningError && <p role="alert" className="text-sm text-red-700 mt-3">{learningError}</p>}
-            <SkillLearningSection
-              courseLinks={courseLinks}
-              availableCourses={availableCourses}
-              progressByCatalogueId={progressByCatalogueId}
-              enrollingId={enrollingCourseId}
-              onOpenCourse={skill.user_id === user.id ? setOpenCourse : null}
-              onEnrol={skill.user_id === user.id ? (course) => handleEnrol(course, course.id) : null}
-              onPlan={skill.user_id === user.id ? (course) => runLearningAction(() => planCatalogueCourse(user.id, course, skill.id)) : null}
-              onRemovePlanned={skill.user_id === user.id ? (course) => runLearningAction(() => removePlannedCourse(course.id)) : null}
-              onEnrolPlanned={skill.user_id === user.id
-                ? (course) => (course.catalogue_course_id
-                  ? handleEnrol(
-                    { id: course.catalogue_course_id, name: course.name, provider: course.provider, course_type: course.course_type, duration: course.duration },
-                    course.id,
-                    course,
-                  )
-                  // Not from the catalogue: enrol through Training as before.
-                  : navigate('/training', { state: trainingScopeState }))
-                : null}
-              onCancel={skill.user_id === user.id ? (course) => setCancellingCourse(course) : null}
-              onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
-              onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
-            />
-            {skill.user_id === user.id && (
-              <SkillResourcesSection
-                onActivityChange={loadHistory}
+              <SkillKnowledgeTab
+                availableCourses={availableCourses}
+                courseLinks={courseLinks}
+                displayedKnowledgeLevel={displayedKnowledgeLevel}
+                displayedPracticalLevel={displayedPracticalLevel}
+                enrollingCourseId={enrollingCourseId}
+                handleEnrol={handleEnrol}
+                knowledgeMilestone={knowledgeMilestone}
+                knowledgeVerification={knowledgeVerification}
+                learningError={learningError}
+                loadHistory={loadHistory}
+                progressByCatalogueId={progressByCatalogueId}
+                runLearningAction={runLearningAction}
+                setCancellingCourse={setCancellingCourse}
+                setConfirmingBaselineOpen={setConfirmingBaselineOpen}
+                setInterviewOpen={setInterviewOpen}
+                setOpenCourse={setOpenCourse}
+                setSelfAssessKnowledgeOpen={setSelfAssessKnowledgeOpen}
+                setSkill={setSkill}
                 skill={skill}
-                user={user}
-                knowledgeLevel={displayedKnowledgeLevel}
-                practicalLevel={displayedPracticalLevel}
+                trainingScopeState={trainingScopeState}
               />
-            )}
-            </div>
             )}
 
             {tab === 'application' && (
-            <div id="skill-detail-panel-application" role="tabpanel" aria-labelledby="skill-detail-tab-application">
-            <div className="mt-4 pt-4 border-t border-hairline">
-              <SkillPanel
-                title={t('skillDetail.application')}
-                status={
-                  <LevelDetail
-                    skill={skill}
-                    axis="practical"
-                    level={displayedPracticalLevel}
-                    trustStatus={practicalVerification}
-                    trustLabel={practicalVerification ?? t('skillDetail.practicalFoundation')}
-                    ringTargetLevel={visibleTarget?.level}
-                    currentTarget={currentTarget}
-                    onSelfAssess={() => setSelfAssessOpen(true)}
-                    onSetTarget={() => setTargetOpen(true)}
-                    onAskToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
-                    onGuideGenerated={(statements) =>
-                      setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
-                    }
-                  />
-                }
-                actions={[]}
-                nested={
-                  <div className="space-y-3">
-                    <NestedSkillPanel
-                      title={t('skillDetail.stages.demonstrate')}
-                      status={
-                        // The latest activities right here, drawn as the
-                        // dashboard's timeline; the rest are one tap away.
-                        <div>
-                          <p className="text-sm text-secondary">
-                            {practicalStatements.length} {practicalStatements.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
-                            {relationshipLinks.length > 0
-                              ? ` · ${t('skillDetail.linkedToPrefix')} ${relationshipLinks.length} ${relationshipLinks.length === 1 ? t('skillDetail.experienceEntrySingular') : t('skillDetail.experienceEntryPlural')}`
-                              : ''}
-                          </p>
-                          {demonstrateRows.length > 0 && (
-                            <div className="mt-3">
-                              <ActivityTimeline
-                                rows={demonstrateRows}
-                                allRows={practicalStatements}
-                                onOpen={(row) => setSelectedActivityEvent({ type: 'activity', statement: row })}
-                              />
-                            </div>
-                          )}
-                          {practicalStatements.length > demonstrateRows.length && (
-                            <button
-                              type="button"
-                              onClick={() => setActivitiesListOpen(true)}
-                              className="mt-3 text-sm text-moss font-medium hover:underline"
-                            >
-                              {t('activity.timeline.seeAll', { total: practicalStatements.length })}
-                            </button>
-                          )}
-                        </div>
-                      }
-                      actions={[
-                        { label: t('skillDetail.logSkillActivity'), onClick: () => setQuickLogOpen(true) },
-                        ...(canShowDemonstrateAction
-                          ? [{ label: t('skillDetail.demonstrateSkillAction'), onClick: handleDemonstrateSkill }]
-                          : []),
-                        ...(canShowValidateAction
-                          ? [{ label: t('skillDetail.moveToValidating'), onClick: handleValidateSkillStage }]
-                          : []),
-                      ]}
-                    />
-                    <NestedSkillPanel
-                      title={t('skillDetail.stages.validate')}
-                      status={
-                        <div className="space-y-3">
-                        <p className="text-sm text-secondary">
-                          {peerRatings.length > 0
-                            ? `${peerRatings.length} ${peerRatings.length === 1 ? t('skillDetail.peerRatingSingular') : t('skillDetail.peerRatingPlural')}`
-                            : t('skillDetail.noPeerRatingsYet')}
-                          {pendingValidationRequestsCount > 0
-                            ? ` · ${pendingValidationRequestsCount} ${pendingValidationRequestsCount === 1 ? t('skillDetail.requestPendingSingular') : t('skillDetail.requestPendingPlural')}`
-                            : ''}
-                          {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} ${t('skillDetail.decidedSuffix')}` : ''}
-                        </p>
-                        {/* Who has rated you and who you're waiting on -- the
-                            learner's own invites and ratings, so only on their
-                            own skill. */}
-                        {skill.user_id === user.id && (
-                          <RatingsFromOthers
-                            ratings={peerRatings}
-                            raterAvatars={raterAvatars}
-                            rateInvites={invites}
-                            knownPeople={knownPeople}
-                          />
-                        )}
-                        </div>
-                      }
-                      actions={[
-                        // Ratings are what Validate is about, so asking for one
-                        // is here too (as well as in Skill network and beside
-                        // the level). Only on the learner's own skill.
-                        ...(skill.user_id === user.id
-                          ? [{ label: t('skillDetail.askToRateAbility'), onClick: () => setInviteOpen(true) }]
-                          : []),
-                        // "✨ Request AI assessment" now lives in the header next
-                        // to the skill name -- see the button beside setSettingsOpen
-                        // above, which shares this exact same onClick/disabled logic.
-                        ...(targets.length > 0
-                          ? [{ label: t('skillDetail.requestValidationAction'), onClick: () => setExpertValidationOpen(true) }]
-                          : []),
-                      ]}
-                    />
-                  </div>
-                }
-              />
-            </div>
-
-            {/* Goals are private to the skill's owner, whoever else can view the skill. */}
-            {skill.user_id === user.id && (
-              <SkillGoalsSection
+              <SkillApplicationTab
+                assessorName={assessorName}
+                canShowDemonstrateAction={canShowDemonstrateAction}
+                canShowValidateAction={canShowValidateAction}
+                composite={composite}
+                compositeError={compositeError}
+                currentTarget={currentTarget}
+                decidedValidationRequestsCount={decidedValidationRequestsCount}
+                demonstrateRows={demonstrateRows}
+                displayedPracticalLevel={displayedPracticalLevel}
+                handleDemonstrateSkill={handleDemonstrateSkill}
+                handleStartComponent={handleStartComponent}
+                handleValidateSkillStage={handleValidateSkillStage}
+                invites={invites}
+                knownPeople={knownPeople}
+                loadHistory={loadHistory}
+                loadingComposite={loadingComposite}
+                peerRatings={peerRatings}
+                pendingValidationRequestsCount={pendingValidationRequestsCount}
+                practicalStatements={practicalStatements}
+                practicalVerification={practicalVerification}
+                raterAvatars={raterAvatars}
+                relationshipLinks={relationshipLinks}
+                setActivitiesListOpen={setActivitiesListOpen}
+                setExpertValidationOpen={setExpertValidationOpen}
+                setInviteOpen={setInviteOpen}
+                setQuickLogOpen={setQuickLogOpen}
+                setSelectedActivityEvent={setSelectedActivityEvent}
+                setSelfAssessOpen={setSelfAssessOpen}
+                setSkill={setSkill}
+                setTargetOpen={setTargetOpen}
                 skill={skill}
-                user={user}
-                actor={{ name: assessorName, email: user.email }}
+                startComponentError={startComponentError}
+                startingComponentId={startingComponentId}
                 statements={statements}
-                onActivitiesChanged={loadHistory}
-                onSetLevelTarget={() => setTargetOpen(true)}
-                editGoalId={location.state?.editGoalId}
-                onEditGoalOpened={() =>
-                  navigate(`${location.pathname}${location.search}`, {
-                    replace: true,
-                    state: { ...location.state, editGoalId: undefined },
-                  })}
+                targets={targets}
+                visibleTarget={visibleTarget}
               />
-            )}
-
-            <CompositeSkillProgress
-              composite={composite}
-              loading={loadingComposite}
-              error={compositeError}
-              onStartComponent={handleStartComponent}
-              startingComponentId={startingComponentId}
-              startError={startComponentError}
-            />
-            </div>
             )}
 
             {tab === 'network' && (
-            <div id="skill-detail-panel-network" role="tabpanel" aria-labelledby="skill-detail-tab-network">
-            <SkillNetworkSection
-              librarySkillId={skill.library_skill_id}
-              isOwner={skill.user_id === user.id}
-              recommendInvites={recommendInvites}
-              recommendAcceptors={recommendAcceptors}
-              knownPeople={knownPeople}
-              connections={connectionsWithSkill}
-              totalTrackersCount={totalTrackersCount}
-              onFindExpert={() => setFindExpertOpen(true)}
-              onRecommend={() => setRecommendOpen(true)}
-            />
-
-            {findExpertOpen && (
-              <PeopleWithSkillModal
-                librarySkillId={skill.library_skill_id}
-                skillName={skill.name}
-                skillId={skill.id}
-                onClose={() => setFindExpertOpen(false)}
+              <SkillNetworkTab
+                connectionsWithSkill={connectionsWithSkill}
+                findExpertOpen={findExpertOpen}
+                knownPeople={knownPeople}
+                recommendAcceptors={recommendAcceptors}
+                recommendInvites={recommendInvites}
+                setFindExpertOpen={setFindExpertOpen}
+                setRecommendOpen={setRecommendOpen}
+                skill={skill}
+                totalTrackersCount={totalTrackersCount}
               />
             )}
             </div>
-            )}
-            </div>
 
-            {openCourse && (
-              <CourseOverlay
-                course={openCourse}
-                onClose={() => {
-                  setOpenCourse(null)
-                  // Lessons studied or the course completed show straight away.
-                  loadHistory()
-                  refreshAvailableCourses()
-                }}
-              />
-            )}
-
-            {cohortPicker && (
-              <CohortPickerModal
-                courseName={cohortPicker.course.name}
-                cohorts={cohortPicker.cohorts}
-                enrolling={cohortEnrolling}
-                error={cohortError}
-                onEnrol={handleCohortEnrol}
-                onClose={() => setCohortPicker(null)}
-              />
-            )}
-
-            {cancellingCourse && (
-              <ConfirmDialog
-                message={t('skillDetail.learning.cancelConfirm', { course: cancellingCourse.name })}
-                confirmLabel={t('skillDetail.learning.cancelConfirmLabel')}
-                onConfirm={async () => {
-                  await runLearningAction(() => cancelCourse(cancellingCourse.id))
-                  setCancellingCourse(null)
-                }}
-                onCancel={() => setCancellingCourse(null)}
-              />
-            )}
-
-            {inviteOpen && (
-              <InviteRaterModal
-                skill={skill}
-                afterSelfAssessment={inviteAfterSelfAssess}
-                onClose={() => {
-                  setInviteOpen(false)
-                  setInviteAfterSelfAssess(false)
-                }}
-              />
-            )}
-
-            {recommendOpen && <RecommendSkillModal skill={skill} onClose={() => setRecommendOpen(false)} />}
-
-            {selfAssessOpen && (
-              <SelfAssessModal
-                skill={skill}
-                user={user}
-                currentLevel={displayedPracticalLevel}
+            <SkillDetailDialogs
+                activitiesListOpen={activitiesListOpen}
+                allTags={allTags}
+                assessMode={assessMode}
+                assessorName={assessorName}
+                backTo={backTo}
+                cancellingCourse={cancellingCourse}
+                cohortEnrolling={cohortEnrolling}
+                cohortError={cohortError}
+                cohortPicker={cohortPicker}
+                confirmingBaselineOpen={confirmingBaselineOpen}
+                displayedKnowledgeLevel={displayedKnowledgeLevel}
+                displayedPracticalLevel={displayedPracticalLevel}
+                expertValidationOpen={expertValidationOpen}
+                focusSkill={focusSkill}
+                handleAddTag={handleAddTag}
+                handleCohortEnrol={handleCohortEnrol}
+                handleRecordActivity={handleRecordActivity}
+                handleRemoveTag={handleRemoveTag}
                 history={history}
-                onClose={() => setSelfAssessOpen(false)}
-                onAssessed={() => {
-                  loadHistory()
-                  loadSkill()
-                  setSelfAssessOpen(false)
-                  setInviteAfterSelfAssess(true)
-                  setInviteOpen(true)
-                }}
-                onGuideGenerated={(statements) =>
-                  setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
-                }
-              />
-            )}
-
-            {selfAssessKnowledgeOpen && (
-              <SelfAssessModal
-                skill={skill}
-                user={user}
-                axis="knowledge"
-                currentLevel={displayedKnowledgeLevel}
-                history={history}
-                onClose={() => setSelfAssessKnowledgeOpen(false)}
-                onAssessed={() => {
-                  loadHistory()
-                  loadSkill()
-                  setSelfAssessKnowledgeOpen(false)
-                }}
-                onGuideGenerated={(statements) =>
-                  setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
-                }
-              />
-            )}
-
-            {confirmingBaselineOpen && (
-              <ConfirmingBaselineQuizModal
-                skill={skill}
-                user={user}
-                actor={{ name: assessorName, email: user.email }}
+                interviewOpen={interviewOpen}
+                inviteAfterSelfAssess={inviteAfterSelfAssess}
+                inviteOpen={inviteOpen}
+                knowledgeCalibrating={knowledgeCalibrating}
                 latestKnowledgeAssessment={latestKnowledgeAssessment}
-                calibrating={knowledgeCalibrating}
-                onClose={() => setConfirmingBaselineOpen(false)}
-                onConfirmed={() => {
-                  loadHistory()
-                  loadSkill()
-                  setConfirmingBaselineOpen(false)
-                }}
-              />
-            )}
-
-            {interviewOpen && (
-              <InterviewModal
-                skill={skill}
-                user={user}
-                actor={{ name: assessorName, email: user.email }}
-                latestKnowledgeAssessment={latestKnowledgeAssessment}
-                calibrating={knowledgeCalibrating}
-                onClose={() => setInterviewOpen(false)}
-                onConfirmed={() => {
-                  loadHistory()
-                  loadSkill()
-                  setInterviewOpen(false)
-                }}
-              />
-            )}
-
-            {recordActivityOpen && (
-              <RecordActivityModal
-                actor={{ name: assessorName, email: user.email }}
-                skills={[]}
-                relatedSkill={{ id: skill.id, name: skill.name }}
-                onSave={handleRecordActivity}
-                onClose={() => setRecordActivityOpen(false)}
-              />
-            )}
-
-            {quickLogOpen && (
-              <AccessibleDialog
-                labelledBy="quick-log-heading"
-                onClose={() => setQuickLogOpen(false)}
-                panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
-              >
-                <div className="flex justify-end -mb-6">
-                  <button type="button" onClick={() => setQuickLogOpen(false)} className="text-secondary hover:text-ink text-sm">
-                    {t('skillDetail.close')}
-                  </button>
-                </div>
-                <QuickActivityLog
-                  user={user}
-                  focusSkill={focusSkill}
-                  goalItems={quickLogGoals.map((goal) => ({ goal, progress: computeGoalProgress(goal, statements) }))}
-                  onLogged={async () => {
-                    const fresh = await loadHistory()
-                    return quickLogGoals.map((goal) => ({ goal, progress: computeGoalProgress(goal, fresh) }))
-                  }}
-                  onOpenFullForm={() => {
-                    setQuickLogOpen(false)
-                    setRecordActivityOpen(true)
-                  }}
-                />
-              </AccessibleDialog>
-            )}
-
-            {activitiesListOpen && (
-              <ActivitiesModal
-                statements={practicalStatements}
-                onSelect={(event) => {
-                  setActivitiesListOpen(false)
-                  setSelectedActivityEvent(event)
-                }}
-                onClose={() => setActivitiesListOpen(false)}
-              />
-            )}
-
-            {selectedActivityEvent && (
-              <TimelineDetailModal
-                event={selectedActivityEvent}
-                onClose={() => setSelectedActivityEvent(null)}
-              />
-            )}
-
-            {assessMode && (
-              <AssessBaselineModal
-                skill={skill}
-                user={user}
-                assessments={history}
+                loadHistory={loadHistory}
+                loadSkill={loadSkill}
+                openCourse={openCourse}
                 peerRatings={peerRatings}
-                statements={practicalStatements}
-                mode={assessMode}
-                onClose={() => setAssessMode(null)}
-                onAssessed={() => {
-                  loadHistory()
-                  loadSkill()
-                  setAssessMode(null)
-                }}
-              />
-            )}
-
-            {targetOpen && (
-              <SetTargetModal
+                practicalStatements={practicalStatements}
+                quickLogGoals={quickLogGoals}
+                quickLogOpen={quickLogOpen}
+                recommendOpen={recommendOpen}
+                recordActivityOpen={recordActivityOpen}
+                refreshAvailableCourses={refreshAvailableCourses}
+                runLearningAction={runLearningAction}
+                selectedActivityEvent={selectedActivityEvent}
+                selfAssessKnowledgeOpen={selfAssessKnowledgeOpen}
+                selfAssessOpen={selfAssessOpen}
+                setActivitiesListOpen={setActivitiesListOpen}
+                setAssessMode={setAssessMode}
+                setCancellingCourse={setCancellingCourse}
+                setCohortPicker={setCohortPicker}
+                setConfirmingBaselineOpen={setConfirmingBaselineOpen}
+                setExpertValidationOpen={setExpertValidationOpen}
+                setInterviewOpen={setInterviewOpen}
+                setInviteAfterSelfAssess={setInviteAfterSelfAssess}
+                setInviteOpen={setInviteOpen}
+                setOpenCourse={setOpenCourse}
+                setQuickLogOpen={setQuickLogOpen}
+                setRecommendOpen={setRecommendOpen}
+                setRecordActivityOpen={setRecordActivityOpen}
+                setSelectedActivityEvent={setSelectedActivityEvent}
+                setSelfAssessKnowledgeOpen={setSelfAssessKnowledgeOpen}
+                setSelfAssessOpen={setSelfAssessOpen}
+                setSettingsOpen={setSettingsOpen}
+                setSkill={setSkill}
+                setTargetOpen={setTargetOpen}
+                setValidateOpen={setValidateOpen}
+                settingsOpen={settingsOpen}
                 skill={skill}
-                user={user}
+                skillTags={skillTags}
+                statements={statements}
+                targetOpen={targetOpen}
                 targets={targets}
-                currentLevel={displayedPracticalLevel}
-                onClose={() => setTargetOpen(false)}
-                onSet={() => {
-                  loadHistory()
-                  loadSkill()
-                  setTargetOpen(false)
-                }}
-                onGuideGenerated={(statements) =>
-                  setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
-                }
+                validateOpen={validateOpen}
               />
-            )}
-
-            {validateOpen && targets[0] && (
-              <ValidateSkillModal
-                skill={skill}
-                target={targets[0]}
-                onClose={() => setValidateOpen(false)}
-                onValidated={() => {
-                  loadHistory()
-                  loadSkill()
-                  setValidateOpen(false)
-                }}
-              />
-            )}
-
-            {expertValidationOpen && targets[0] && (
-              <RequestValidationModal
-                skill={skill}
-                user={user}
-                targetLevel={targets[0].target_level}
-                onClose={() => setExpertValidationOpen(false)}
-                onRequested={() => {
-                  loadHistory()
-                  setExpertValidationOpen(false)
-                }}
-              />
-            )}
-
-            {settingsOpen && (
-              <AccessibleDialog
-                labelledBy="skill-settings-dialog-title"
-                onClose={() => setSettingsOpen(false)}
-                overlayClassName="z-40"
-                panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
-              >
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 id="skill-settings-dialog-title" className="font-display text-2xl text-ink">{t('skillDetail.skillSettings')}</h2>
-                    <button
-                      type="button"
-                      onClick={() => setSettingsOpen(false)}
-                      className="text-secondary hover:text-ink text-sm"
-                    >
-                      {t('skillDetail.close')}
-                    </button>
-                  </div>
-                  <div className="space-y-6">
-                    <DetailsSection
-                      skill={skill}
-                      skillTags={skillTags}
-                      allTags={allTags}
-                      onAddTag={handleAddTag}
-                      onRemoveTag={handleRemoveTag}
-                      user={user}
-                      onUpdated={loadSkill}
-                    />
-                    <SettingsSection skill={skill} user={user} onUpdated={loadSkill} />
-                    <ScheduleSection skill={skill} onUpdated={loadSkill} />
-                    <DeleteSection
-                      skill={skill}
-                      onUpdated={loadSkill}
-                      onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
-                    />
-                  </div>
-              </AccessibleDialog>
-            )}
 
             {(skill.next_checkin_date || currentTarget || targetSetByOthers) && (
               <div className="mt-4 pt-4 border-t border-hairline">
