@@ -10,7 +10,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.claude/worktrees/**'],
-    pool: 'threads',
+    // Child processes, not worker threads: under threads, files failed to
+    // load now and then ("React.createContext is not a function", a
+    // source-map-js export missing) as modules were loaded concurrently --
+    // 5 in 20 runs of ExperienceDetail + Plans, 0 in 20 with forks, and a
+    // full run is no slower.
+    pool: 'forks',
     // Node 24's experimental global Web Storage shadows jsdom's per-window
     // implementation when no --localstorage-file is configured (as on CI).
     // Browser-facing tests must use jsdom's isolated storage instead.
