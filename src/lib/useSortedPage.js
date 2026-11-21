@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 export const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
 
@@ -172,13 +172,14 @@ export function useSortedPage(items, sortAccessors, { defaultSortKey = null, def
 export function useRowSelection(ids) {
   const [selected, setSelected] = useState(() => new Set())
   const idsSignature = ids.join(' ')
-  const previousSignature = useRef(idsSignature)
-
-  useEffect(() => {
-    if (previousSignature.current === idsSignature) return
-    previousSignature.current = idsSignature
+  // Reset while rendering rather than in an effect, so no committed render
+  // shows the new rows with the old selection -- and a click made as soon
+  // as the rows appear isn't wiped by a reset that runs just after it.
+  const [previousSignature, setPreviousSignature] = useState(idsSignature)
+  if (previousSignature !== idsSignature) {
+    setPreviousSignature(idsSignature)
     setSelected(new Set())
-  }, [idsSignature])
+  }
 
   const toggle = useCallback((id) => {
     setSelected((current) => {

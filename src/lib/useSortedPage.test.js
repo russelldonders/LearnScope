@@ -1,6 +1,7 @@
+import { useLayoutEffect } from 'react'
 import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import { useSortedPage, useUrlParam, writeUrlParams } from './useSortedPage'
+import { useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from './useSortedPage'
 
 // Minimal stand-in for the searchParams/setSearchParams pair a page gets
 // from react-router-dom's useSearchParams() -- these hooks only ever call
@@ -129,5 +130,37 @@ describe('useSortedPage urlSync mode', () => {
     act(() => result2.current.setPageSize(20))
     const [next2] = urlSync2.setSearchParams.mock.calls[0]
     expect(next2.has('pageSize')).toBe(false)
+  })
+})
+
+describe('useRowSelection', () => {
+  it('toggles rows and keeps the selection while the row list is unchanged', () => {
+    const { result, rerender } = renderHook(({ ids }) => useRowSelection(ids), { initialProps: { ids: ['a', 'b'] } })
+    act(() => result.current.toggle('a'))
+    rerender({ ids: ['a', 'b'] })
+    expect([...result.current.selected]).toEqual(['a'])
+  })
+
+  it('clears the selection in the same render the row list changes', () => {
+    const seen = []
+    const { result, rerender } = renderHook(({ ids }) => {
+      const selection = useRowSelection(ids)
+      // Committed renders only (a discarded render pass never reaches here).
+      useLayoutEffect(() => { seen.push([ids.join(' '), selection.selected.size]) })
+      return selection
+    }, { initialProps: { ids: ['a', 'b'] } })
+    act(() => result.current.toggle('a'))
+    seen.length = 0
+    rerender({ ids: ['a', 'c'] })
+    // No committed render shows the new rows with the old selection.
+    expect(seen).toEqual([['a c', 0]])
+    expect(result.current.selected.size).toBe(0)
+  })
+
+  it('keeps a selection made right after the rows first load', () => {
+    const { result, rerender } = renderHook(({ ids }) => useRowSelection(ids), { initialProps: { ids: [] } })
+    rerender({ ids: ['a', 'b'] })
+    act(() => result.current.toggle('a'))
+    expect([...result.current.selected]).toEqual(['a'])
   })
 })
