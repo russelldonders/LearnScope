@@ -4,6 +4,7 @@ import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { saveInterview, sendInterviewAnswer, startInterview } from '../lib/skillDiagnostics'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
+import { pickVoice, readPreferredVoice, savePreferredVoice, speak, speechTag, voicesFor, watchVoices } from '../lib/speech'
 
 const SpeechRecognitionAPI =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
@@ -51,7 +52,7 @@ export default function InterviewModal({
   onClose,
   onConfirmed,
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const calibratedLevel = calibrating ? null : (latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1)
 
   const [stage, setStage] = useState('intro') // intro -> chat -> result
@@ -69,6 +70,8 @@ export default function InterviewModal({
   const [reasoning, setReasoning] = useState(null)
   const [saving, setSaving] = useState(false)
   const [readAloud, setReadAloud] = useState(false)
+  const [voices, setVoices] = useState([])
+  const [voiceName, setVoiceName] = useState(() => readPreferredVoice())
   const [listening, setListening] = useState(false)
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   const transcriptEndRef = useRef(null)
@@ -76,6 +79,10 @@ export default function InterviewModal({
   const inputRef = useRef(null)
 
   const canReadAloud = typeof window !== 'undefined' && Boolean(window.speechSynthesis)
+  const voiceChoices = voicesFor(voices, language)
+  const voice = pickVoice(voices, language, voiceName)
+
+  useEffect(() => watchVoices(setVoices), [])
   const answersGiven = transcript.filter((turn) => turn.role === 'learner').length
   const currentQuestion = Math.min(MAX_QUESTIONS, answersGiven + 1)
 
@@ -121,8 +128,10 @@ export default function InterviewModal({
     if (!readAloud || stage !== 'chat' || transcript.length === 0) return
     const last = transcript[transcript.length - 1]
     if (last.role !== 'interviewer' || !canReadAloud) return
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(last.text))
+    speak(last.text, { voice, language })
+    // Only a new interviewer turn (or turning read-aloud on) speaks; changing
+    // the voice applies from the next one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript, readAloud, stage, canReadAloud])
 
   useEffect(() => {
@@ -156,7 +165,7 @@ export default function InterviewModal({
       return
     }
     const recognition = new SpeechRecognitionAPI()
-    recognition.lang = 'en-US'
+    recognition.lang = speechTag(language)
     recognition.interimResults = false
     recognition.maxAlternatives = 1
     recognition.onresult = (e) => {
@@ -280,6 +289,24 @@ export default function InterviewModal({
           <span aria-hidden="true">×</span>
         </button>
       </div>
+      {readAloud && stage !== 'result' && voiceChoices.length > 1 && (
+        <div className="flex items-center gap-2 border-b border-hairline/60 px-5 py-2">
+          <label htmlFor="interview-voice" className="text-xs text-secondary">{t('modals.interview.voice')}</label>
+          <select
+            id="interview-voice"
+            value={voice?.name ?? ''}
+            onChange={(event) => {
+              setVoiceName(event.target.value)
+              savePreferredVoice(event.target.value)
+              const chosen = voiceChoices.find((option) => option.name === event.target.value)
+              if (chosen) speak(t('modals.interview.voiceSample'), { voice: chosen, language })
+            }}
+            className="min-w-0 flex-1 rounded-md border border-hairline bg-paper px-2 py-1 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          >
+            {voiceChoices.map((option) => <option key={option.name} value={option.name}>{option.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {stage === 'chat' && !finished && (
         <QuestionProgress current={currentQuestion} label={t('modals.interview.questionProgress', { current: currentQuestion, max: MAX_QUESTIONS })} />

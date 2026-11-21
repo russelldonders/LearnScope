@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import {
@@ -252,9 +252,9 @@ export default function ConfirmingBaselineQuizModal({
     <AccessibleDialog
       labelledBy="knowledge-quiz-dialog-title"
       onClose={requestClose}
-      panelClassName="relative w-full max-w-xl bg-card border border-hairline rounded-2xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden"
+      panelClassName="relative w-full max-w-xl lg:max-w-3xl bg-card border border-hairline rounded-2xl shadow-xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden"
     >
-      <div className="interview-hero flex items-center gap-3 border-b border-hairline px-5 py-4">
+      <div className="interview-hero flex items-center gap-3 border-b border-hairline px-5 py-4 short:py-2.5">
         <span
           aria-hidden="true"
           className={`grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate text-lg text-paper shadow-sm ${
@@ -351,7 +351,7 @@ export default function ConfirmingBaselineQuizModal({
         )}
 
         {stage === 'question' && question && (
-          <div key={question.id} className="interview-bubble-in px-5 py-5 sm:px-6">
+          <div key={question.id} className="interview-bubble-in px-5 py-5 sm:px-6 short:py-3">
             <QuestionCard t={t} question={question} answer={answers[question.id]} result={result} onAnswer={(value) => setAnswers((prev) => ({ ...prev, [question.id]: value }))} />
           </div>
         )}
@@ -545,8 +545,19 @@ function RoundBreak({ t, lastRound, nextLevel }) {
 
 // One question, in whichever of the course builder's scored-question
 // layouts it uses. Once checked, it shows what was right.
+// Answers short enough to sit two to a row on a wide screen.
+function shortOptions(question) {
+  return question.items.length >= 4 && question.items.every((item) => (item.label ?? '').length <= 60)
+}
+
 function QuestionCard({ t, question, answer, result, onAnswer }) {
   const checked = Boolean(result)
+  const feedbackRef = useRef(null)
+  // Once checked, bring the feedback into view rather than leaving it below
+  // the fold on a laptop screen.
+  useEffect(() => {
+    if (checked) feedbackRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [checked])
   const choice = ['single', 'multiple', 'true_false'].includes(question.layout)
   const matchOptions = useMemo(
     () => question.options ?? shuffleStable(question.items.map((item) => item.detail).filter(Boolean), question.id),
@@ -575,10 +586,13 @@ function QuestionCard({ t, question, answer, result, onAnswer }) {
 
   return (
     <fieldset>
-      <legend className="font-display text-xl leading-snug text-ink">{question.title}</legend>
+      <legend className="font-display text-xl short:text-lg leading-snug text-ink">{question.title}</legend>
 
       {choice && (
-        <div className="mt-4 space-y-2" role={question.layout === 'multiple' ? 'group' : 'radiogroup'}>
+        <div
+          className={`mt-4 short:mt-3 ${shortOptions(question) ? 'grid gap-2 lg:grid-cols-2' : 'space-y-2'}`}
+          role={question.layout === 'multiple' ? 'group' : 'radiogroup'}
+        >
           {question.items.map((item, i) => {
             const selected = question.layout === 'multiple' ? answer.includes(item.id) : answer === item.id
             const state = checked
@@ -587,7 +601,7 @@ function QuestionCard({ t, question, answer, result, onAnswer }) {
             return (
               <label
                 key={item.id}
-                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-sm transition-colors ${
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 short:py-2 text-sm transition-colors ${
                   state === 'right'
                     ? 'border-moss bg-moss/10 text-ink'
                     : state === 'missed'
@@ -737,8 +751,9 @@ function QuestionCard({ t, question, answer, result, onAnswer }) {
 
       {checked && (
         <div
+          ref={feedbackRef}
           role="status"
-          className={`interview-bubble-in mt-4 rounded-xl border px-4 py-3 text-sm ${
+          className={`interview-bubble-in mt-4 short:mt-3 rounded-xl border px-4 py-3 short:py-2 text-sm ${
             result.correct ? 'border-moss/60 bg-moss/10' : 'border-gold/60 bg-gold/10'
           }`}
         >

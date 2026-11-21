@@ -1699,6 +1699,8 @@ export default {
       findingYourLevel: '正在确定你的水平',
       pitchedAt: '按 {level} 水平进行',
       stopReadingAloud: '停止朗读问题',
+      voice: '声音',
+      voiceSample: '你好，这就是我的声音。',
       readAloud: '朗读问题',
       on: '开',
       off: '关',

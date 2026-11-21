@@ -1710,6 +1710,8 @@ export default {
       findingYourLevel: 'recherche de votre niveau',
       pitchedAt: 'proposé à {level}',
       stopReadingAloud: 'Arrêter de lire les questions à voix haute',
+      voice: 'Voix',
+      voiceSample: 'Bonjour, voici comment je vais parler.',
       readAloud: 'Lire les questions à voix haute',
       on: 'Activé',
       off: 'Désactivé',

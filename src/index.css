@@ -5,6 +5,8 @@
    class on <html>, rather than relying on the OS-level prefers-color-scheme
    media query, so a signed-in learner's stored preference always wins. */
 @custom-variant dark (&:where(.dark, .dark *));
+/* Laptop-height screens, where a tall dialog would otherwise scroll. */
+@custom-variant short (@media (max-height: 820px));
 
 @theme {
   --color-ink: #20301f;

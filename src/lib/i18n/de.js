@@ -1711,6 +1711,8 @@ export default {
       findingYourLevel: 'dein Niveau wird ermittelt',
       pitchedAt: 'angesetzt bei {level}',
       stopReadingAloud: 'Fragen nicht mehr vorlesen',
+      voice: 'Stimme',
+      voiceSample: 'Hallo, so werde ich klingen.',
       readAloud: 'Fragen vorlesen',
       on: 'An',
       off: 'Aus',

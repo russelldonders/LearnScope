@@ -1709,6 +1709,8 @@ export default {
       findingYourLevel: 'je niveau wordt bepaald',
       pitchedAt: 'ingezet op {level}',
       stopReadingAloud: 'Stop met vragen hardop voorlezen',
+      voice: 'Stem',
+      voiceSample: 'Hallo, zo ga ik klinken.',
       readAloud: 'Vragen hardop voorlezen',
       on: 'Aan',
       off: 'Uit',

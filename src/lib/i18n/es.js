@@ -1709,6 +1709,8 @@ export default {
       findingYourLevel: 'encontrando tu nivel',
       pitchedAt: 'planteado en {level}',
       stopReadingAloud: 'Dejar de leer las preguntas en voz alta',
+      voice: 'Voz',
+      voiceSample: 'Hola, así es como sonaré.',
       readAloud: 'Leer las preguntas en voz alta',
       on: 'Activado',
       off: 'Desactivado',

@@ -1708,6 +1708,8 @@ export default {
       findingYourLevel: 'finding your level',
       pitchedAt: 'pitched at {level}',
       stopReadingAloud: 'Stop reading questions aloud',
+      voice: 'Voice',
+      voiceSample: 'Hello, this is how I will sound.',
       readAloud: 'Read questions aloud',
       on: 'On',
       off: 'Off',

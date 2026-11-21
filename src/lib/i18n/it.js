@@ -1711,6 +1711,8 @@ export default {
       findingYourLevel: 'ricerca del tuo livello',
       pitchedAt: 'impostato a {level}',
       stopReadingAloud: 'Smetti di leggere le domande ad alta voce',
+      voice: 'Voce',
+      voiceSample: 'Ciao, ecco come suonerò.',
       readAloud: 'Leggi le domande ad alta voce',
       on: 'Attivo',
       off: 'Disattivo',
