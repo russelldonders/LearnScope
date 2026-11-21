@@ -13,6 +13,14 @@ vi.mock('../lib/courseContent', () => ({
 }))
 
 vi.mock('../context/LanguageContext', () => import('../test/languageMock'))
+vi.mock('../lib/organisationPlans', () => ({
+  listOrganisationPlans: vi.fn().mockResolvedValue([
+    { id: '11111111-1111-4111-8111-111111111111', title: 'New manager plan', status: 'active' },
+    { id: '22222222-2222-4222-8222-222222222222', title: 'Old plan', status: 'archived' },
+  ]),
+  listMyPlanAssignments: vi.fn().mockResolvedValue([]),
+  respondToPlanAssignment: vi.fn(),
+}))
 
 afterEach(cleanup)
 
@@ -274,4 +282,16 @@ it('adds a goals panel to a workspace page, configures it, and saves its setting
   expect(saveResource.mock.calls[0][1].blocks).toEqual([
     { id: expect.any(String), type: 'goals_panel', title: 'Goals from Acme', limit: 8, show: 'all' },
   ])
+})
+
+it('lets a Plans panel show only chosen organisation plans', async () => {
+  const saveResource = vi.fn().mockResolvedValue({})
+  render(<PageBuilderModal panelBlocks organisationId="org-1" userId="me" resource={{ title: 'Home', page_content: { version: 1, blocks: [] } }} saveResource={saveResource} onClose={vi.fn()} onSaved={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: /Add content/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Plans panel' }))
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'New manager plan' }))
+  expect(screen.queryByRole('checkbox', { name: 'Old plan' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Save page' }))
+  await waitFor(() => expect(saveResource).toHaveBeenCalled())
+  expect(saveResource.mock.calls[0][1].blocks[0]).toMatchObject({ type: 'plans_panel', planIds: ['11111111-1111-4111-8111-111111111111'] })
 })

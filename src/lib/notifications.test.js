@@ -43,4 +43,18 @@ describe('buildNotificationItems', () => {
     expect(items.every((item) => item.actions.length > 0)).toBe(true)
     expect(items.find((item) => item.kind === 'rate-invite').actions[0].href).toBe('/rate/abc')
   })
+
+  it('lists a plan an organisation assigned, linking to where it can be started', () => {
+    const [item] = buildNotificationItems({
+      ...emptyValues,
+      planAssignments: [{ id: 'assignment-1', title: 'New manager plan', organisation_name: 'Acme', assigned_at: '2026-11-21T09:00:00Z' }],
+    })
+    expect(item).toMatchObject({
+      id: 'plan-assignment:assignment-1',
+      title: 'Plan Assigned',
+      detail: 'New manager plan',
+      source: 'Acme',
+      actions: [{ label: 'Review plan', href: '/actions#assigned-plans' }],
+    })
+  })
 })

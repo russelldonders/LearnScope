@@ -43,6 +43,7 @@ export const BLOCK_LAYOUTS = {
 //   title  the panel's heading (blank uses its default)
 //   limit  how many to show
 //   show   goals only: 'active', or 'all' to include completed goals
+//   planIds plans only: just these of the organisation's plans (none = all)
 export const PANEL_BLOCKS = {
   goals_panel: { label: 'Goals', description: 'Goals your organisation set for the member.' },
   skills_panel: { label: 'Latest skills', description: 'Skills your organisation rated or set a goal on.' },
@@ -52,7 +53,11 @@ export const PANEL_LIMITS = { min: 1, max: 20, default: 5 }
 export const GOAL_PANEL_SHOW = ['active', 'all']
 
 export function newPanelBlock(type) {
-  return { id: crypto.randomUUID(), type, title: '', limit: PANEL_LIMITS.default, ...(type === 'goals_panel' ? { show: 'active' } : {}) }
+  return {
+    id: crypto.randomUUID(), type, title: '', limit: PANEL_LIMITS.default,
+    ...(type === 'goals_panel' ? { show: 'active' } : {}),
+    ...(type === 'plans_panel' ? { planIds: [] } : {}),
+  }
 }
 
 function normalisePanel(block) {
@@ -61,6 +66,11 @@ function normalisePanel(block) {
     title: plainText(block.title, 120),
     limit: Number.isFinite(limit) ? Math.max(PANEL_LIMITS.min, Math.min(PANEL_LIMITS.max, limit)) : PANEL_LIMITS.default,
     ...(block.type === 'goals_panel' ? { show: GOAL_PANEL_SHOW.includes(block.show) ? block.show : 'active' } : {}),
+    ...(block.type === 'plans_panel' ? {
+      planIds: (Array.isArray(block.planIds) ? block.planIds : [])
+        .filter((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))
+        .slice(0, 20),
+    } : {}),
   }
 }
 

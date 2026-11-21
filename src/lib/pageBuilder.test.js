@@ -120,3 +120,12 @@ describe('LearnScope panel blocks', () => {
     ])
   })
 })
+
+describe('Plans panel block', () => {
+  it('keeps only real plan ids', () => {
+    const { blocks } = normalisePageDocument({ blocks: [
+      { id: 'p', type: 'plans_panel', limit: 3, planIds: ['11111111-1111-4111-8111-111111111111', 'nope', 7] },
+    ] })
+    expect(blocks[0]).toEqual({ id: 'p', type: 'plans_panel', title: '', limit: 3, planIds: ['11111111-1111-4111-8111-111111111111'] })
+  })
+})

@@ -1066,15 +1066,16 @@ async function listOrgMembers(admin, caller, { organisationId }, res) {
   if (membersError) throw membersError
 
   const { data: profiles, error: profilesError } = members.length
-    ? await admin.from('profiles').select('id, user_code').in('id', members.map((m) => m.user_id))
+    ? await admin.from('profiles').select('id, user_code, full_name').in('id', members.map((m) => m.user_id))
     : { data: [], error: null }
   if (profilesError) throw profilesError
   const userCodes = new Map(profiles.map((p) => [p.id, p.user_code]))
+  const names = new Map(profiles.map((p) => [p.id, p.full_name?.trim() || null]))
 
   const details = await Promise.all(
     members.map(async (m) => {
       const { data, error } = await admin.auth.admin.getUserById(m.user_id)
-      return { ...m, userCode: userCodes.get(m.user_id) ?? null, email: error ? null : (data?.user?.email ?? null) }
+      return { ...m, userCode: userCodes.get(m.user_id) ?? null, name: names.get(m.user_id) ?? null, email: error ? null : (data?.user?.email ?? null) }
     })
   )
 

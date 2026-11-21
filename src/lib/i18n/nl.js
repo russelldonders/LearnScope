@@ -937,6 +937,7 @@ export default {
     managerTeamInvitations: 'Teamuitnodigingen van manager',
     dataAccessRequests: 'Verzoeken om gegevenstoegang',
     assignedTraining: 'Toegewezen training',
+    assignedPlans: 'Toegewezen plannen',
     skillSuggestions: 'Vaardigheidssuggesties',
     requestsToValidate: 'Verzoeken om validatie',
     planInvitations: 'Planuitnodigingen',

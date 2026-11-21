@@ -937,6 +937,7 @@ export default {
     managerTeamInvitations: 'Invitaciones de equipo de gestor',
     dataAccessRequests: 'Solicitudes de acceso a datos',
     assignedTraining: 'Formación asignada',
+    assignedPlans: 'Planes asignados',
     skillSuggestions: 'Sugerencias de habilidades',
     requestsToValidate: 'Solicitudes de validación',
     planInvitations: 'Invitaciones a planes',

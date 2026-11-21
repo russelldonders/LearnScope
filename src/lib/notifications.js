@@ -9,6 +9,7 @@ import { listIncomingPendingValidationRequests } from './skillValidationRequests
 import { listMyPendingOrgInvites } from './organisationInvites'
 import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from './admin/employers'
 import { listMyCourseAssignments } from './courseCatalogue'
+import { listMyPlanAssignments } from './organisationPlans'
 import { listMyManagerSkillSuggestions } from './managerSkillActions'
 import { listMyManagerTeamInvites } from './managerTeams'
 import { loadActionSources } from './actionLoading'
@@ -176,6 +177,15 @@ export function buildNotificationItems(values, profiles = {}) {
       occurredAt: item.created_at,
       actions: [{ label: 'Start course', href: '/actions#assigned-training' }],
     })),
+    ...(values.planAssignments ?? []).map((item) => notification({
+      id: item.id,
+      kind: 'plan-assignment',
+      title: 'Plan Assigned',
+      detail: item.title || 'A plan is ready for you to start.',
+      source: item.organisation_name || 'Organisation',
+      occurredAt: item.assigned_at,
+      actions: [{ label: 'Review plan', href: '/actions#assigned-plans' }],
+    })),
     // One list for suggestions from an organisation and from a team leader
     // (manager_skill_suggestions), labelled with where each came from.
     ...values.skillSuggestions.map((item) => notification({
@@ -243,6 +253,7 @@ export async function loadNotifications(userId) {
     { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(userId) },
     { key: 'dataAccessRequests', label: 'data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(userId) },
     { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(userId) },
+    { key: 'planAssignments', label: 'assigned plans', fallback: [], load: async () => (await listMyPlanAssignments()).filter((a) => a.status === 'assigned') },
     { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(userId) },
     { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
     { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },

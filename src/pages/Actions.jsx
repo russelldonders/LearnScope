@@ -3,6 +3,8 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useLanguage } from '../context/LanguageContext'
+import AssignedPlansList from '../components/AssignedPlansList'
+import { listMyPlanAssignments } from '../lib/organisationPlans'
 import AppHeader from '../components/AppHeader'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings, markPeerRatingsSeen, getProfiles } from '../lib/connections'
@@ -69,6 +71,7 @@ export default function Actions() {
   const [acceptingDataAccessRequest, setAcceptingDataAccessRequest] = useState(null)
   const [mySkills, setMySkills] = useState([])
   const [courseAssignments, setCourseAssignments] = useState([])
+  const [planAssignments, setPlanAssignments] = useState([])
   const [assignmentActingId, setAssignmentActingId] = useState(null)
   const [assignmentError, setAssignmentError] = useState(null)
   // Set once an assigned course with at least one cohort is about to be
@@ -133,6 +136,7 @@ export default function Actions() {
         { key: 'managerInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
         { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
         { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
+        { key: 'planAssignments', label: 'assigned plans', fallback: [], load: async () => (await listMyPlanAssignments()).filter((a) => a.status === 'assigned') },
         { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(user.id) },
         { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },
         {
@@ -172,6 +176,7 @@ export default function Actions() {
       setManagerTeamInvites(managerTeamInvitesData)
       setDataAccessRequests(dataAccessRequestsData)
       setCourseAssignments(courseAssignmentsData)
+      setPlanAssignments(values.planAssignments)
       setSkillSuggestions(skillSuggestionsData)
       setMySkills(values.skills)
       setUnseenRatings(values.unseenRatings)
@@ -455,6 +460,7 @@ export default function Actions() {
     managerTeamInvites.length +
     dataAccessRequests.length +
     courseAssignments.length +
+    planAssignments.length +
     skillSuggestions.length +
     planInvites.length +
     validationRequests.length
@@ -883,6 +889,20 @@ export default function Actions() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {planAssignments.length > 0 && (
+          <div id="assigned-plans">
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.assignedPlans')}</h2>
+            <div className="bg-card border border-hairline rounded-lg p-4">
+              <AssignedPlansList
+                assignments={planAssignments}
+                onChanged={() => listMyPlanAssignments()
+                  .then((rows) => setPlanAssignments(rows.filter((a) => a.status === 'assigned')))
+                  .catch(() => {})}
+              />
             </div>
           </div>
         )}

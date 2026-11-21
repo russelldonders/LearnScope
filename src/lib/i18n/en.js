@@ -937,6 +937,7 @@ export default {
     managerTeamInvitations: 'Manager team invitations',
     dataAccessRequests: 'Data access requests',
     assignedTraining: 'Assigned training',
+    assignedPlans: 'Assigned plans',
     skillSuggestions: 'Skill suggestions',
     requestsToValidate: 'Requests to validate',
     planInvitations: 'Plan invitations',

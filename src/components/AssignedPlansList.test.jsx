@@ -67,4 +67,19 @@ describe('AssignedPlansList', () => {
     await waitFor(() => expect(listMyPlanAssignments).toHaveBeenCalled())
     expect(screen.queryByRole('heading', { name: 'Plans from Acme' })).not.toBeInTheDocument()
   })
+
+  it('shows given assignments without loading, and asks for a refresh after a response (the Actions inbox)', async () => {
+    const onChanged = vi.fn()
+    renderList({ organisationId: null, organisationName: null, assignments: [ASSIGNED], onChanged })
+    expect(screen.getByText('Assigned by Acme')).toBeInTheDocument()
+    expect(listMyPlanAssignments).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('keeps to the chosen plans when given plan ids (a configured Plans panel)', async () => {
+    renderList({ planIds: ['plan-2'] })
+    expect(await screen.findByText('Safety refresher')).toBeInTheDocument()
+    expect(screen.queryByText('New manager plan')).not.toBeInTheDocument()
+  })
 })

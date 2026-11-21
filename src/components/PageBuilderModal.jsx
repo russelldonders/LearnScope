@@ -18,6 +18,7 @@ import {
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
 import { SampleGoalsPanel, SamplePlansPanel, SampleSkillsPanel } from './WorkspacePanels'
+import { listOrganisationPlans } from '../lib/organisationPlans'
 import PageInteractiveEditor from './PageInteractiveEditor'
 import AccessibleDialog from './AccessibleDialog'
 import ConfirmDialog from './ConfirmDialog'
@@ -369,7 +370,7 @@ function InsertMenu({ onInsert, label = 'Add content', panelBlocks = false }) {
 
 // A LearnScope panel's settings, above an example of how it looks. Each
 // member sees their own records for this organisation in its place.
-function PanelBlockEditor({ block, onChange, onChangeWithHistory }) {
+function PanelBlockEditor({ block, organisationId, onChange, onChangeWithHistory }) {
   const Sample = SAMPLE_PANELS[block.type]
   const fieldClass = 'w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss'
   return (
@@ -398,8 +399,44 @@ function PanelBlockEditor({ block, onChange, onChangeWithHistory }) {
           </select>
         </label>
       )}
+      {block.type === 'plans_panel' && (
+        <PlanPanelChoice organisationId={organisationId} planIds={block.planIds ?? []}
+          onChange={(planIds) => onChangeWithHistory({ planIds })} />
+      )}
       {Sample && <Sample block={block} />}
     </div>
+  )
+}
+
+// Which of the organisation's plans a Plans panel shows: any it assigned the
+// member (none ticked), or only those ticked.
+function PlanPanelChoice({ organisationId, planIds, onChange }) {
+  const [plans, setPlans] = useState(null)
+  useEffect(() => {
+    if (!organisationId) return
+    listOrganisationPlans(organisationId)
+      .then((rows) => setPlans(rows.filter((plan) => plan.status !== 'archived')))
+      .catch(() => setPlans([]))
+  }, [organisationId])
+  if (!plans) return null
+  return (
+    <fieldset className="text-xs text-secondary">
+      <legend>Which plans</legend>
+      <p className="mt-1">Leave all unticked to show every plan the member has from this organisation.</p>
+      {plans.length === 0 && <p className="mt-1">This organisation has no plans yet.</p>}
+      <div className="mt-1 flex flex-wrap gap-2">
+        {plans.map((plan) => (
+          <label key={plan.id} className="inline-flex items-center gap-1.5 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={planIds.includes(plan.id)}
+              onChange={() => onChange(planIds.includes(plan.id) ? planIds.filter((id) => id !== plan.id) : [...planIds, plan.id])}
+            />
+            {plan.title}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
@@ -925,6 +962,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                       {PANEL_BLOCKS[block.type] && (
                         <PanelBlockEditor
                           block={block}
+                          organisationId={organisationId}
                           onChange={(changes) => updateBlock(block.id, changes)}
                           onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)}
                         />

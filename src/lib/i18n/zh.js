@@ -937,6 +937,7 @@ export default {
     managerTeamInvitations: '经理团队邀请',
     dataAccessRequests: '数据访问请求',
     assignedTraining: '指派的培训',
+    assignedPlans: '指派的计划',
     skillSuggestions: '技能建议',
     requestsToValidate: '待验证请求',
     planInvitations: '计划邀请',

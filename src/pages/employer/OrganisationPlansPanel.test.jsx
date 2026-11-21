@@ -51,7 +51,7 @@ beforeEach(() => {
   createOrganisationPlan.mockResolvedValue('plan-1')
   listPlanCatalogueCourses.mockResolvedValue([{ id: 'course-2', name: 'Feedback that lands' }])
   listEmployerMembers.mockResolvedValue([
-    { user_id: 'user-1', email: 'sam@example.com', status: 'active' },
+    { user_id: 'user-1', name: 'Sam Patel', email: 'sam@example.com', status: 'active' },
     { user_id: 'user-2', email: 'pending@example.com', status: 'pending' },
   ])
   assignOrganisationPlan.mockResolvedValue(1)
@@ -90,9 +90,9 @@ describe('OrganisationPlansPanel', () => {
     render(<OrganisationPlansPanel organisationId="org-1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open' }))
     const assign = await screen.findByRole('region', { name: 'Assign to members' })
-    expect(await within(assign).findByLabelText('sam@example.com')).toBeInTheDocument()
+    expect(await within(assign).findByLabelText('Sam Patel · sam@example.com')).toBeInTheDocument()
     expect(within(assign).queryByLabelText('pending@example.com')).not.toBeInTheDocument()
-    fireEvent.click(within(assign).getByLabelText('sam@example.com'))
+    fireEvent.click(within(assign).getByLabelText('Sam Patel · sam@example.com'))
     fireEvent.click(within(assign).getByRole('button', { name: 'Assign to 1' }))
     await waitFor(() => expect(assignOrganisationPlan).toHaveBeenCalledWith('plan-1', ['user-1']))
     expect(await within(assign).findByText('Assigned to 1 member.')).toBeInTheDocument()

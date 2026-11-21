@@ -441,7 +441,10 @@ function AssignPlanSection({ planId, organisationId, hasSteps, onAssigned }) {
       .catch((err) => setError(err.message))
   }, [organisationId])
 
-  const shown = (members ?? []).filter((member) => !filter.trim() || (member.email ?? '').toLowerCase().includes(filter.trim().toLowerCase()))
+  const term = filter.trim().toLowerCase()
+  const shown = (members ?? []).filter((member) => !term
+    || (member.name ?? '').toLowerCase().includes(term)
+    || (member.email ?? '').toLowerCase().includes(term))
 
   return (
     <section className="rounded-lg border border-hairline bg-card p-5" aria-labelledby="organisation-plan-assign-heading">
@@ -474,7 +477,10 @@ function AssignPlanSection({ planId, organisationId, hasSteps, onAssigned }) {
                         return next
                       })}
                     />
-                    {member.email ?? member.userCode ?? 'Member'}
+                    <span>
+                      {member.name ?? member.email ?? member.userCode ?? 'Member'}
+                      {member.name && member.email && <span className="text-xs text-secondary"> · {member.email}</span>}
+                    </span>
                   </label>
                 ))}
                 {shown.length === 0 && <p className="py-2 text-sm text-secondary">No members match.</p>}

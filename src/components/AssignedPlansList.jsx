@@ -19,22 +19,34 @@ const FRAMING_KEYS = {
 
 // With `heading`, it's a card of its own that only appears once there's a
 // plan to show (a workspace section); without, it's a bare list for a panel.
-export default function AssignedPlansList({ organisationId, organisationName = null, framing = 'assigned', limit = null, emptyText = null, heading = null }) {
+// Given `assignments` (the Actions inbox, across organisations), it shows
+// those instead of loading its own, and calls `onChanged` after a response.
+export default function AssignedPlansList({ organisationId, organisationName = null, framing = 'assigned', limit = null, emptyText = null, heading = null, assignments: given = null, onChanged = null, planIds = null }) {
   const { t } = useLanguage()
   const navigate = useNavigate()
-  const [assignments, setAssignments] = useState(null)
+  const [loaded, setLoaded] = useState(null)
   const [error, setError] = useState(false)
   const [starting, setStarting] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [actionError, setActionError] = useState(null)
 
   const load = useCallback(() => {
+    if (given) {
+      onChanged?.()
+      return
+    }
     listMyPlanAssignments(organisationId)
-      .then((rows) => { setAssignments(rows); setError(false) })
+      .then((rows) => { setLoaded(rows); setError(false) })
       .catch(() => setError(true))
-  }, [organisationId])
+  }, [organisationId, given, onChanged])
 
-  useEffect(() => { if (organisationId) load() }, [load, organisationId])
+  useEffect(() => {
+    if (!given && organisationId) load()
+    // Only when the organisation changes; load() also runs after a response.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisationId, Boolean(given)])
+
+  const assignments = given ?? (loaded && planIds?.length ? loaded.filter((a) => planIds.includes(a.plan_id)) : loaded)
 
   async function respond(assignment, start) {
     setBusyId(assignment.id)

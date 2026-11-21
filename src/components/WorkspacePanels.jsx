@@ -122,7 +122,7 @@ export function PlansPanel({ block, organisationId, organisationName = null, fra
   return (
     <PanelFrame title={block.title || t('workspacePanels.plansTitle')}>
       <AssignedPlansList organisationId={organisationId} organisationName={organisationName} framing={framing}
-        limit={block.limit} emptyText={t('workspacePanels.noPlans')} />
+        limit={block.limit} planIds={block.planIds} emptyText={t('workspacePanels.noPlans')} />
     </PanelFrame>
   )
 }
