@@ -26,7 +26,10 @@ move active work to **In progress** and completed work to **Done**.
   after its split: list, search, add staff, member details and the assign
   training/skill/role profile dialogs. `env.test` has no employer-admin
   account (its provider admin is redirected to the learner dashboard), so
-  only `EmployerLearnersPanel.test.jsx` covers it so far.
+  only `EmployerLearnersPanel.test.jsx` covers it so far. The same account
+  would also allow browser-checking the provider catalogue and training
+  sections (`ProviderConsole.test.jsx`) after their split. Needs an
+  employer-admin test account adding to `env.test`.
 
 - Splitting any further large page file: use the method below, one commit
   per step, with no change to what users see:
@@ -41,25 +44,32 @@ move active work to **In progress** and completed work to **Done**.
      page, unchanged (`useSkillDetailData.js`, `useExperienceDetailData.js`
      and `usePlanDetail.js` are the models). Dialog and edit-mode state stays
      in the page.
-  4. After each step run `npm run lint`, `npm run build`, `npm run test:run`,
-     and `npx oxlint -D no-undef <changed files>` (the project lint does not
-     flag a missing import in a moved file; ignore its `window`/`document`
-     reports).
+  4. After each step run `npm run lint` (which also catches a missing import
+     in a moved file), `npm run build` and `npm run test:run`.
 
 ## In progress
 
-- Flaky test: `src/pages/ExperienceDetail.test.jsx` intermittently fails to
-  load with "TypeError: React.createContext is not a function" raised inside
-  react-router (about 1 run in 5 when run with one other test file, also on
-  code from before the page split). The cause is not known. Reproduce with
-  `npx vitest run src/pages/ExperienceDetail.test.jsx src/pages/Plans.test.jsx`
-  in a loop. Possibly related: on 2026-11-21 a full `npm run test:run` once
-  failed to start the worker for
-  `src/pages/account-linking/CreateLinkInvitationForm.test.jsx` ("source-map-js
-  ... does not provide an export named 'SourceMapGenerator'"); the file passes
-  on its own.
-
 ## Done
+
+- Fixed flaky unit-test runs (2026-11-21). Files failed to load now and then
+  ("React.createContext is not a function", a missing source-map-js export)
+  under Vitest's worker-thread pool: 5 in 20 runs of
+  `ExperienceDetail.test.jsx` + `Plans.test.jsx`. The suite now runs in child
+  processes (`pool: 'forks'`): 0 in 20, three clean full runs, no slower. Also
+  fixed `useRowSelection` clearing a selection made as soon as a table's rows
+  appeared (it reset in an effect after the render, now during it).
+
+- Lint catches missing imports (`no-undef` with browser, node and ES2024
+  globals) and has no remaining warnings (2026-11-21).
+
+- Split `Actions.jsx` (1,108 to 580 lines: section components under
+  `src/pages/actions/` and `useActionsData.js`) and `provider/ProviderConsole.jsx`
+  (1,353 lines into `ProviderCataloguesSection`, `ProviderTrainingSection`,
+  `CourseRow`, the version-history and participants dialogs,
+  `providerCourseColumns.jsx` and `src/lib/providerTraining.js`;
+  `ProviderConsole.jsx` re-exports the two sections), with page tests added
+  first (2026-11-21). The Actions tests found the summary line reading "Nothing
+  needs a response right now1 new rating received"; fixed.
 
 - Split the largest page files into focused files (2026-11-17 to
   2026-11-21): `SkillDetail.jsx` (now 865 lines, with
