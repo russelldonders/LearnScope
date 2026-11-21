@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OrganisationPlansPanel from './OrganisationPlansPanel'
 import { listEmployerMembers } from '../../lib/admin/employers'
 import {
+  addOrganisationPlanSection,
   addOrganisationPlanStep,
   assignOrganisationPlan,
   createOrganisationPlan,
@@ -15,6 +16,8 @@ import {
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
 vi.mock('../../lib/admin/employers', () => ({ listEmployerMembers: vi.fn() }))
+vi.mock('../../lib/planSettings', () => ({ getPlanPrerequisites: vi.fn().mockResolvedValue([]) }))
+vi.mock('../../components/PlanSettingsDialog', () => ({ default: (props) => <div role="dialog" aria-label="Plan settings" data-plan={props.plan.id} /> }))
 vi.mock('../../lib/organisationPlans', async (importOriginal) => {
   const actual = await importOriginal()
   return {
@@ -26,6 +29,8 @@ vi.mock('../../lib/organisationPlans', async (importOriginal) => {
     archiveOrganisationPlan: vi.fn(),
     deleteOrganisationPlan: vi.fn(),
     addOrganisationPlanStep: vi.fn().mockResolvedValue(),
+    addOrganisationPlanSection: vi.fn().mockResolvedValue(),
+    removeOrganisationPlanSection: vi.fn(),
     removeOrganisationPlanStep: vi.fn(),
     reorderOrganisationPlanSteps: vi.fn(),
     searchPlanLibrarySkills: vi.fn().mockResolvedValue([]),
@@ -37,10 +42,11 @@ vi.mock('../../lib/organisationPlans', async (importOriginal) => {
 })
 
 const PLAN = {
-  id: 'plan-1', title: 'New manager plan', description: null, status: 'active', target_on: null,
+  id: 'plan-1', title: 'New manager plan', description: null, status: 'active', target_on: null, sequence: 'none',
+  sections: [{ id: 'section-1', title: 'First month', position: 0 }],
   items: [
     { id: 'item-1', item_type: 'course', position: 0, catalogue_course_id: 'course-1', course_catalogue: { name: 'Coaching basics' } },
-    { id: 'item-2', item_type: 'step', position: 1, step_title: 'Meet your team' },
+    { id: 'item-2', item_type: 'step', position: 1, step_title: 'Meet your team', section_id: 'section-1' },
   ],
 }
 
@@ -102,5 +108,26 @@ describe('OrganisationPlansPanel', () => {
     fireEvent.click(within(progress).getByRole('button', { name: 'Show steps' }))
     expect(within(progress).getByText('Meet your team').closest('li')).toHaveTextContent('Done')
     expect(within(progress).getByText('Coaching basics').closest('li')).toHaveTextContent('In progress')
+  })
+
+  it('groups steps by section, adds sections and steps into them, and opens order and prerequisites', async () => {
+    listOrganisationPlans.mockResolvedValue([{ ...PLAN, stepCount: 2, assignedCount: 0, startedCount: 0 }])
+    render(<OrganisationPlansPanel organisationId="org-1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    expect(await screen.findByRole('heading', { name: 'First month' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'First month' }).parentElement.parentElement).toHaveTextContent('Meet your team')
+
+    fireEvent.change(screen.getByLabelText('New section'), { target: { value: 'Second month' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add section' }))
+    await waitFor(() => expect(addOrganisationPlanSection).toHaveBeenCalledWith('plan-1', 'Second month', 1))
+
+    fireEvent.click(screen.getByLabelText('A step'))
+    fireEvent.change(screen.getByLabelText('What to do'), { target: { value: 'Shadow a colleague' } })
+    fireEvent.change(screen.getByLabelText('Section'), { target: { value: 'section-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }))
+    await waitFor(() => expect(addOrganisationPlanStep).toHaveBeenCalledWith('plan-1', { type: 'step', title: 'Shadow a colleague', note: '', sectionId: 'section-1' }, 2))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Order and prerequisites' }))
+    expect(screen.getByRole('dialog', { name: 'Plan settings' })).toHaveAttribute('data-plan', 'plan-1')
   })
 })

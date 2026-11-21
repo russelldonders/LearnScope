@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import PlanSettingsDialog from '../../components/PlanSettingsDialog'
+import { useLanguage } from '../../context/LanguageContext'
+import { getPlanPrerequisites } from '../../lib/planSettings'
 import { formatFullDate } from '../../lib/dates'
 import { LEVEL_LABELS, LEVELS } from '../../lib/levels'
 import { listEmployerMembers } from '../../lib/admin/employers'
 import {
+  addOrganisationPlanSection,
   addOrganisationPlanStep,
   archiveOrganisationPlan,
   assignOrganisationPlan,
@@ -13,6 +17,7 @@ import {
   listOrganisationPlanProgress,
   listOrganisationPlans,
   listPlanCatalogueCourses,
+  removeOrganisationPlanSection,
   removeOrganisationPlanStep,
   reorderOrganisationPlanSteps,
   searchPlanLibrarySkills,
@@ -179,6 +184,14 @@ function OrganisationPlanDetail({ planId, organisationId, onBack }) {
   const [busy, setBusy] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [progressKey, setProgressKey] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [prerequisites, setPrerequisites] = useState(null)
+  const { t } = useLanguage()
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    getPlanPrerequisites(planId).then(setPrerequisites).catch((err) => setError(err.message))
+  }, [settingsOpen, planId])
 
   const load = useCallback(async () => {
     setError(null)
@@ -204,11 +217,21 @@ function OrganisationPlanDetail({ planId, organisationId, onBack }) {
     }
   }
 
-  async function moveStep(index, direction) {
-    const ids = plan.items.map((item) => item.id)
+  // Steps outside any section come first, then each section's in order.
+  const groups = plan
+    ? [
+      { id: null, title: null, items: plan.items.filter((item) => !item.section_id || !plan.sections.some((s) => s.id === item.section_id)) },
+      ...plan.sections.map((section) => ({ ...section, items: plan.items.filter((item) => item.section_id === section.id) })),
+    ]
+    : []
+
+  // Moves a step within its section; positions are saved in reading order.
+  async function moveStep(groupIndex, index, direction) {
     const target = index + direction
-    if (target < 0 || target >= ids.length) return
-    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    const items = [...groups[groupIndex].items]
+    if (target < 0 || target >= items.length) return
+    ;[items[index], items[target]] = [items[target], items[index]]
+    const ids = groups.flatMap((group, i) => (i === groupIndex ? items : group.items)).map((item) => item.id)
     await run(() => reorderOrganisationPlanSteps(ids))
   }
 
@@ -259,31 +282,61 @@ function OrganisationPlanDetail({ planId, organisationId, onBack }) {
       </section>
 
       <section className="rounded-lg border border-hairline bg-card p-5" aria-labelledby="organisation-plan-steps-heading">
-        <h3 id="organisation-plan-steps-heading" className="font-display text-lg text-ink">Steps</h3>
-        {plan.items.length === 0 && <p className="text-sm text-secondary mt-2">No steps yet. Add a course, a skill or a step below.</p>}
-        {plan.items.length > 0 && (
-          <ol className="mt-3 divide-y divide-hairline border-y border-hairline">
-            {plan.items.map((item, index) => (
-              <li key={item.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-ink">{index + 1}. {stepTitle(item)}</p>
-                  <p className="text-xs text-secondary">{stepKind(item)}{item.note ? ` · ${item.note}` : ''}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button type="button" className={SECONDARY} disabled={busy || index === 0} onClick={() => moveStep(index, -1)} aria-label={`Move ${stepTitle(item)} up`}>Up</button>
-                  <button type="button" className={SECONDARY} disabled={busy || index === plan.items.length - 1} onClick={() => moveStep(index, 1)} aria-label={`Move ${stepTitle(item)} down`}>Down</button>
-                  <button type="button" className={`${SECONDARY} text-red-700`} disabled={busy} onClick={() => run(() => removeOrganisationPlanStep(item.id))} aria-label={`Remove ${stepTitle(item)}`}>Remove</button>
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="organisation-plan-steps-heading" className="font-display text-lg text-ink">Steps</h3>
+          <button type="button" className={SECONDARY} onClick={() => setSettingsOpen(true)}>Order and prerequisites</button>
+        </div>
+        {plan.items.length === 0 && plan.sections.length === 0 && <p className="text-sm text-secondary mt-2">No steps yet. Add a course, a skill or a step below.</p>}
+        {groups.map((group, groupIndex) => (group.id || group.items.length > 0) && (
+          <div key={group.id ?? 'top'} className="mt-3">
+            {group.id && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-medium text-ink">{group.title}</h4>
+                <button type="button" className={`${SECONDARY} text-red-700`} disabled={busy}
+                  onClick={() => run(() => removeOrganisationPlanSection(group.id))} aria-label={`Remove section ${group.title}`}>
+                  Remove section
+                </button>
+              </div>
+            )}
+            {group.id && group.items.length === 0 && <p className="text-xs text-secondary mt-1">No steps in this section yet.</p>}
+            {group.items.length > 0 && (
+              <ol className="mt-1 divide-y divide-hairline border-y border-hairline">
+                {group.items.map((item, index) => (
+                  <li key={item.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink">{index + 1}. {stepTitle(item)}</p>
+                      <p className="text-xs text-secondary">{stepKind(item)}{item.note ? ` · ${item.note}` : ''}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button type="button" className={SECONDARY} disabled={busy || index === 0} onClick={() => moveStep(groupIndex, index, -1)} aria-label={`Move ${stepTitle(item)} up`}>Up</button>
+                      <button type="button" className={SECONDARY} disabled={busy || index === group.items.length - 1} onClick={() => moveStep(groupIndex, index, 1)} aria-label={`Move ${stepTitle(item)} down`}>Down</button>
+                      <button type="button" className={`${SECONDARY} text-red-700`} disabled={busy} onClick={() => run(() => removeOrganisationPlanStep(item.id))} aria-label={`Remove ${stepTitle(item)}`}>Remove</button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        ))}
+        <AddSectionForm disabled={busy} onAdd={(title) => run(() => addOrganisationPlanSection(plan.id, title, plan.sections.length))} />
         <AddStepForm
           organisationId={organisationId}
+          sections={plan.sections}
           disabled={busy}
           onAdd={(step) => run(() => addOrganisationPlanStep(plan.id, step, plan.items.length))}
         />
       </section>
+
+      {settingsOpen && (
+        <PlanSettingsDialog
+          plan={plan}
+          prerequisites={prerequisites ?? []}
+          busy={busy}
+          run={(action) => run(async () => { await action(); setPrerequisites(await getPlanPrerequisites(plan.id)) })}
+          onClose={() => setSettingsOpen(false)}
+          t={t}
+        />
+      )}
 
       {!archived && (
         <AssignPlanSection
@@ -316,8 +369,31 @@ function OrganisationPlanDetail({ planId, organisationId, onBack }) {
   )
 }
 
-function AddStepForm({ organisationId, disabled, onAdd }) {
+function AddSectionForm({ disabled, onAdd }) {
+  const [title, setTitle] = useState('')
+  return (
+    <form
+      className="mt-4 flex flex-wrap items-end gap-2 max-w-2xl"
+      aria-label="Add a section"
+      onSubmit={async (event) => {
+        event.preventDefault()
+        if (!title.trim()) return
+        await onAdd(title)
+        setTitle('')
+      }}
+    >
+      <label className="text-xs text-secondary flex-1 min-w-48">
+        New section
+        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="e.g. First month" className={`mt-1 ${FIELD}`} />
+      </label>
+      <button type="submit" className={SECONDARY} disabled={disabled || !title.trim()}>Add section</button>
+    </form>
+  )
+}
+
+function AddStepForm({ organisationId, sections = [], disabled, onAdd }) {
   const [type, setType] = useState('course')
+  const [sectionId, setSectionId] = useState('')
   const [courses, setCourses] = useState(null)
   const [courseId, setCourseId] = useState('')
   const [skillQuery, setSkillQuery] = useState('')
@@ -354,11 +430,12 @@ function AddStepForm({ organisationId, disabled, onAdd }) {
         event.preventDefault()
         if (!ready) return
         setError(null)
-        await onAdd(type === 'course'
+        const step = type === 'course'
           ? { type, catalogueCourseId: courseId, note }
           : type === 'skill'
             ? { type, librarySkillId: skillId, practicalLevel: Number(level), note }
-            : { type, title, note })
+            : { type, title, note }
+        await onAdd(sectionId ? { ...step, sectionId } : step)
         setCourseId('')
         setSkillId('')
         setTitle('')
@@ -413,6 +490,15 @@ function AddStepForm({ organisationId, disabled, onAdd }) {
         <label className="text-xs text-secondary">
           What to do
           <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="e.g. Meet your team" className={`mt-1 ${FIELD}`} />
+        </label>
+      )}
+      {sections.length > 0 && (
+        <label className="text-xs text-secondary">
+          Section
+          <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className={`mt-1 ${FIELD}`}>
+            <option value="">No section</option>
+            {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
+          </select>
         </label>
       )}
       <label className="text-xs text-secondary">

@@ -29,14 +29,16 @@ export async function listOrganisationPlans(organisationId) {
 export async function getOrganisationPlan(planId) {
   const { data, error } = await supabase
     .from('learner_plans')
-    .select(`${PLAN_COLUMNS}, organisation_id, learner_plan_items(id, item_type, position, step_title, note, plan_practical_level, catalogue_course_id, library_skill_id, created_at, course_catalogue(name, provider), skill_library(name))`)
+    .select(`${PLAN_COLUMNS}, organisation_id, sequence, learner_plan_sections(id, title, position, target_on, created_at), learner_plan_items(id, item_type, section_id, position, step_title, note, plan_practical_level, catalogue_course_id, library_skill_id, created_at, course_catalogue(name, provider), skill_library(name))`)
     .eq('id', planId)
     .maybeSingle()
   throwIfError(error)
   if (!data) return null
-  const { learner_plan_items: items, ...plan } = data
+  const { learner_plan_items: items, learner_plan_sections: sections, ...plan } = data
+  const byPosition = (a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at))
   return {
     ...plan,
+    sections: [...(sections ?? [])].sort(byPosition),
     items: [...(items ?? [])].sort((a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at))),
   }
 }
@@ -82,7 +84,7 @@ export async function deleteOrganisationPlan(planId) {
 // step: { type: 'course', catalogueCourseId } | { type: 'skill', librarySkillId, practicalLevel }
 //     | { type: 'step', title }, with an optional note.
 export async function addOrganisationPlanStep(planId, step, position) {
-  const row = { plan_id: planId, item_type: step.type, position, note: step.note?.trim() || null }
+  const row = { plan_id: planId, item_type: step.type, position, note: step.note?.trim() || null, section_id: step.sectionId || null }
   if (step.type === 'course') row.catalogue_course_id = step.catalogueCourseId
   if (step.type === 'skill') {
     row.library_skill_id = step.librarySkillId
@@ -90,6 +92,17 @@ export async function addOrganisationPlanStep(planId, step, position) {
   }
   if (step.type === 'step') row.step_title = step.title.trim()
   const { error } = await supabase.from('learner_plan_items').insert(row)
+  throwIfError(error)
+}
+
+export async function addOrganisationPlanSection(planId, title, position) {
+  const { error } = await supabase.from('learner_plan_sections').insert({ plan_id: planId, title: title.trim(), position })
+  throwIfError(error)
+}
+
+// Its steps stay on the plan, outside any section.
+export async function removeOrganisationPlanSection(sectionId) {
+  const { error } = await supabase.from('learner_plan_sections').delete().eq('id', sectionId)
   throwIfError(error)
 }
 

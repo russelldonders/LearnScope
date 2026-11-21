@@ -16,21 +16,11 @@ move active work to **In progress** and completed work to **Done**.
   experience-type labels, duplicate-skill messages, and generated AI content
   stay English unless that product decision changes.
 
-- Organisation plans and workspace panels (0328/0329), follow-ups:
-  - Browser-check the organisation console's Plans section and a member
-    starting an assigned plan against Staging; only unit, pgTAP and the
-    existing e2e suites cover them so far.
-  - The Goals and Latest skills panels leave out goals and ratings set by a
-    team manager: team rows carry no organisation, and members can't read
-    their team's workspace. Showing them needs a definer function that
-    resolves a team to its workspace's organisation.
-  - Assigned plans don't appear in the /actions inbox the way assigned
-    courses do, only in the organisation's workspace.
-  - Organisation plans have no sections or prerequisites in the console yet,
-    and the assign list shows members by email (the members API has no
-    names).
-  - The Plans panel shows all of the member's plans from the organisation;
-    it can't yet be set to particular plans.
+- Organisation plans and workspace panels (0328-0332), follow-ups:
+  - Browser-check the organisation console's Plans section (steps, sections,
+    order and prerequisites, assigning, progress), a member starting an
+    assigned plan from the workspace and from Actions, and the panels against
+    Staging; only unit, pgTAP and the existing e2e suites cover them so far.
 
 ## In progress
 
@@ -72,6 +62,12 @@ move active work to **In progress** and completed work to **Done**.
   in a loop.
 
 ## Done
+
+- Organisation plans follow-ups: assigned plans in the Actions inbox and
+  notification bell; Plans panel set to particular plans; member names when
+  assigning; team-manager goals and ratings from the organisation's teams in
+  the Goals and Latest skills panels (0331); sections, order and
+  prerequisites for organisation plans in the console (0332).
 
 - Fixed the course outline's down arrow on a section's or content item's
   drag handle, which did nothing; covered by `CourseSections.test.jsx`.

@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(39);
+select plan(40);
 
 -- a: admin of Org One   m: member who is assigned   n: member, not assigned
 -- o: outsider           x: admin of Org Two
@@ -97,6 +97,8 @@ select throws_ok(
   $$select public.get_learner_plan_share_link('83000000-0000-0000-0000-0000000000e1')$$,
   '23514', null, 'an organisation plan cannot be shared by link'
 );
+select is(public.get_learner_plan_prerequisites('83000000-0000-0000-0000-0000000000e1'), '[]'::jsonb,
+  'the admin can read the plan''s prerequisites to set them up');
 reset role;
 
 -- Before it's assigned, members and other organisations don't see it.
