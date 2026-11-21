@@ -87,6 +87,11 @@ vi.mock('../lib/managerSkillActions', () => ({
   listLatestManagerRatings: () => Promise.resolve([]),
   pickTargetSetByOthers: () => null,
 }))
+vi.mock('../lib/skillDiscovery', () => ({
+  getSearchPrivacySettings: () => Promise.resolve({ skill_search_visibility: 'nobody' }),
+  listSearchableSkillIds: () => Promise.resolve(new Set()),
+  setSkillSearchable: vi.fn(),
+}))
 vi.mock('../lib/skillGoals', () => ({ listSkillGoals: () => Promise.resolve([]) }))
 vi.mock('../lib/knowledgeLevelGuide', () => ({ ensureKnowledgeLevelGuide: () => Promise.resolve([]) }))
 vi.mock('../lib/practicalLevelGuide', () => ({ ensurePracticalLevelGuide: () => Promise.resolve([]) }))
@@ -309,5 +314,29 @@ describe('SkillDetail', () => {
     renderPage('/skills/skill-1?tab=application')
     const again = await screen.findByRole('tabpanel')
     await waitFor(() => expect(within(again).getByText('Evidence supported')).toBeInTheDocument())
+  })
+
+  it('opens the knowledge self-assessment from the knowledge tab', async () => {
+    renderPage()
+    const panel = await screen.findByRole('tabpanel')
+    await waitFor(() => expect(within(panel).getByText('Knowledgeable')).toBeInTheDocument())
+    fireEvent.click(within(panel).getByRole('button', { name: 'Rate your current level' }))
+    expect(await screen.findByRole('dialog', { name: 'Self-assess your knowledge' })).toBeInTheDocument()
+  })
+
+  it('opens the quick activity log from the application tab and closes it again', async () => {
+    renderPage('/skills/skill-1?tab=application')
+    const panel = await screen.findByRole('tabpanel')
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Log skill activity' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('opens the skill settings from the header', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Negotiation', level: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Skill settings' }))
+    expect(await screen.findByRole('dialog', { name: 'Skill settings' })).toBeInTheDocument()
   })
 })
