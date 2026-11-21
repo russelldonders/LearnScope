@@ -4,6 +4,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listOrganisationGoals, listOrganisationSkills } from '../lib/workspacePanels'
+import AssignedPlansList from './AssignedPlansList'
 
 // The LearnScope panels on an organisation's own workspace pages
 // (PANEL_BLOCKS in pageBuilder.js): the signed-in member's goals and skills
@@ -115,6 +116,17 @@ export function SkillsPanel({ block, organisationId }) {
   )
 }
 
+// The member's plans from this organisation: assigned (to start) and started.
+export function PlansPanel({ block, organisationId, organisationName = null, framing = 'assigned' }) {
+  const { t } = useLanguage()
+  return (
+    <PanelFrame title={block.title || t('workspacePanels.plansTitle')}>
+      <AssignedPlansList organisationId={organisationId} organisationName={organisationName} framing={framing}
+        limit={block.limit} emptyText={t('workspacePanels.noPlans')} />
+    </PanelFrame>
+  )
+}
+
 const SAMPLE_GOALS = [
   { id: 'sample-1', skillName: 'Giving feedback', targetLevel: 3, targetDate: '2027-03-31', status: 'active', currentLevel: 2 },
   { id: 'sample-2', skillName: 'Data analysis', targetLevel: 4, targetDate: '2027-06-30', status: 'active', currentLevel: 3 },
@@ -149,6 +161,31 @@ export function SampleSkillsPanel({ block }) {
     <PanelFrame title={block.title || t('workspacePanels.skillsTitle')}>
       <SampleNote />
       <SkillRows skills={SAMPLE_SKILLS.slice(0, block.limit)} />
+    </PanelFrame>
+  )
+}
+
+const SAMPLE_PLANS = [
+  { id: 'sample-1', title: 'New manager essentials', steps: 6, status: 'started', done: 2 },
+  { id: 'sample-2', title: 'Safety refresher', steps: 3, status: 'assigned', done: 0 },
+]
+
+export function SamplePlansPanel({ block }) {
+  const { t } = useLanguage()
+  return (
+    <PanelFrame title={block.title || t('workspacePanels.plansTitle')}>
+      <SampleNote />
+      <ul className="divide-y divide-hairline">
+        {SAMPLE_PLANS.slice(0, block.limit).map((plan) => (
+          <li key={plan.id} className="py-2.5 first:pt-0 last:pb-0">
+            <span className="text-sm font-medium text-ink">{plan.title}</span>
+            <p className="text-xs text-secondary mt-0.5">
+              {t('assignedPlans.steps', { count: plan.steps })}
+              {plan.status === 'started' && ` · ${t('assignedPlans.progress', { done: plan.done, total: plan.steps })}`}
+            </p>
+          </li>
+        ))}
+      </ul>
     </PanelFrame>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addPeriod, currentGoal, paceOf, planItemStatus, planTimeframe, sequenceLocks, summariseProgress, timeElapsedPercent } from './planProgress'
+import { addPeriod, currentGoal, paceOf, planItemStatus, planProgressEntry, planTimeframe, sequenceLocks, summariseProgress, timeElapsedPercent } from './planProgress'
 
 const today = '2026-11-16'
 const context = (extra = {}) => ({
@@ -126,5 +126,21 @@ describe('plan timeframes', () => {
     expect(planTimeframe({ ...plan, my_joined_on: '2026-11-10' }).targetOn).toBe('2026-12-10')
     expect(planTimeframe({ ...plan, status: 'planning' }).targetOn).toBeNull()
     expect(timeElapsedPercent({ ...plan, my_joined_on: '2026-11-10' }, '2026-11-25')).toBe(50)
+  })
+})
+
+describe('planProgressEntry', () => {
+  const items = [
+    { id: 'a', item_type: 'step', completed_on: '2026-11-01' },
+    { id: 'b', item_type: 'step', completed_on: null },
+  ]
+  it('records counts only for a personal plan', () => {
+    expect(planProgressEntry({ id: 'p', organisation_id: null, items }, { today: '2026-11-21' })).toEqual({ planId: 'p', done: 1, total: 2 })
+  })
+  it('adds each step’s status on an organisation plan', () => {
+    expect(planProgressEntry({ id: 'p', organisation_id: 'org-1', items }, { today: '2026-11-21' })).toEqual({
+      planId: 'p', done: 1, total: 2,
+      items: [{ item_id: 'a', status: 'done' }, { item_id: 'b', status: 'not_started' }],
+    })
   })
 })

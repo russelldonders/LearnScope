@@ -11,7 +11,7 @@ import {
   recordPlanProgress,
   savePositions,
 } from '../lib/learnerPlans'
-import { planItemStatus, summariseProgress } from '../lib/planProgress'
+import { planProgressEntry } from '../lib/planProgress'
 import { getPlanPrerequisites } from '../lib/planSettings'
 
 // A plan and the records its items point at. `run` wraps a change to the
@@ -51,8 +51,7 @@ export function usePlanData(planId) {
     setPrerequisites(nextPrerequisites)
     // Everyone's progress on a shared plan is shared with its owners; keep
     // the viewer's up to date, and say so to a follower. Best effort.
-    const { done, total } = summariseProgress(loaded.items.map((item) => planItemStatus(item, nextContext)))
-    recordPlanProgress([{ planId: loaded.id, done, total }])
+    recordPlanProgress([planProgressEntry(loaded, nextContext)])
       .then((shared) => setProgressShared(shared.has(loaded.id)))
       .catch(() => {})
     return nextContext

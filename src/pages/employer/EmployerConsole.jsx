@@ -17,6 +17,7 @@ import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import MutationFeedback from '../../components/MutationFeedback'
 import OrganisationSwitcher from '../../components/OrganisationSwitcher'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
+import OrganisationPlansPanel from './OrganisationPlansPanel'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 import EmployerManagementSection from './EmployerManagementSection'
 import EmployerCatalogueAccessPanel from './EmployerCatalogueAccessPanel'
@@ -53,6 +54,7 @@ const SECTIONS = [
   { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
   { key: 'users', label: 'People' },
   { key: 'roles', label: 'Role profiles', workforceOnly: true },
+  { key: 'plans', label: 'Plans', workforceOnly: true },
   { key: 'providers', label: 'Distribution' },
 ]
 
@@ -510,6 +512,9 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                       onOpenProfile={(id) => navigate(`/organisation/roles/${id}`)}
                     />
+                  )}
+                  {currentSection === 'plans' && (
+                    <OrganisationPlansPanel key={`${selectedEmployer.id}-plans`} organisationId={selectedEmployer.id} />
                   )}
                   {currentSection === 'providers' && (
                     hasWorkforceCapability ? (

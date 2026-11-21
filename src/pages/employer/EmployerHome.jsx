@@ -6,6 +6,7 @@ import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
 import LearnerRoleAlignmentContainer from '../roles/LearnerRoleAlignmentContainer'
 import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 import EmployerCataloguePanel from './EmployerCataloguePanel'
+import AssignedPlansList from '../../components/AssignedPlansList'
 import { useLanguage } from '../../context/LanguageContext'
 import {
   findCustomPage,
@@ -140,6 +141,14 @@ export default function EmployerHome() {
                     framing={settings.assignedTrainingFraming}
                   />
                 )}
+                {showLearning && (
+                  <AssignedPlansList
+                    organisationId={employer.id}
+                    organisationName={employer.name}
+                    framing={settings.assignedTrainingFraming}
+                    heading={t('assignedPlans.heading', { employer: employer.name })}
+                  />
+                )}
                 {showRole && (
                   <LearnerRoleAlignmentContainer
                     employerId={employer.id}
@@ -151,12 +160,20 @@ export default function EmployerHome() {
               </>
             )}
             {section === 'learning' && (
-              <EmployerAssignedTrainingPanel
-                employerId={employer.id}
-                employerName={employer.name}
-                employerLogoUrl={branding?.logoUrl}
-                framing={settings.assignedTrainingFraming}
-              />
+              <>
+                <EmployerAssignedTrainingPanel
+                  employerId={employer.id}
+                  employerName={employer.name}
+                  employerLogoUrl={branding?.logoUrl}
+                  framing={settings.assignedTrainingFraming}
+                />
+                <AssignedPlansList
+                  organisationId={employer.id}
+                  organisationName={employer.name}
+                  framing={settings.assignedTrainingFraming}
+                  heading={t('assignedPlans.heading', { employer: employer.name })}
+                />
+              </>
             )}
             {section === 'catalogue' && (
               <EmployerCataloguePanel
@@ -167,7 +184,7 @@ export default function EmployerHome() {
               />
             )}
             {section === 'role' && <LearnerRoleAlignmentContainer employerId={employer.id} />}
-            {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} organisationId={employer.id} />}
+            {findCustomPage(settings, section) && <WorkspaceCustomPage page={findCustomPage(settings, section)} organisationId={employer.id} organisationName={employer.name} framing={settings.assignedTrainingFraming} />}
           </>
         ) : (
           <p className="text-secondary">{t('common.loading')}</p>

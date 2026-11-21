@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import PlanProgressBar from '../components/PlanProgressBar'
 import { createPlan, listPlans, loadPlanContext, PLAN_DURATION_UNITS, recordPlanProgress } from '../lib/learnerPlans'
-import { formatPlanTimeframe, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
+import { formatPlanTimeframe, planItemStatus, planProgressEntry, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 
 // Plans by where they are: in use, still being prepared, done, and (on
 // request) archived.
@@ -32,10 +32,7 @@ export default function Plans() {
         setContext(nextContext)
         // Keeps the progress shared with whoever invited the learner to a
         // plan up to date. Best effort: the list works without it.
-        recordPlanProgress(loaded.map((plan) => {
-          const { done, total } = summariseProgress(plan.items.map((item) => planItemStatus(item, nextContext)))
-          return { planId: plan.id, done, total }
-        })).catch(() => {})
+        recordPlanProgress(loaded.map((plan) => planProgressEntry(plan, nextContext))).catch(() => {})
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))

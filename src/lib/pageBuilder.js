@@ -46,6 +46,7 @@ export const BLOCK_LAYOUTS = {
 export const PANEL_BLOCKS = {
   goals_panel: { label: 'Goals', description: 'Goals your organisation set for the member.' },
   skills_panel: { label: 'Latest skills', description: 'Skills your organisation rated or set a goal on.' },
+  plans_panel: { label: 'Plans', description: 'Plans your organisation assigned the member, to start or continue.' },
 }
 export const PANEL_LIMITS = { min: 1, max: 20, default: 5 }
 export const GOAL_PANEL_SHOW = ['active', 'all']

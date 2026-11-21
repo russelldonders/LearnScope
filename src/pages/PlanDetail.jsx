@@ -337,7 +337,9 @@ export default function PlanDetail() {
             )}
           </div>
           {plan.description && <p className="mt-2 text-sm text-ink whitespace-pre-wrap break-words max-w-2xl">{plan.description}</p>}
-          {progressShared && <p data-progress-shared="" className="mt-2 text-xs text-secondary">{t('plans.progressSharedNote')}</p>}
+          {plan.organisation ? (
+            <p data-progress-shared="" className="mt-2 text-xs text-secondary">{t('plans.organisationPlanNote', { employer: plan.organisation.name })}</p>
+          ) : progressShared && <p data-progress-shared="" className="mt-2 text-xs text-secondary">{t('plans.progressSharedNote')}</p>}
           {inviteNotice && <p role="status" className="mt-3 text-sm text-moss">{inviteNotice}</p>}
         </div>
       )}

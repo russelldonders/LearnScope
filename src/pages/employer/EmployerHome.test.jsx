@@ -17,9 +17,12 @@ vi.mock('./EmployerCataloguePanel', () => ({ default: (props) => <div data-testi
 vi.mock('../../components/WorkspacePanels', () => ({
   GoalsPanel: (props) => <div data-testid="goals-panel" data-org={props.organisationId} data-limit={props.block.limit} />,
   SkillsPanel: (props) => <div data-testid="skills-panel" data-org={props.organisationId} />,
+  PlansPanel: (props) => <div data-testid="plans-panel" data-org={props.organisationId} data-framing={props.framing} />,
   SampleGoalsPanel: () => null,
   SampleSkillsPanel: () => null,
+  SamplePlansPanel: () => null,
 }))
+vi.mock('../../components/AssignedPlansList', () => ({ default: (props) => <div data-testid="assigned-plans" data-org={props.organisationId} data-heading={props.heading} /> }))
 vi.mock('../roles/LearnerRoleAlignmentContainer', () => ({ default: (props) => <div data-testid="role-panel" data-variant={props.variant || 'full'} /> }))
 
 beforeEach(() => settingsMock.mockResolvedValue(normaliseWorkspaceSettings(null)))
@@ -44,6 +47,8 @@ describe('EmployerHome learner LMS navigation', () => {
     fireEvent.click(screen.getByRole('link', { name: 'My learning' }))
     expect(await screen.findByRole('heading', { name: 'My learning' })).toBeInTheDocument()
     expect(screen.getByTestId('learning-panel')).toHaveAttribute('data-variant', 'full')
+    expect(screen.getByTestId('assigned-plans')).toHaveAttribute('data-org', 'employer-1')
+    expect(screen.getByTestId('assigned-plans')).toHaveAttribute('data-heading', 'Plans from Acme Ltd')
     expect(screen.getByRole('link', { name: 'My learning' })).toHaveAttribute('href', '/organisation/learning?org=acme&section=learning')
 
     fireEvent.click(screen.getByRole('link', { name: 'Role & skills' }))
@@ -166,6 +171,7 @@ describe('EmployerHome shows the organisation’s own sections', () => {
       custom_pages: [{ id: benefits, title: 'Progress', content: { version: 1, blocks: [
         { id: 'p1', type: 'goals_panel', title: '', limit: 3, show: 'active' },
         { id: 'p2', type: 'skills_panel', title: '', limit: 5 },
+        { id: 'p3', type: 'plans_panel', title: '', limit: 5 },
       ] } }],
       section_order: ['home', benefits, 'learning', 'catalogue', 'role'],
     }))
@@ -174,5 +180,6 @@ describe('EmployerHome shows the organisation’s own sections', () => {
     expect(await screen.findByTestId('goals-panel')).toHaveAttribute('data-org', 'employer-1')
     expect(screen.getByTestId('goals-panel')).toHaveAttribute('data-limit', '3')
     expect(screen.getByTestId('skills-panel')).toHaveAttribute('data-org', 'employer-1')
+    expect(screen.getByTestId('plans-panel')).toHaveAttribute('data-org', 'employer-1')
   })
 })

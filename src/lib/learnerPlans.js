@@ -98,7 +98,7 @@ export async function listPlanMembers(planId) {
 export async function recordPlanProgress(entries) {
   if (entries.length === 0) return new Set()
   const { data, error } = await supabase.rpc('record_learner_plan_progress', {
-    p_progress: entries.map(({ planId, done, total }) => ({ plan_id: planId, done, total })),
+    p_progress: entries.map(({ planId, done, total, items }) => ({ plan_id: planId, done, total, ...(items ? { items } : {}) })),
   })
   if (error) throw error
   return new Set((data ?? []).map((row) => (typeof row === 'string' ? row : row.record_learner_plan_progress)))

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import PageContent from '../../components/PageContent'
-import { GoalsPanel, SampleGoalsPanel, SampleSkillsPanel, SkillsPanel } from '../../components/WorkspacePanels'
+import { GoalsPanel, PlansPanel, SampleGoalsPanel, SamplePlansPanel, SampleSkillsPanel, SkillsPanel } from '../../components/WorkspacePanels'
 import { useLanguage } from '../../context/LanguageContext'
 import { isEmptyPage } from '../../lib/learnerWorkspaceSettings'
 
@@ -112,15 +112,15 @@ export function WorkspaceHelp({ settings }) {
   )
 }
 
-const MEMBER_PANELS = { goals_panel: GoalsPanel, skills_panel: SkillsPanel }
-const SAMPLE_PANELS = { goals_panel: SampleGoalsPanel, skills_panel: SampleSkillsPanel }
+const MEMBER_PANELS = { goals_panel: GoalsPanel, skills_panel: SkillsPanel, plans_panel: PlansPanel }
+const SAMPLE_PANELS = { goals_panel: SampleGoalsPanel, skills_panel: SampleSkillsPanel, plans_panel: SamplePlansPanel }
 
 // One of the organisation's own sections (custom_pages, 0326/0327): its
 // page, drawn by the course page renderer (which sanitises its rich text),
 // or a short note while it's still empty. Its LearnScope panels show a
 // member their own records for `organisationId`; the admin's preview
 // (`sample`) shows made-up rows instead.
-export function WorkspaceCustomPage({ page, organisationId = null, sample = false, compact = false }) {
+export function WorkspaceCustomPage({ page, organisationId = null, organisationName = null, framing = 'assigned', sample = false, compact = false }) {
   const { t } = useLanguage()
   if (isEmptyPage(page)) {
     return (
@@ -129,5 +129,5 @@ export function WorkspaceCustomPage({ page, organisationId = null, sample = fals
       </div>
     )
   }
-  return <PageContent document={page.content} compact={compact} panels={sample ? SAMPLE_PANELS : MEMBER_PANELS} panelProps={{ organisationId }} />
+  return <PageContent document={page.content} compact={compact} panels={sample ? SAMPLE_PANELS : MEMBER_PANELS} panelProps={{ organisationId, organisationName, framing }} />
 }

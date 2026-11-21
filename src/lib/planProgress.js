@@ -189,3 +189,17 @@ export function formatPlanTimeframe(plan, t, { short = false } = {}) {
   if (!short && startsOn && targetOn) return t('plans.timeframe', { start: formatFullDate(startsOn), end: formatFullDate(targetOn) })
   return targetOn ? t('plans.byDate', { date: formatFullDate(targetOn) }) : t('plans.noEndDate')
 }
+
+// What a member records of their progress on a plan (record_learner_plan_progress):
+// done out of total, and, on an organisation's plan only, each step's status,
+// which the organisation sees (0328). A personal plan's owners see the counts.
+export function planProgressEntry(plan, context) {
+  const statuses = plan.items.map((item) => ({ itemId: item.id, ...planItemStatus(item, context) }))
+  const { done, total } = summariseProgress(statuses)
+  return {
+    planId: plan.id,
+    done,
+    total,
+    ...(plan.organisation_id ? { items: statuses.map((s) => ({ item_id: s.itemId, status: s.state })) } : {}),
+  }
+}

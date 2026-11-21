@@ -17,7 +17,7 @@ import {
   sanitiseRichText,
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
-import { SampleGoalsPanel, SampleSkillsPanel } from './WorkspacePanels'
+import { SampleGoalsPanel, SamplePlansPanel, SampleSkillsPanel } from './WorkspacePanels'
 import PageInteractiveEditor from './PageInteractiveEditor'
 import AccessibleDialog from './AccessibleDialog'
 import ConfirmDialog from './ConfirmDialog'
@@ -37,7 +37,7 @@ const BLOCK_LABELS = {
   ...Object.fromEntries(Object.entries(PANEL_BLOCKS).map(([type, spec]) => [type, `${spec.label} panel`])),
 }
 
-const SAMPLE_PANELS = { goals_panel: SampleGoalsPanel, skills_panel: SampleSkillsPanel }
+const SAMPLE_PANELS = { goals_panel: SampleGoalsPanel, skills_panel: SampleSkillsPanel, plans_panel: SamplePlansPanel }
 
 const BLOCK_PLACEHOLDERS = {
   heading: 'Write a heading…',
@@ -379,7 +379,7 @@ function PanelBlockEditor({ block, onChange, onChangeWithHistory }) {
         <label className="block text-xs text-secondary">
           Panel heading
           <input value={block.title} onChange={(event) => onChange({ title: event.target.value })} maxLength={120}
-            placeholder={block.type === 'goals_panel' ? 'Your goals' : 'Your latest skills'} className={`mt-1 ${fieldClass}`} />
+            placeholder={{ goals_panel: 'Your goals', skills_panel: 'Your latest skills', plans_panel: 'Your plans' }[block.type]} className={`mt-1 ${fieldClass}`} />
         </label>
         <label className="block text-xs text-secondary">
           How many to show
