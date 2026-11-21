@@ -19,7 +19,8 @@ move active work to **In progress** and completed work to **Done**.
 ## In progress
 
 - Splitting the largest page files into focused files (started 2026-11-17).
-  `SkillDetail.jsx`, `ExperienceDetail.jsx` and `PlanDetail.jsx` are done;
+  `SkillDetail.jsx`, `ExperienceDetail.jsx`, `PlanDetail.jsx` and
+  `provider/CourseSections.jsx` are done;
   the rest is listed below. The method for every page, one commit per step,
   with no change to what users see:
   1. Page tests first. Render the whole page against mocked data and pin down
@@ -39,19 +40,6 @@ move active work to **In progress** and completed work to **Done**.
      reports).
 
   Remaining work:
-  - `src/pages/provider/CourseSections.jsx` (1,553 lines, no tests). Tests
-    should cover: sections listed open with their content in position order,
-    ungrouped content, collapsing a section, no editing controls when
-    `canEdit` is false, the empty state, adding a section, keyboard reorder
-    of sections and content, moving content to another section with the
-    left/right arrows, and the order being restored with an error message
-    when saving a reorder fails. Mock `lib/courseContent` and `lib/device`.
-    A drag handle's accessible name is its label plus ". Drag to reorder, or
-    use the arrow keys.". Then move `reorderById` to `src/lib/dragReorder.js`
-    (update the import in `ProviderCourseEditor.test.jsx`), move
-    `AddSectionModal`, `InlineSectionEditor`, `AddResourceModal` and
-    `ItemPreviewBody`/`ItemPreviewPane` into their own files, and move the
-    loading, reorder and drag state into a `useCourseOutline` hook.
   - `src/pages/employer/EmployerLearnersPanel.jsx` (1,487 lines, has tests).
     Not yet looked at; apply the same steps.
   - `SkillDetail.jsx` (now 1,138 lines): split the Knowledge, Application and
@@ -59,15 +47,6 @@ move active work to **In progress** and completed work to **Done**.
   - Browser-check the experience and plan pages against Staging, and run
     `npm run test:e2e`; only the skill page was checked in a browser after
     its split.
-
-- Possible bug found during the work above, not yet confirmed in a browser:
-  in the course editor's outline, pressing the down arrow on a section's or a
-  content item's drag handle appears to do nothing, while up, left and right
-  work. `handleSectionKeyDown` and `handleOutlineItemKeyDown` in
-  `CourseSections.jsx` call the reorder with the default side `'before'`;
-  placing an item before the one directly below it leaves the order
-  unchanged, so `reorderById` returns the same list. Confirm in the browser,
-  then pass `'after'` for the down arrow and cover it with a test.
 
 - Flaky test: `src/pages/ExperienceDetail.test.jsx` intermittently fails to
   load with "TypeError: React.createContext is not a function" raised inside
@@ -77,6 +56,9 @@ move active work to **In progress** and completed work to **Done**.
   in a loop.
 
 ## Done
+
+- Fixed the course outline's down arrow on a section's or content item's
+  drag handle, which did nothing; covered by `CourseSections.test.jsx`.
 
 - Added short-lived, read-only platform-admin user previews in a separate
   browser session, with database-enforced write blocking, start/end audit
