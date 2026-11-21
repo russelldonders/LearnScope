@@ -22,13 +22,14 @@ move active work to **In progress** and completed work to **Done**.
     assigned plan from the workspace and from Actions, and the panels against
     Staging; only unit, pgTAP and the existing e2e suites cover them so far.
 
-## In progress
+- Browser-check the employer People panel (`/organisation?section=users`)
+  after its split: list, search, add staff, member details and the assign
+  training/skill/role profile dialogs. `env.test` has no employer-admin
+  account (its provider admin is redirected to the learner dashboard), so
+  only `EmployerLearnersPanel.test.jsx` covers it so far.
 
-- Splitting the largest page files into focused files (started 2026-11-17).
-  `SkillDetail.jsx`, `ExperienceDetail.jsx`, `PlanDetail.jsx` and
-  `provider/CourseSections.jsx` are done;
-  the rest is listed below. The method for every page, one commit per step,
-  with no change to what users see:
+- Splitting any further large page file: use the method below, one commit
+  per step, with no change to what users see:
   1. Page tests first. Render the whole page against mocked data and pin down
      what it shows and what it saves (`SkillDetail.test.jsx` and
      `ExperienceDetail.page.test.jsx` are the models; `src/test/supabaseFake.js`
@@ -45,23 +46,33 @@ move active work to **In progress** and completed work to **Done**.
      flag a missing import in a moved file; ignore its `window`/`document`
      reports).
 
-  Remaining work:
-  - `src/pages/employer/EmployerLearnersPanel.jsx` (1,487 lines, has tests).
-    Not yet looked at; apply the same steps.
-  - `SkillDetail.jsx` (now 1,138 lines): split the Knowledge, Application and
-    Network tab panels and the block of dialogs into their own components.
-  - Browser-check the experience and plan pages against Staging, and run
-    `npm run test:e2e`; only the skill page was checked in a browser after
-    its split.
+## In progress
 
 - Flaky test: `src/pages/ExperienceDetail.test.jsx` intermittently fails to
   load with "TypeError: React.createContext is not a function" raised inside
   react-router (about 1 run in 5 when run with one other test file, also on
   code from before the page split). The cause is not known. Reproduce with
   `npx vitest run src/pages/ExperienceDetail.test.jsx src/pages/Plans.test.jsx`
-  in a loop.
+  in a loop. Possibly related: on 2026-11-21 a full `npm run test:run` once
+  failed to start the worker for
+  `src/pages/account-linking/CreateLinkInvitationForm.test.jsx` ("source-map-js
+  ... does not provide an export named 'SourceMapGenerator'"); the file passes
+  on its own.
 
 ## Done
+
+- Split the largest page files into focused files (2026-11-17 to
+  2026-11-21): `SkillDetail.jsx` (now 865 lines, with
+  `SkillKnowledgeTab`/`SkillApplicationTab`/`SkillNetworkTab`/
+  `SkillDetailDialogs`), `ExperienceDetail.jsx`, `PlanDetail.jsx`,
+  `provider/CourseSections.jsx` and `employer/EmployerLearnersPanel.jsx`
+  (1,487 to 538 lines, with `AssignTrainingModal`, `AssignSkillModal`,
+  `AssignRoleModal`, `employerLearnerColumns.jsx` and
+  `useEmployerLearnersData.js`). Page tests were added first for each.
+  `npm run test:e2e` passes, including the authenticated suites run
+  against a local dev server on Staging data; the skill (all three tabs,
+  settings and quick-log dialogs), experience and plan pages were checked
+  in a browser with no console errors.
 
 - Organisation plans follow-ups: assigned plans in the Actions inbox and
   notification bell; Plans panel set to particular plans; member names when
