@@ -213,7 +213,7 @@ export function CourseSections({ courseId, organisationId, userId, canEdit }) {
     event.preventDefault()
     const index = sections.findIndex((section) => section.id === sectionId)
     const target = sections[index + (event.key === 'ArrowUp' ? -1 : 1)]
-    if (target) commitSectionOrder(sectionId, target.id)
+    if (target) commitSectionOrder(sectionId, target.id, event.key === 'ArrowUp' ? 'before' : 'after')
   }
 
   async function commitOutlineItemOrder(draggedId, targetSectionId, targetLinkId = null, side = 'before') {
@@ -282,7 +282,7 @@ export function CourseSections({ courseId, organisationId, userId, canEdit }) {
       event.preventDefault()
       const index = sectionItems.findIndex((candidate) => candidate.linkId === item.linkId)
       const target = sectionItems[index + (event.key === 'ArrowUp' ? -1 : 1)]
-      if (target) commitOutlineItemOrder(item.linkId, item.sectionId, target.linkId)
+      if (target) commitOutlineItemOrder(item.linkId, item.sectionId, target.linkId, event.key === 'ArrowUp' ? 'before' : 'after')
       return
     }
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
