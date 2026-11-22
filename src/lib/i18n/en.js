@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'No active skill targets yet. Set a target to assess where you are and where you want to go next.',
     personalTarget: 'Personal target',
     targetDatePrefix: 'by',
+    sections: {
+      due: { heading: 'Due or overdue', description: 'Something on these needs doing now.' },
+      recent: { heading: 'Recent activity', description: 'Activity logged in the last two weeks.' },
+      showAll: 'Show all {count}',
+      showFewer: 'Show fewer',
+      others: 'Other skills',
+      reasons: {
+        checkinOverdue: 'Check-in overdue',
+        checkinDue: 'Check-in due today',
+        targetOverdue: 'Target date passed',
+        targetDue: 'Target due today',
+        goalLog: 'Time to log {goal}',
+        goalDateOverdue: '{goal}: date passed',
+        goalDateDue: '{goal}: due today',
+      },
+      lastActivity: { today: 'Last activity today', yesterday: 'Last activity yesterday', daysAgo: 'Last activity {count} days ago' },
+    },
     setForYou: {
       heading: "Set for you",
       description: "Skills your employer or team set a target on that you don’t track yet. Add one to start working towards it.",

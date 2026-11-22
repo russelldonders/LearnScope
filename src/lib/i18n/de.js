@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'Noch keine aktiven Kompetenzziele. Lege ein Ziel fest, um deinen Stand einzuschätzen und den nächsten Schritt zu bestimmen.',
     personalTarget: 'Persönliches Ziel',
     targetDatePrefix: 'bis',
+    sections: {
+      due: { heading: 'Fällig oder überfällig', description: 'Hier steht jetzt etwas an.' },
+      recent: { heading: 'Letzte Aktivitäten', description: 'Aktivitäten aus den letzten zwei Wochen.' },
+      showAll: 'Alle {count} anzeigen',
+      showFewer: 'Weniger anzeigen',
+      others: 'Weitere Fähigkeiten',
+      reasons: {
+        checkinOverdue: 'Check-in überfällig',
+        checkinDue: 'Check-in heute fällig',
+        targetOverdue: 'Zieldatum überschritten',
+        targetDue: 'Ziel heute fällig',
+        goalLog: 'Zeit, {goal} einzutragen',
+        goalDateOverdue: '{goal}: Datum überschritten',
+        goalDateDue: '{goal}: heute fällig',
+      },
+      lastActivity: { today: 'Letzte Aktivität heute', yesterday: 'Letzte Aktivität gestern', daysAgo: 'Letzte Aktivität vor {count} Tagen' },
+    },
     setForYou: {
       heading: "Für dich festgelegt",
       description: "Fähigkeiten, für die dein Arbeitgeber oder Team ein Ziel gesetzt hat und die du noch nicht verfolgst. Füge eine hinzu, um darauf hinzuarbeiten.",

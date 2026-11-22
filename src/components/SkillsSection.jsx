@@ -9,7 +9,14 @@ import FilterRow from './FilterRow'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import OrganizationLogo from './OrganizationLogo'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
-import { isSelfAssessmentDue } from '../lib/checkin'
+import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
+import { listActiveGoalsForAttention } from '../lib/skillGoals'
+import {
+  RECENT_ACTIVITY_DAYS,
+  dueReasonsBySkill,
+  latestActivityBySkill,
+  splitSkillsForList,
+} from '../lib/skillListSections'
 import {
   addSkillSetByOthers,
   listLatestManagerRatings,
@@ -40,6 +47,10 @@ export default function SkillsSection({ intro = null }) {
   const [addingLibraryId, setAddingLibraryId] = useState(null)
   const [addError, setAddError] = useState(null)
   const [currentRoles, setCurrentRoles] = useState([])
+  // What is due on each skill, and when each last had activity, for the
+  // sections at the top of the list (see skillListSections.js).
+  const [dueBySkillId, setDueBySkillId] = useState(() => new Map())
+  const [activityBySkillId, setActivityBySkillId] = useState(() => new Map())
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -96,6 +107,27 @@ export default function SkillsSection({ intro = null }) {
     setCurrentRoles(data ?? [])
   }
 
+  // Activities that happened in the last two weeks (by when they happened, not
+  // when they were logged), with the further skills each one is linked to.
+  async function loadRecentActivity() {
+    const since = new Date()
+    since.setDate(since.getDate() - RECENT_ACTIVITY_DAYS)
+    const { data: statements, error: statementsError } = await supabase
+      .from('xapi_statements')
+      .select('id, skill_id, recorded_at')
+      .eq('user_id', user.id)
+      .gte('recorded_at', since.toISOString())
+    if (statementsError) throw statementsError
+    const ids = (statements ?? []).map((row) => row.id)
+    if (ids.length === 0) return { statements: [], links: [] }
+    const { data: links, error: linksError } = await supabase
+      .from('xapi_statement_skills')
+      .select('statement_id, skill_id')
+      .in('statement_id', ids)
+    if (linksError) throw linksError
+    return { statements: statements ?? [], links: links ?? [] }
+  }
+
   async function loadSkills() {
     setLoading(true)
     const [
@@ -106,6 +138,8 @@ export default function SkillsSection({ intro = null }) {
       targetsSetByOthers,
       latestManagerRatings,
       { data: confirmedValidations },
+      goalItems,
+      recentActivity,
     ] = await Promise.all([
       supabase
         .from('skills')
@@ -121,12 +155,15 @@ export default function SkillsSection({ intro = null }) {
         .order('assessed_at', { ascending: false }),
       supabase
         .from('skill_targets')
-        .select('skill_id, target_level, created_at')
+        .select('skill_id, target_level, target_date, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       listTargetsSetByOthers(user.id),
       listLatestManagerRatings(user.id),
       supabase.from('skill_validation_requests').select('skill_id').eq('requester_id', user.id).eq('status', 'confirmed'),
+      // The sections are extras: the list still loads if either of these fails.
+      listActiveGoalsForAttention(user.id).catch(() => []),
+      loadRecentActivity().catch(() => ({ statements: [], links: [] })),
     ])
     if (error) {
       setError(error.message)
@@ -153,11 +190,13 @@ export default function SkillsSection({ intro = null }) {
       // currentTarget = targets[0] on the skill's own detail page.
       const personValidatedSkillIds = new Set((confirmedValidations ?? []).map((v) => v.skill_id))
       const latestTargetLevelBySkillId = new Map()
+      const latestTargets = []
       for (const t of skillTargets ?? []) {
-        if (!latestTargetLevelBySkillId.has(t.skill_id)) latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
+        if (latestTargetLevelBySkillId.has(t.skill_id)) continue
+        latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
+        latestTargets.push(t)
       }
-      setSkills(
-        data.map((s) => {
+      const loadedSkills = data.map((s) => {
           // A target set by a team or organisation shows until a rating
           // from that same context reaches it (pickTargetSetByOthers); then
           // the learner's own higher target takes over.
@@ -183,7 +222,9 @@ export default function SkillsSection({ intro = null }) {
             targetContextName: setByOthers?.contextName ?? null,
           }
         })
-      )
+      setSkills(loadedSkills)
+      setDueBySkillId(dueReasonsBySkill({ skills: loadedSkills, latestTargets, goalItems, today: todayDateString() }))
+      setActivityBySkillId(latestActivityBySkill(recentActivity.statements, recentActivity.links))
       listUntrackedTargetsSetByOthers(data, targetsSetByOthers, latestManagerRatings)
         .then(setSetForYou)
         .catch(() => setSetForYou([]))
@@ -255,14 +296,47 @@ export default function SkillsSection({ intro = null }) {
     }
   }
 
+  // Under the usual "Needs attention" order, skills with something due come
+  // first, then those with recent activity, each in a small section of its
+  // own; everything else follows as before. Another sort shows one list.
+  const sections = useMemo(
+    () => (sortBy === 'attention'
+      ? splitSkillsForList(filteredSkills, dueBySkillId, activityBySkillId)
+      : { due: [], recent: [], rest: filteredSkills }),
+    [sortBy, filteredSkills, dueBySkillId, activityBySkillId]
+  )
+  const hasTopSections = sections.due.length > 0 || sections.recent.length > 0
+
   const currentRoleSkills = useMemo(
-    () => filteredSkills.filter((s) => s.is_current_role),
-    [filteredSkills]
+    () => sections.rest.filter((s) => s.is_current_role),
+    [sections]
   )
   const otherSkills = useMemo(
-    () => filteredSkills.filter((s) => !s.is_current_role),
-    [filteredSkills]
+    () => sections.rest.filter((s) => !s.is_current_role),
+    [sections]
   )
+
+  function dueNote(skill) {
+    const reason = dueBySkillId.get(skill.id)
+    if (!reason) return null
+    const goal = reason.goalTitle
+    switch (reason.kind) {
+      case 'checkin': return t(reason.overdue ? 'skills.sections.reasons.checkinOverdue' : 'skills.sections.reasons.checkinDue')
+      case 'target': return t(reason.overdue ? 'skills.sections.reasons.targetOverdue' : 'skills.sections.reasons.targetDue')
+      case 'goalLog': return t('skills.sections.reasons.goalLog', { goal })
+      default: return t(reason.overdue ? 'skills.sections.reasons.goalDateOverdue' : 'skills.sections.reasons.goalDateDue', { goal })
+    }
+  }
+
+  function activityNote(skill) {
+    const recordedAt = activityBySkillId.get(skill.id)
+    if (!recordedAt) return null
+    const day = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const days = Math.round((day(new Date()) - day(new Date(recordedAt))) / 86400000)
+    if (days <= 0) return t('skills.sections.lastActivity.today')
+    if (days === 1) return t('skills.sections.lastActivity.yesterday')
+    return t('skills.sections.lastActivity.daysAgo', { count: days })
+  }
   const hasSplit = currentRoleSkills.length > 0
 
   // Roles the skill-to-experience map has actually confirmed have at least
@@ -423,6 +497,28 @@ export default function SkillsSection({ intro = null }) {
         </div>
       )}
 
+      {sections.due.length > 0 && (
+        <SkillListSection
+          id="skills-due-heading"
+          heading={t('skills.sections.due.heading')}
+          description={t('skills.sections.due.description')}
+          skills={sections.due}
+          noteFor={(skill) => ({ text: dueNote(skill), urgent: dueBySkillId.get(skill.id)?.overdue })}
+          onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+        />
+      )}
+
+      {sections.recent.length > 0 && (
+        <SkillListSection
+          id="skills-recent-heading"
+          heading={t('skills.sections.recent.heading')}
+          description={t('skills.sections.recent.description')}
+          skills={sections.recent}
+          noteFor={(skill) => ({ text: activityNote(skill) })}
+          onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+        />
+      )}
+
       {hasSplit && (
         <div className="mb-10">
           {currentRoleGroups.length > 1 ? (
@@ -466,7 +562,9 @@ export default function SkillsSection({ intro = null }) {
 
       {otherSkills.length > 0 && (
         <div>
-          {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
+          {hasSplit
+            ? <h3 className="font-display text-base text-ink mb-4">Further skills</h3>
+            : hasTopSections && <h3 className="font-display text-base text-ink mb-4">{t('skills.sections.others')}</h3>}
           <SkillGrid
             skills={otherSkills}
             onEdit={(skill) => navigate(`/skills/${skill.id}`)}
@@ -552,6 +650,46 @@ function SetForYouCard({ item, adding, onAdd, t }) {
         </button>
       </div>
     </div>
+  )
+}
+
+// How many skills a top section shows before "Show all".
+const SECTION_PREVIEW_COUNT = 4
+
+// A small section above the rest of the list, each card with a short line
+// saying why it's there. Shows the first few, with the rest a click away.
+function SkillListSection({ id, heading, description, skills, noteFor, onEdit }) {
+  const { t } = useLanguage()
+  const [expanded, setExpanded] = useState(false)
+  const shown = expanded ? skills : skills.slice(0, SECTION_PREVIEW_COUNT)
+  return (
+    <section aria-labelledby={id} className="mb-10">
+      <h3 id={id} className="font-display text-base text-ink">{heading}</h3>
+      <p className="text-sm text-secondary mt-1 mb-4">{description}</p>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {shown.map((skill) => {
+          const note = noteFor(skill)
+          return (
+            <li key={skill.id} className="flex flex-col gap-1.5">
+              <SkillCard skill={skill} onEdit={onEdit} compact />
+              {note?.text && (
+                <p className={`text-xs px-1 ${note.urgent ? 'text-red-700 font-medium' : 'text-secondary'}`}>{note.text}</p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {skills.length > SECTION_PREVIEW_COUNT && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          className="mt-3 text-sm font-medium text-moss hover:underline"
+        >
+          {expanded ? t('skills.sections.showFewer') : t('skills.sections.showAll', { count: skills.length })}
+        </button>
+      )}
+    </section>
   )
 }
 

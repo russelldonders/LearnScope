@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'Non ci sono ancora obiettivi di competenza attivi. Imposta un obiettivo per valutare il tuo livello e definire il prossimo passo.',
     personalTarget: 'Obiettivo personale',
     targetDatePrefix: 'entro il',
+    sections: {
+      due: { heading: 'Da fare o in ritardo', description: 'C’è qualcosa da fare su queste ora.' },
+      recent: { heading: 'Attività recenti', description: 'Attività registrate nelle ultime due settimane.' },
+      showAll: 'Mostra tutte ({count})',
+      showFewer: 'Mostra meno',
+      others: 'Altre competenze',
+      reasons: {
+        checkinOverdue: 'Verifica in ritardo',
+        checkinDue: 'Verifica prevista oggi',
+        targetOverdue: 'Data obiettivo superata',
+        targetDue: 'Obiettivo previsto oggi',
+        goalLog: 'È ora di registrare {goal}',
+        goalDateOverdue: '{goal}: data superata',
+        goalDateDue: '{goal}: previsto oggi',
+      },
+      lastActivity: { today: 'Ultima attività oggi', yesterday: 'Ultima attività ieri', daysAgo: 'Ultima attività {count} giorni fa' },
+    },
     setForYou: {
       heading: "Assegnate a te",
       description: "Competenze per cui il tuo datore di lavoro o team ha fissato un obiettivo e che non segui ancora. Aggiungine una per iniziare a lavorarci.",

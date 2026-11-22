@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'Aún no hay objetivos de habilidades activos. Establece un objetivo para evaluar dónde estás y definir tu siguiente paso.',
     personalTarget: 'Objetivo personal',
     targetDatePrefix: 'para el',
+    sections: {
+      due: { heading: 'Pendiente o atrasado', description: 'Hay algo que hacer en estas ahora.' },
+      recent: { heading: 'Actividad reciente', description: 'Actividad registrada en las últimas dos semanas.' },
+      showAll: 'Mostrar las {count}',
+      showFewer: 'Mostrar menos',
+      others: 'Otras habilidades',
+      reasons: {
+        checkinOverdue: 'Revisión atrasada',
+        checkinDue: 'Revisión para hoy',
+        targetOverdue: 'Fecha objetivo pasada',
+        targetDue: 'Objetivo para hoy',
+        goalLog: 'Es hora de registrar {goal}',
+        goalDateOverdue: '{goal}: fecha pasada',
+        goalDateDue: '{goal}: para hoy',
+      },
+      lastActivity: { today: 'Última actividad hoy', yesterday: 'Última actividad ayer', daysAgo: 'Última actividad hace {count} días' },
+    },
     setForYou: {
       heading: "Asignadas a ti",
       description: "Habilidades en las que tu empresa o equipo fijó un objetivo y que aún no sigues. Añade una para empezar a trabajar en ella.",

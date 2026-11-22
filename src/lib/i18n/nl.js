@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'Nog geen actieve vaardigheidsdoelen. Stel een doel in om te bepalen waar je staat en wat je volgende stap wordt.',
     personalTarget: 'Persoonlijk doel',
     targetDatePrefix: 'voor',
+    sections: {
+      due: { heading: 'Te doen of te laat', description: 'Hier moet nu iets aan gebeuren.' },
+      recent: { heading: 'Recente activiteit', description: 'Activiteit vastgelegd in de afgelopen twee weken.' },
+      showAll: 'Alle {count} tonen',
+      showFewer: 'Minder tonen',
+      others: 'Andere vaardigheden',
+      reasons: {
+        checkinOverdue: 'Check-in te laat',
+        checkinDue: 'Check-in vandaag',
+        targetOverdue: 'Streefdatum verstreken',
+        targetDue: 'Doel vandaag',
+        goalLog: 'Tijd om {goal} vast te leggen',
+        goalDateOverdue: '{goal}: datum verstreken',
+        goalDateDue: '{goal}: vandaag',
+      },
+      lastActivity: { today: 'Laatste activiteit vandaag', yesterday: 'Laatste activiteit gisteren', daysAgo: 'Laatste activiteit {count} dagen geleden' },
+    },
     setForYou: {
       heading: "Voor jou ingesteld",
       description: "Vaardigheden waarvoor je werkgever of team een doel heeft gesteld en die je nog niet volgt. Voeg er een toe om eraan te werken.",

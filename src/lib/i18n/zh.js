@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: '目前没有进行中的技能目标。请设定一个目标，评估当前水平并确定下一步。',
     personalTarget: '个人目标',
     targetDatePrefix: '截止',
+    sections: {
+      due: { heading: '到期或逾期', description: '这些技能现在有事要做。' },
+      recent: { heading: '最近的活动', description: '过去两周记录的活动。' },
+      showAll: '显示全部 {count} 项',
+      showFewer: '收起',
+      others: '其他技能',
+      reasons: {
+        checkinOverdue: '自评已逾期',
+        checkinDue: '自评今天到期',
+        targetOverdue: '目标日期已过',
+        targetDue: '目标今天到期',
+        goalLog: '该记录{goal}了',
+        goalDateOverdue: '{goal}：日期已过',
+        goalDateDue: '{goal}：今天到期',
+      },
+      lastActivity: { today: '最近活动：今天', yesterday: '最近活动：昨天', daysAgo: '最近活动：{count} 天前' },
+    },
     setForYou: {
       heading: "为你设定的技能",
       description: "你的雇主或团队已设定目标、但你还没有跟踪的技能。添加后即可开始朝目标努力。",

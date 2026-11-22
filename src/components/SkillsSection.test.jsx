@@ -14,6 +14,7 @@ function makeSupabaseMock(resultsByTable = {}) {
         select: vi.fn(() => builder),
         eq: vi.fn(() => builder),
         in: vi.fn(() => builder),
+        gte: vi.fn(() => builder),
         is: vi.fn(() => builder),
         order: vi.fn(() => builder),
         limit: vi.fn(() => builder),
@@ -41,6 +42,7 @@ function defaultSupabaseMock() {
 let supabaseMock = defaultSupabaseMock()
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: { from: (...args) => supabaseMock.from(...args) } }))
+vi.mock('../lib/skillGoals', () => ({ listActiveGoalsForAttention: vi.fn().mockResolvedValue([]) }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }))
 vi.mock('../context/LanguageContext', () => ({ useLanguage: () => ({ t: (key) => key }) }))
 vi.mock('../lib/managerSkillActions', async (importOriginal) => ({
@@ -106,5 +108,72 @@ describe('skills set for you by someone else', () => {
       table: 'skills',
       row: expect.objectContaining({ name: 'Coaching', library_skill_id: 'lib-coaching', user_id: 'user-1' }),
     })
+  })
+})
+
+describe('sections at the top of the list', () => {
+  it('shows skills with something due first, then recent activity, then the rest', async () => {
+    const recent = new Date(Date.now() - 2 * 86400000).toISOString()
+    supabaseMock = makeSupabaseMock({
+      skills: {
+        data: [
+          { id: 'quiet', name: 'Quiet skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2026-01-03' },
+          { id: 'active', name: 'Active skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2026-01-02' },
+          { id: 'due', name: 'Due skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, next_checkin_date: '2020-01-01', date_added: '2026-01-01' },
+        ],
+        error: null,
+      },
+      xapi_statements: { data: [{ id: 'st-1', skill_id: 'active', recorded_at: recent }], error: null },
+    })
+    renderSection()
+
+    const dueHeading = await screen.findByRole('heading', { name: 'skills.sections.due.heading' })
+    const recentHeading = await screen.findByRole('heading', { name: 'skills.sections.recent.heading' })
+    const othersHeading = screen.getByRole('heading', { name: 'skills.sections.others' })
+    const dueSection = dueHeading.closest('section')
+    const recentSection = recentHeading.closest('section')
+    expect(dueSection).toHaveTextContent('Due skill')
+    expect(dueSection).toHaveTextContent('skills.sections.reasons.checkinOverdue')
+    expect(dueSection).not.toHaveTextContent('Active skill')
+    expect(recentSection).toHaveTextContent('Active skill')
+    expect(recentSection).toHaveTextContent('skills.sections.lastActivity.daysAgo')
+    expect(recentSection).not.toHaveTextContent('Quiet skill')
+    // Sections come in that order, each skill once.
+    expect(dueHeading.compareDocumentPosition(recentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(recentHeading.compareDocumentPosition(othersHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByText('Quiet skill')).toHaveLength(1)
+  })
+
+  it('shows one list under another sort', async () => {
+    supabaseMock = makeSupabaseMock({
+      skills: { data: [{ id: 'due', name: 'Due skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, next_checkin_date: '2020-01-01' }], error: null },
+    })
+    renderSection()
+    await screen.findByRole('heading', { name: 'skills.sections.due.heading' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'skills.filters' }))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'name' } })
+    expect(screen.queryByRole('heading', { name: 'skills.sections.due.heading' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Due skill').length).toBeGreaterThan(0)
+  })
+})
+
+describe('a long top section', () => {
+  it('shows the first four, with the rest behind Show all', async () => {
+    const recent = new Date(Date.now() - 86400000).toISOString()
+    const ids = ['a', 'b', 'c', 'd', 'e']
+    supabaseMock = makeSupabaseMock({
+      skills: { data: ids.map((id) => ({ id, name: `Skill ${id}`, lifecycle_stage: 'developing', library_skill_id: null, level: 2 })), error: null },
+      xapi_statements: { data: ids.map((id) => ({ id: `st-${id}`, skill_id: id, recorded_at: recent })), error: null },
+    })
+    renderSection()
+
+    const section = (await screen.findByRole('heading', { name: 'skills.sections.recent.heading' })).closest('section')
+    expect(section.querySelectorAll('li')).toHaveLength(4)
+    const toggle = screen.getByRole('button', { name: 'skills.sections.showAll' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(section.querySelectorAll('li')).toHaveLength(5)
+    expect(screen.getByRole('button', { name: 'skills.sections.showFewer' })).toHaveAttribute('aria-expanded', 'true')
   })
 })

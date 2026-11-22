@@ -215,6 +215,23 @@ export default {
     skillTargetsEmpty: 'Aucun objectif de compétence actif. Définissez un objectif pour évaluer votre niveau et la prochaine étape.',
     personalTarget: 'Objectif personnel',
     targetDatePrefix: 'avant le',
+    sections: {
+      due: { heading: 'À faire ou en retard', description: 'Il y a quelque chose à faire sur celles-ci.' },
+      recent: { heading: 'Activité récente', description: 'Activité enregistrée ces deux dernières semaines.' },
+      showAll: 'Tout afficher ({count})',
+      showFewer: 'Afficher moins',
+      others: 'Autres compétences',
+      reasons: {
+        checkinOverdue: 'Point d’étape en retard',
+        checkinDue: 'Point d’étape prévu aujourd’hui',
+        targetOverdue: 'Date cible dépassée',
+        targetDue: 'Objectif prévu aujourd’hui',
+        goalLog: 'C’est le moment d’enregistrer {goal}',
+        goalDateOverdue: '{goal} : date dépassée',
+        goalDateDue: '{goal} : prévu aujourd’hui',
+      },
+      lastActivity: { today: 'Dernière activité aujourd’hui', yesterday: 'Dernière activité hier', daysAgo: 'Dernière activité il y a {count} jours' },
+    },
     setForYou: {
       heading: "Fixées pour vous",
       description: "Des compétences pour lesquelles votre employeur ou votre équipe a fixé un objectif et que vous ne suivez pas encore. Ajoutez-en une pour commencer à progresser.",

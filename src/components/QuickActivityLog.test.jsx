@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({ tables: { skills: [{ id: 'skill-1', name: 'Running', user_id: 'user-1' }] }, calls: [] }))
@@ -53,6 +53,9 @@ describe('QuickActivityLog', () => {
     expect(within(dialog).getByDisplayValue('Morning run')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Save (1)' })).toBeInTheDocument()
 
+    // The dialog listens for Escape from the same step that moves focus into
+    // it; under a busy test run that can land a moment after it appears.
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('Morning run')).not.toBeInTheDocument()
