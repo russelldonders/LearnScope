@@ -15,6 +15,7 @@ import {
   goalMiniHistory,
   goalShapeText,
   goalStreak,
+  isGoalAchieved,
   lastGoalEntry,
   localDateString,
   previousPeriodResult,
@@ -613,7 +614,7 @@ export function SkillGoalTile({
   const history = goalMiniHistory(goal, statements)
   const previousResult = previousPeriodResult(goal, statements)
   const due = nextLog != null && nextLog <= today
-  const achieved = (goal.target_value != null || progress.sessions != null) && progress.reached === true
+  const achieved = isGoalAchieved({ goal, progress })
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
     ? 'skillGoals.bestSoFar'

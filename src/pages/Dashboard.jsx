@@ -13,6 +13,7 @@ import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
 import SkillGoalModal from '../components/SkillGoalModal'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listActiveGoalsForAttention } from '../lib/skillGoals'
+import { isGoalAchieved, openGoalsFirst } from '../lib/skillGoalProgress'
 import { settledValue } from '../lib/settledValue'
 import { todayDateString } from '../lib/checkin'
 
@@ -139,13 +140,14 @@ export default function Dashboard() {
   }
 
   // One goals section: those due first and shown by default; with none due,
-  // the next few. "Show all" opens the rest either way.
+  // the next few. "Show all" opens the rest either way. Goals still to do
+  // always come before achieved ones, even one just added or due.
   const addedGoals = addedGoalIds.map((id) => goals.find((item) => item.goal.id === id)).filter(Boolean)
   const isAdded = (item) => addedGoalIds.includes(item.goal.id)
   const dueGoals = goals.filter((item) => dueGoalIds.has(item.goal.id) && !isAdded(item))
   const otherGoals = goals.filter((item) => !dueGoalIds.has(item.goal.id) && !isAdded(item))
-  const orderedGoals = [...addedGoals, ...dueGoals, ...otherGoals]
-  const pinnedCount = addedGoals.length + dueGoals.length
+  const orderedGoals = openGoalsFirst([...addedGoals, ...dueGoals, ...otherGoals])
+  const pinnedCount = [...addedGoals, ...dueGoals].filter((item) => !isGoalAchieved(item)).length
 
   // A goal added from Home: its skill may be new, so the nav and goals reload.
   async function handleGoalAdded(created) {

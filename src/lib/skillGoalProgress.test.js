@@ -28,6 +28,7 @@ import {
   parseClock,
   previousPeriodResult,
   sortGoalsForAttention,
+  openGoalsFirst,
   resolveMetric,
   slugifyMetric,
   validateEntryInput,
@@ -784,5 +785,27 @@ describe('a goal done in sets: 3 x 100, 4 times a week', () => {
       ['met', true],
       ['inProgress', false],
     ])
+  })
+})
+
+describe('openGoalsFirst', () => {
+  const item = (id, { target = 10, reached = false, sessions } = {}) => ({
+    goal: { id, target_value: target },
+    progress: { reached, ...(sessions ? { sessions } : {}) },
+  })
+
+  it('puts goals still to do before achieved ones, keeping the order within each', () => {
+    const items = [item('a', { reached: true }), item('b'), item('c', { reached: true }), item('d')]
+    expect(openGoalsFirst(items).map((i) => i.goal.id)).toEqual(['b', 'd', 'a', 'c'])
+  })
+
+  it('never counts a goal without a target as achieved', () => {
+    const items = [item('a', { target: null, reached: true }), item('b')]
+    expect(openGoalsFirst(items).map((i) => i.goal.id)).toEqual(['a', 'b'])
+  })
+
+  it('counts a sessions goal with every session done as achieved', () => {
+    const items = [item('a', { target: null, reached: true, sessions: { done: 3, target: 3 } }), item('b')]
+    expect(openGoalsFirst(items).map((i) => i.goal.id)).toEqual(['b', 'a'])
   })
 })

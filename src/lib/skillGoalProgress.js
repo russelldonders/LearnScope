@@ -574,6 +574,18 @@ export function goalLogFeedback(goal, before, after) {
   return null
 }
 
+// Whether a goal's target is met: for this period on a repeating goal, for good
+// on a one-off one. A goal without a target can't be met.
+export function isGoalAchieved({ goal, progress }) {
+  return (goal.target_value != null || progress?.sessions != null) && progress?.reached === true
+}
+
+// The goals still to do first, then the achieved ones, each keeping the order
+// they came in.
+export function openGoalsFirst(items) {
+  return [...items.filter((item) => !isGoalAchieved(item)), ...items.filter(isGoalAchieved)]
+}
+
 // Goals in the order they need the learner: those due a log first (most
 // overdue first), then the nearest target dates, then the newest.
 export function sortGoalsForAttention(items, today = localDateString()) {

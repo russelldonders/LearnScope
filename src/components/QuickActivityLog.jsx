@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SkillPickerModal from './SkillPickerModal'
+import AccessibleDialog from './AccessibleDialog'
 import ActivityReflection from './ActivityReflection'
 import VoiceInputButton from './VoiceInputButton'
 import GoalSetField from './GoalSetField'
@@ -38,8 +39,9 @@ const RECENT_ROWS = 60
 // ({ row, nonce }) adds a card copying an activity from elsewhere on the page,
 // to check and save like any other. focusSkill ({ id, name }): logging from
 // that skill's page, so every activity includes it and the repeat shortcuts
-// are the ones done on it.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null, focusSkill = null }) {
+// are the ones done on it. The activities to check open in a pop-up, unless
+// inDialog: this box is itself already in one (the skill page's quick log).
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null, focusSkill = null, inDialog = false }) {
   const { t, language } = useLanguage()
   const exampleSeed = useExampleSeed()
   const sectionRef = useRef(null)
@@ -216,6 +218,23 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     setSaving(false)
   }
 
+  const reviewInPopup = cards.length > 0 && !inDialog
+  const review = (
+    <ReviewCards
+      cards={cards}
+      skills={skills}
+      goals={goals}
+      experiences={experiences}
+      errors={errors}
+      saving={saving}
+      onUpdate={updateCard}
+      onRemove={removeCard}
+      onSkillCreated={(skill) => setSkills((current) => [...current, skill].sort((a, b) => a.name.localeCompare(b.name)))}
+      onSave={handleSave}
+      onDiscard={() => setCards([])}
+    />
+  )
+
   return (
     <section ref={sectionRef} tabIndex={-1} aria-labelledby="quick-log-heading" className="focus:outline-none">
       <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
@@ -272,7 +291,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
           {question} <span className="text-secondary">{t('quickLog.answerHint')}</span>
         </p>
       )}
-      {formError && <p role="alert" className="text-sm text-red-700 mt-3">{formError}</p>}
+      {formError && !reviewInPopup && <p role="alert" className="text-sm text-red-700 mt-3">{formError}</p>}
 
       {templates.length > 0 && (
         <div className="mt-4">
@@ -293,36 +312,20 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
         </div>
       )}
 
-      {cards.length > 0 && (
-        <div className="mt-4 space-y-3">
-          <p className="text-sm text-secondary">{t('quickLog.checkHint')}</p>
-          {cards.map((card) => (
-            <DraftCard
-              key={card.key}
-              card={card}
-              skills={skills}
-              goals={goals}
-              experiences={experiences}
-              error={errors[card.key]}
-              onChange={(changes) => updateCard(card.key, changes)}
-              onRemove={() => removeCard(card.key)}
-              onSkillCreated={(skill) => setSkills((current) => [...current, skill].sort((a, b) => a.name.localeCompare(b.name)))}
-            />
-          ))}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 disabled:opacity-60"
-            >
-              {saving ? t('quickLog.saving') : t('quickLog.saveButton', { count: cards.length })}
-            </button>
-            <button type="button" onClick={() => setCards([])} disabled={saving} className="text-sm text-secondary hover:text-ink">
-              {t('quickLog.discard')}
-            </button>
-          </div>
-        </div>
+      {cards.length > 0 && inDialog && <div className="mt-4">{review}</div>}
+      {reviewInPopup && (
+        // The activities to check open in a pop-up; closing it is the same as
+        // Discard, so it doesn't close on a stray click outside.
+        <AccessibleDialog
+          labelledBy="quick-log-review-title"
+          onClose={() => { if (!saving) setCards([]) }}
+          closeOnBackdrop={false}
+          panelClassName="w-full max-w-lg bg-paper border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+        >
+          <h2 id="quick-log-review-title" className="font-display text-2xl text-ink mb-4">{t('quickLog.title')}</h2>
+          {review}
+          {formError && <p role="alert" className="text-sm text-red-700 mt-3">{formError}</p>}
+        </AccessibleDialog>
       )}
 
       {result && (
@@ -335,6 +338,41 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
         </div>
       )}
     </section>
+  )
+}
+
+function ReviewCards({ cards, skills, goals, experiences, errors, saving, onUpdate, onRemove, onSkillCreated, onSave, onDiscard }) {
+  const { t } = useLanguage()
+  return (
+        <div className="space-y-3">
+          <p className="text-sm text-secondary">{t('quickLog.checkHint')}</p>
+          {cards.map((card) => (
+            <DraftCard
+              key={card.key}
+              card={card}
+              skills={skills}
+              goals={goals}
+              experiences={experiences}
+              error={errors[card.key]}
+              onChange={(changes) => onUpdate(card.key, changes)}
+              onRemove={() => onRemove(card.key)}
+              onSkillCreated={onSkillCreated}
+            />
+          ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? t('quickLog.saving') : t('quickLog.saveButton', { count: cards.length })}
+            </button>
+            <button type="button" onClick={onDiscard} disabled={saving} className="text-sm text-secondary hover:text-ink">
+              {t('quickLog.discard')}
+            </button>
+          </div>
+        </div>
   )
 }
 

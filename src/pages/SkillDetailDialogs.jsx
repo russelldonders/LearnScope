@@ -238,6 +238,7 @@ export default function SkillDetailDialogs({
           <QuickActivityLog
             user={user}
             focusSkill={focusSkill}
+            inDialog
             goalItems={quickLogGoals.map((goal) => ({ goal, progress: computeGoalProgress(goal, statements) }))}
             onLogged={async () => {
               const fresh = await loadHistory()
