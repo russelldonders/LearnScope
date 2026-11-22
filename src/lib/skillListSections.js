@@ -1,8 +1,13 @@
-// The Skills page's first two sections: skills with something due or overdue,
-// then skills with recent activity. Each skill shows in one place only.
+// The Skills page's first sections: skills with something due or overdue,
+// then skills with recent activity, then neglected skills. Each skill shows
+// in one place only.
 
 // How far back an activity counts as recent.
 export const RECENT_ACTIVITY_DAYS = 14
+// How long without any activity before a skill counts as neglected.
+export const NEGLECTED_AFTER_DAYS = 60
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 // What is due on each skill, today or earlier: its check-in, its latest
 // target's date (while the level isn't reached), and its goals' log or target
@@ -27,10 +32,8 @@ export function dueReasonsBySkill({ skills, latestTargets = [], goalItems = [], 
     add(target.skill_id, { kind: 'target', date: target.target_date })
   }
   for (const { goal, skill, progress, nextLog } of goalItems) {
-    if (progress?.reached) {
-      // A repeating goal met for this period isn't due a log either.
-      continue
-    }
+    // A goal reached (for this period, on a repeating one) isn't due a log.
+    if (progress?.reached) continue
     add(skill.id, { kind: 'goalLog', date: nextLog, goalTitle: goal.title })
     add(skill.id, { kind: 'goalDate', date: goal.target_date, goalTitle: goal.title })
   }
@@ -42,38 +45,66 @@ function isMorePressing(a, b) {
   return a.date < b.date
 }
 
-// The newest activity date per skill, from the learner's recent activities
-// ({ id, skill_id, recorded_at }) and their further skill links
-// ({ statement_id, skill_id }).
-export function latestActivityBySkill(statements = [], extraLinks = []) {
+// The newest activity date per skill, from rows of { skill_id, recorded_at }:
+// the learner's activities, and the further skills each is linked to.
+export function latestActivityBySkill(rows = []) {
   const latest = new Map()
-  const note = (skillId, recordedAt) => {
-    if (!skillId || !recordedAt) return
+  for (const { skill_id: skillId, recorded_at: recordedAt } of rows) {
+    if (!skillId || !recordedAt) continue
     if (!latest.has(skillId) || new Date(recordedAt) > new Date(latest.get(skillId))) latest.set(skillId, recordedAt)
   }
-  const recordedAtById = new Map()
-  for (const row of statements) {
-    recordedAtById.set(row.id, row.recorded_at)
-    note(row.skill_id, row.recorded_at)
-  }
-  for (const link of extraLinks) note(link.skill_id, recordedAtById.get(link.statement_id))
   return latest
 }
 
 // Splits skills (already filtered, in their usual order) into those due,
-// those with recent activity, and the rest. Due: overdue first, then the
-// earliest date. Recent: newest activity first. The rest keep their order.
-export function splitSkillsForList(skills, dueBySkillId, activityBySkillId) {
-  const due = skills
-    .filter((skill) => dueBySkillId.has(skill.id))
-    .sort((a, b) => {
-      const ra = dueBySkillId.get(a.id)
-      const rb = dueBySkillId.get(b.id)
-      return isMorePressing(ra, rb) ? -1 : isMorePressing(rb, ra) ? 1 : 0
-    })
-  const recent = skills
-    .filter((skill) => !dueBySkillId.has(skill.id) && activityBySkillId.has(skill.id))
-    .sort((a, b) => new Date(activityBySkillId.get(b.id)) - new Date(activityBySkillId.get(a.id)))
-  const rest = skills.filter((skill) => !dueBySkillId.has(skill.id) && !activityBySkillId.has(skill.id))
-  return { due, recent, rest }
+// those with recent activity, neglected ones, and the rest.
+// - Due: overdue first, then the earliest date.
+// - Recent: activity in the last RECENT_ACTIVITY_DAYS, newest first.
+// - Neglected: no activity in NEGLECTED_AFTER_DAYS (or none at all, on a
+//   skill tracked for longer than that), longest neglected first.
+// The rest keep their order.
+export function splitSkillsForList(skills, dueBySkillId, activityBySkillId, now = new Date()) {
+  const recentSince = now.getTime() - RECENT_ACTIVITY_DAYS * DAY_MS
+  const neglectedBefore = now.getTime() - NEGLECTED_AFTER_DAYS * DAY_MS
+  const lastActivity = (skill) => {
+    const date = activityBySkillId.get(skill.id)
+    return date ? new Date(date).getTime() : null
+  }
+  // Since when nothing has happened: the last activity, else when it was added.
+  const quietSince = (skill) => lastActivity(skill) ?? (skill.date_added ? new Date(skill.date_added).getTime() : null)
+
+  const due = []
+  const recent = []
+  const neglected = []
+  const rest = []
+  for (const skill of skills) {
+    const last = lastActivity(skill)
+    const quiet = quietSince(skill)
+    if (dueBySkillId.has(skill.id)) due.push(skill)
+    else if (last != null && last >= recentSince) recent.push(skill)
+    else if (quiet != null && quiet < neglectedBefore) neglected.push(skill)
+    else rest.push(skill)
+  }
+  due.sort((a, b) => {
+    const ra = dueBySkillId.get(a.id)
+    const rb = dueBySkillId.get(b.id)
+    return isMorePressing(ra, rb) ? -1 : isMorePressing(rb, ra) ? 1 : 0
+  })
+  recent.sort((a, b) => lastActivity(b) - lastActivity(a))
+  neglected.sort((a, b) => quietSince(a) - quietSince(b))
+  return { due, recent, neglected, rest }
+}
+
+// "Last activity …" in days, weeks, months or years, as a translation key and
+// its count. Null without an activity.
+export function lastActivityLabel(recordedAt, now = new Date()) {
+  if (!recordedAt) return null
+  const day = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const days = Math.round((day(now) - day(new Date(recordedAt))) / DAY_MS)
+  if (days <= 0) return { key: 'skills.sections.lastActivity.today' }
+  if (days === 1) return { key: 'skills.sections.lastActivity.yesterday' }
+  if (days < 14) return { key: 'skills.sections.lastActivity.daysAgo', count: days }
+  if (days < 60) return { key: 'skills.sections.lastActivity.weeksAgo', count: Math.floor(days / 7) }
+  if (days < 730) return { key: 'skills.sections.lastActivity.monthsAgo', count: Math.floor(days / 30) }
+  return { key: 'skills.sections.lastActivity.yearsAgo', count: Math.floor(days / 365) }
 }

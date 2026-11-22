@@ -9,7 +9,9 @@ import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus, isPersonValidate
 import LifecycleStageIcon from './LifecycleStageIcon'
 import { useLanguage } from '../context/LanguageContext'
 
-export default function SkillCard({ skill, onEdit, compact = false }) {
+// notes: short lines shown inside the card under its level, each
+// { text, urgent } -- on the Skills page, what's due and the last activity.
+export default function SkillCard({ skill, onEdit, compact = false, notes = [] }) {
   const { t } = useLanguage()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   // Falls back to the latest self-assessment when skill.level itself hasn't
@@ -88,6 +90,11 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
                 : ` · ${t('modals.skillCard.otherTargetMetSuffix', { name: skill.targetContextName ?? '' })}`)}
           </p>
         )}
+        {notes.filter((note) => note?.text).map((note) => (
+          <p key={note.text} className={`text-xs mt-1 ${note.urgent ? 'text-red-700 font-medium' : 'text-secondary'}`}>
+            {note.text}
+          </p>
+        ))}
         {!compact && skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
           <p className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
             <LifecycleStageIcon stage={skill.lifecycle_stage} />

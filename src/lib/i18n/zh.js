@@ -218,6 +218,7 @@ export default {
     sections: {
       due: { heading: '到期或逾期', description: '这些技能现在有事要做。' },
       recent: { heading: '最近的活动', description: '过去两周记录的活动。' },
+      neglected: { heading: '被搁置的技能', description: '过去两个月没有活动。' },
       showAll: '显示全部 {count} 项',
       showFewer: '收起',
       others: '其他技能',
@@ -230,7 +231,7 @@ export default {
         goalDateOverdue: '{goal}：日期已过',
         goalDateDue: '{goal}：今天到期',
       },
-      lastActivity: { today: '最近活动：今天', yesterday: '最近活动：昨天', daysAgo: '最近活动：{count} 天前' },
+      lastActivity: { today: '最近活动：今天', yesterday: '最近活动：昨天', daysAgo: '最近活动：{count} 天前', weeksAgo: '最近活动：{count} 周前', monthsAgo: '最近活动：{count} 个月前', yearsAgo: '最近活动：{count} 年前', none: '还没有活动' },
     },
     setForYou: {
       heading: "为你设定的技能",

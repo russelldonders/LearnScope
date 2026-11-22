@@ -218,6 +218,7 @@ export default {
     sections: {
       due: { heading: 'Te doen of te laat', description: 'Hier moet nu iets aan gebeuren.' },
       recent: { heading: 'Recente activiteit', description: 'Activiteit vastgelegd in de afgelopen twee weken.' },
+      neglected: { heading: 'Verwaarloosd', description: 'Geen activiteit in de afgelopen twee maanden.' },
       showAll: 'Alle {count} tonen',
       showFewer: 'Minder tonen',
       others: 'Andere vaardigheden',
@@ -230,7 +231,7 @@ export default {
         goalDateOverdue: '{goal}: datum verstreken',
         goalDateDue: '{goal}: vandaag',
       },
-      lastActivity: { today: 'Laatste activiteit vandaag', yesterday: 'Laatste activiteit gisteren', daysAgo: 'Laatste activiteit {count} dagen geleden' },
+      lastActivity: { today: 'Laatste activiteit vandaag', yesterday: 'Laatste activiteit gisteren', daysAgo: 'Laatste activiteit {count} dagen geleden', weeksAgo: 'Laatste activiteit {count} weken geleden', monthsAgo: 'Laatste activiteit {count} maanden geleden', yearsAgo: 'Laatste activiteit {count} jaar geleden', none: 'Nog geen activiteit' },
     },
     setForYou: {
       heading: "Voor jou ingesteld",

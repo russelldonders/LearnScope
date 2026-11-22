@@ -218,6 +218,7 @@ export default {
     sections: {
       due: { heading: 'Due or overdue', description: 'Something on these needs doing now.' },
       recent: { heading: 'Recent activity', description: 'Activity logged in the last two weeks.' },
+      neglected: { heading: 'Neglected', description: 'No activity in the last two months.' },
       showAll: 'Show all {count}',
       showFewer: 'Show fewer',
       others: 'Other skills',
@@ -230,7 +231,7 @@ export default {
         goalDateOverdue: '{goal}: date passed',
         goalDateDue: '{goal}: due today',
       },
-      lastActivity: { today: 'Last activity today', yesterday: 'Last activity yesterday', daysAgo: 'Last activity {count} days ago' },
+      lastActivity: { today: 'Last activity today', yesterday: 'Last activity yesterday', daysAgo: 'Last activity {count} days ago', weeksAgo: 'Last activity {count} weeks ago', monthsAgo: 'Last activity {count} months ago', yearsAgo: 'Last activity {count} years ago', none: 'No activity yet' },
     },
     setForYou: {
       heading: "Set for you",

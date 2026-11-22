@@ -218,6 +218,7 @@ export default {
     sections: {
       due: { heading: 'Pendiente o atrasado', description: 'Hay algo que hacer en estas ahora.' },
       recent: { heading: 'Actividad reciente', description: 'Actividad registrada en las últimas dos semanas.' },
+      neglected: { heading: 'Descuidadas', description: 'Sin actividad en los últimos dos meses.' },
       showAll: 'Mostrar las {count}',
       showFewer: 'Mostrar menos',
       others: 'Otras habilidades',
@@ -230,7 +231,7 @@ export default {
         goalDateOverdue: '{goal}: fecha pasada',
         goalDateDue: '{goal}: para hoy',
       },
-      lastActivity: { today: 'Última actividad hoy', yesterday: 'Última actividad ayer', daysAgo: 'Última actividad hace {count} días' },
+      lastActivity: { today: 'Última actividad hoy', yesterday: 'Última actividad ayer', daysAgo: 'Última actividad hace {count} días', weeksAgo: 'Última actividad hace {count} semanas', monthsAgo: 'Última actividad hace {count} meses', yearsAgo: 'Última actividad hace {count} años', none: 'Aún sin actividad' },
     },
     setForYou: {
       heading: "Asignadas a ti",

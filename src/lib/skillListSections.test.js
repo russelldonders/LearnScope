@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dueReasonsBySkill, latestActivityBySkill, splitSkillsForList } from './skillListSections'
+import { dueReasonsBySkill, lastActivityLabel, latestActivityBySkill, splitSkillsForList } from './skillListSections'
 
 const today = '2026-11-22'
 const skill = (id, extra = {}) => ({ id, name: id, displayedLevel: 2, next_checkin_date: null, ...extra })
@@ -64,36 +64,67 @@ describe('dueReasonsBySkill', () => {
 })
 
 describe('latestActivityBySkill', () => {
-  it('takes the newest activity per skill, through further skill links too', () => {
-    const latest = latestActivityBySkill(
-      [
-        { id: 's1', skill_id: 'a', recorded_at: '2026-11-10T09:00:00+00:00' },
-        { id: 's2', skill_id: 'a', recorded_at: '2026-11-20T09:00:00+00:00' },
-        { id: 's3', skill_id: null, recorded_at: '2026-11-21T09:00:00+00:00' },
-      ],
-      [{ statement_id: 's3', skill_id: 'b' }, { statement_id: 's1', skill_id: 'b' }],
-    )
+  it('takes the newest activity per skill', () => {
+    const latest = latestActivityBySkill([
+      { skill_id: 'a', recorded_at: '2026-11-10T09:00:00+00:00' },
+      { skill_id: 'a', recorded_at: '2026-11-20T09:00:00+00:00' },
+      { skill_id: 'b', recorded_at: '2026-11-21T09:00:00+00:00' },
+      { skill_id: null, recorded_at: '2026-11-22T09:00:00+00:00' },
+    ])
     expect(latest.get('a')).toBe('2026-11-20T09:00:00+00:00')
     expect(latest.get('b')).toBe('2026-11-21T09:00:00+00:00')
+    expect(latest.size).toBe(2)
   })
 })
 
 describe('splitSkillsForList', () => {
-  it('puts each skill in one section: due, then recent, then the rest in order', () => {
-    const skills = ['a', 'b', 'c', 'd', 'e'].map((id) => skill(id))
+  const now = new Date('2026-11-22T12:00:00')
+
+  it('puts each skill in one section: due, recent, neglected, then the rest in order', () => {
+    const skills = [
+      skill('due-old', { date_added: '2025-01-01' }),
+      skill('recent-1'),
+      skill('quiet', { date_added: '2026-11-01' }),
+      skill('neglected-long', { date_added: '2025-01-01' }),
+      skill('recent-2'),
+      skill('neglected-never', { date_added: '2026-06-01' }),
+      skill('middling'),
+      skill('due-now'),
+    ]
     const due = new Map([
-      ['c', { date: '2026-11-21', overdue: true }],
-      ['d', { date: today, overdue: false }],
-      ['e', { date: '2026-11-01', overdue: true }],
+      ['due-now', { date: today, overdue: false }],
+      ['due-old', { date: '2026-11-01', overdue: true }],
     ])
     const activity = new Map([
-      ['a', '2026-11-10T09:00:00+00:00'],
-      ['c', '2026-11-21T09:00:00+00:00'],
-      ['b', '2026-11-20T09:00:00+00:00'],
+      ['recent-1', '2026-11-10T09:00:00+00:00'],
+      ['recent-2', '2026-11-20T09:00:00+00:00'],
+      ['due-old', '2026-11-21T09:00:00+00:00'],
+      ['neglected-long', '2026-03-01T09:00:00+00:00'],
+      ['middling', '2026-10-15T09:00:00+00:00'],
     ])
-    const { due: dueList, recent, rest } = splitSkillsForList(skills, due, activity)
-    expect(dueList.map((s) => s.id)).toEqual(['e', 'c', 'd'])
-    expect(recent.map((s) => s.id)).toEqual(['b', 'a'])
-    expect(rest.map((s) => s.id)).toEqual([])
+    const sections = splitSkillsForList(skills, due, activity, now)
+    expect(sections.due.map((s) => s.id)).toEqual(['due-old', 'due-now'])
+    expect(sections.recent.map((s) => s.id)).toEqual(['recent-2', 'recent-1'])
+    expect(sections.neglected.map((s) => s.id)).toEqual(['neglected-long', 'neglected-never'])
+    // Added three weeks ago with no activity, or active six weeks ago: neither.
+    expect(sections.rest.map((s) => s.id)).toEqual(['quiet', 'middling'])
+  })
+})
+
+describe('lastActivityLabel', () => {
+  const now = new Date('2026-11-22T12:00:00')
+  it.each([
+    ['2026-11-22T08:00:00', 'today', undefined],
+    ['2026-11-21T08:00:00', 'yesterday', undefined],
+    ['2026-11-12T08:00:00', 'daysAgo', 10],
+    ['2026-10-25T08:00:00', 'weeksAgo', 4],
+    ['2026-05-22T08:00:00', 'monthsAgo', 6],
+    ['2023-11-01T08:00:00', 'yearsAgo', 3],
+  ])('reads %s as %s', (date, key, count) => {
+    expect(lastActivityLabel(date, now)).toEqual(count == null ? { key: `skills.sections.lastActivity.${key}` } : { key: `skills.sections.lastActivity.${key}`, count })
+  })
+
+  it('is null without an activity', () => {
+    expect(lastActivityLabel(null, now)).toBeNull()
   })
 })

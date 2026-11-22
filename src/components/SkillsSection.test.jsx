@@ -15,6 +15,7 @@ function makeSupabaseMock(resultsByTable = {}) {
         eq: vi.fn(() => builder),
         in: vi.fn(() => builder),
         gte: vi.fn(() => builder),
+        range: vi.fn(() => builder),
         is: vi.fn(() => builder),
         order: vi.fn(() => builder),
         limit: vi.fn(() => builder),
@@ -117,7 +118,7 @@ describe('sections at the top of the list', () => {
     supabaseMock = makeSupabaseMock({
       skills: {
         data: [
-          { id: 'quiet', name: 'Quiet skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2026-01-03' },
+          { id: 'quiet', name: 'Quiet skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: new Date().toISOString() },
           { id: 'active', name: 'Active skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2026-01-02' },
           { id: 'due', name: 'Due skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, next_checkin_date: '2020-01-01', date_added: '2026-01-01' },
         ],
@@ -175,5 +176,37 @@ describe('a long top section', () => {
     fireEvent.click(toggle)
     expect(section.querySelectorAll('li')).toHaveLength(5)
     expect(screen.getByRole('button', { name: 'skills.sections.showFewer' })).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('neglected skills and last activity on each card', () => {
+  it('lists skills with no activity for two months as neglected, saying so inside the card', async () => {
+    const longAgo = new Date(Date.now() - 120 * 86400000).toISOString()
+    const lastWeek = new Date(Date.now() - 20 * 86400000).toISOString()
+    supabaseMock = makeSupabaseMock({
+      skills: {
+        data: [
+          { id: 'old', name: 'Old skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2025-01-01' },
+          { id: 'never', name: 'Never used', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2025-06-01' },
+          { id: 'fresh', name: 'Fresh skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: new Date().toISOString() },
+          { id: 'middling', name: 'Middling skill', lifecycle_stage: 'developing', library_skill_id: null, level: 2, date_added: '2025-01-01' },
+        ],
+        error: null,
+      },
+      xapi_statements: { data: [{ skill_id: 'old', recorded_at: longAgo }, { skill_id: 'middling', recorded_at: lastWeek }], error: null },
+    })
+    renderSection()
+
+    const neglected = (await screen.findByRole('heading', { name: 'skills.sections.neglected.heading' })).closest('section')
+    expect(neglected).toHaveTextContent('Old skill')
+    expect(neglected).toHaveTextContent('Never used')
+    expect(neglected).not.toHaveTextContent('Fresh skill')
+    expect(neglected).not.toHaveTextContent('Middling skill')
+    // The last activity sits inside the card itself, which is its button.
+    expect(screen.getByRole('button', { name: /Old skill.*skills\.sections\.lastActivity\.monthsAgo/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Never used.*skills\.sections\.lastActivity\.none/ })).toBeInTheDocument()
+    // Cards in the rest of the list show their last activity too.
+    expect(screen.getByRole('button', { name: /Middling skill.*skills\.sections\.lastActivity\.weeksAgo/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Fresh skill/ })).not.toHaveTextContent('skills.sections.lastActivity')
   })
 })
