@@ -279,6 +279,25 @@ describe('goal tiles', () => {
     expect(tile.querySelector('[data-last-period]')).toHaveTextContent(/^Last week · 0 of 100 push-ups · Not completed/)
   })
 
+  it('shows a weekly limit as how much of it is used, with what is left until Sunday', () => {
+    const goal = { title: 'Takeaways', aggregation: 'total', direction: 'lower', period: 'week', target_value: 4, started_on: localDateString(daysAgo(30)) }
+    renderPanel([item(goal, [pushUps('a', 1, new Date())])])
+    const tile = screen.getByRole('article', { name: 'Takeaways' })
+    expect(within(tile).getByText(/^Limit 4 push-ups$/)).toBeInTheDocument()
+    expect(within(tile).getByRole('progressbar', { name: 'Limit used: This week' })).toHaveAttribute('aria-valuenow', '25')
+    expect(within(tile).getByText(/^3 push-ups left until Sun /)).toBeInTheDocument()
+    // Nothing logged last week kept it within the limit.
+    expect(tile.querySelector('[data-last-period]')).toHaveTextContent(/^Last week · 0, limit 4 push-ups · Within limit/)
+    expect(tile.querySelector('[data-achieved]')).toBeNull()
+  })
+
+  it('turns a limit red once this week goes over it', () => {
+    const goal = { title: 'Takeaways', aggregation: 'total', direction: 'lower', period: 'week', target_value: 4, started_on: localDateString(daysAgo(30)) }
+    renderPanel([item(goal, [pushUps('a', 6, new Date())])])
+    const tile = screen.getByRole('article', { name: 'Takeaways' })
+    expect(within(tile).getByText('2 push-ups over the limit')).toHaveClass('text-red-700')
+  })
+
   it('shows any other goal its recent entries as a line with a dot on each, latest on the right', () => {
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })

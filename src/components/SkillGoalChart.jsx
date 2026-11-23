@@ -1,5 +1,5 @@
 import { formatFullDate } from '../lib/dates'
-import { OVER_TARGET_COLOR, formatGoalValue, goalChartPoints, goalPeriodBars } from '../lib/skillGoalProgress'
+import { OVER_TARGET_COLOR, formatGoalValue, goalChartPoints, goalPeriodBars, isLimitGoal } from '../lib/skillGoalProgress'
 import { useLanguage } from '../context/LanguageContext'
 
 const WIDTH = 320
@@ -66,7 +66,7 @@ function PeriodBars({ goal, bars, target }) {
         role="img"
         aria-label={
           target != null
-            ? t('skillGoals.periodChart.label', { count: bars.length, met, missed })
+            ? t(isLimitGoal(goal) ? 'skillGoals.periodChart.limitLabel' : 'skillGoals.periodChart.label', { count: bars.length, met, missed })
             : t('skillGoals.periodChart.labelNoTarget', { count: bars.length })
         }
       >
@@ -95,8 +95,8 @@ function PeriodBars({ goal, bars, target }) {
         </div>
         {target != null && (
           <ul className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-            <LegendItem swatch="bg-moss" label={t('skillGoals.periodChart.met', { count: met })} />
-            <LegendItem swatch="bg-red-700/70" label={t('skillGoals.periodChart.missed', { count: missed })} />
+            <LegendItem swatch="bg-moss" label={t(isLimitGoal(goal) ? 'skillGoals.periodChart.limitMet' : 'skillGoals.periodChart.met', { count: met })} />
+            <LegendItem swatch="bg-red-700/70" label={t(isLimitGoal(goal) ? 'skillGoals.periodChart.limitMissed' : 'skillGoals.periodChart.missed', { count: missed })} />
             {inProgress && <LegendItem swatch="bg-moss opacity-40" label={t('skillGoals.periodChart.inProgress')} />}
           </ul>
         )}

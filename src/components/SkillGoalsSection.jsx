@@ -4,7 +4,7 @@ import SkillGoalModal from './SkillGoalModal'
 import { SkillGoalTile } from './SkillGoalsDashboardPanel'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalDueOn } from '../lib/skillGoalProgress'
+import { computeGoalProgress, formatGoalValue, goalDueOn, isLimitGoal } from '../lib/skillGoalProgress'
 import { listSkillGoals } from '../lib/skillGoals'
 
 // A skill's goals on its page, each as the same tile Home shows. Values are
@@ -134,7 +134,7 @@ export default function SkillGoalsSection({
                   </button>
                   <span className="font-mono text-xs">
                     {' '}· {t(`skillGoals.status.${goal.status}`)} {formatFullDate(goal.closed_on)}
-                    {goal.target_value != null ? ` · ${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : ''}
+                    {goal.target_value != null ? ` · ${t(isLimitGoal(goal) ? 'skillGoals.limitShort' : 'skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : ''}
                   </span>
                 </li>
               ))}

@@ -16,6 +16,7 @@ import {
   goalShapeText,
   goalStreak,
   isGoalAchieved,
+  isLimitGoal,
   lastGoalEntry,
   localDateString,
   previousPeriodResult,
@@ -123,6 +124,12 @@ function statusFor({ note, progress, streak, goal, t }) {
   if (note) return { text: t(note), tone: 'text-moss', role: 'status' }
   // A run of one is just "this week was met", so only from two.
   if (streak >= 2) return { text: t(`skillGoals.streak.${goal.period}`, { count: streak }), tone: 'text-moss font-medium' }
+  // A limit is kept by not going over it, logged or not.
+  if (isLimitGoal(goal) && progress.target != null) {
+    return progress.overLimit
+      ? { text: t('skillGoals.limit.overSoFar'), tone: 'text-red-700 font-medium' }
+      : { text: t('skillGoals.limit.withinSoFar'), tone: 'text-moss' }
+  }
   if (progress.reached) return { text: t('skillGoals.targetReached'), tone: 'text-moss font-medium' }
   if (progress.lastLogged) {
     return { text: t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) }), tone: 'text-secondary' }
@@ -272,7 +279,12 @@ function MiniHistory({ goal, history }) {
       ? periodName(bar, barPeriod, locale, t)
       : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
     const outcomeKey = bar.status === 'met' || bar.status === 'missed' ? toneOf(bar) : null
-    const outcome = outcomeKey ? ` (${t(`skillGoals.dashboard.${outcomeKey}`)})` : ''
+    const outcomeText = !outcomeKey
+      ? null
+      : isLimitGoal(goal)
+        ? t(outcomeKey === 'missed' ? 'skillGoals.limit.overShort' : 'skillGoals.limit.withinShort')
+        : t(`skillGoals.dashboard.${outcomeKey}`)
+    const outcome = outcomeText ? ` (${outcomeText})` : ''
     const amount = bar.parts?.length > 1
       ? t('skillGoals.dashboard.fromEntries', {
           value: formatGoalValue(goal, bar.value),
@@ -507,11 +519,16 @@ function currentPeriodEnd(period, now = new Date()) {
 
 // A repeating total's tile shows only the period under way: one bar filling
 // towards this period's target, with what's left and when the period ends.
+//
+// A limit fills the same bar with how much of it is used, and turns red once
+// it has gone over.
 function CurrentPeriodProgress({ goal, progress }) {
   const { t, language } = useLanguage()
   const locale = displayLocale(language)
   const target = Number(goal.target_value)
   const value = progress.current ?? 0
+  const limit = isLimitGoal(goal)
+  const over = limit && value > target
   const percent = target > 0 ? Math.min(100, (value / target) * 100) : value > 0 ? 100 : 0
   const left = Math.max(0, target - value)
   const percentText = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 })
@@ -520,6 +537,31 @@ function CurrentPeriodProgress({ goal, progress }) {
   const endText = goal.period === 'week'
     ? weekEndText(startOfWeek(new Date()), locale)
     : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(end)
+  if (limit) {
+    const limitText = over
+      ? t('skillGoals.limit.overBy', { value: formatGoalValue(goal, value - target) })
+      : goal.period === 'day'
+        ? t('skillGoals.limit.left', { value: formatGoalValue(goal, left) })
+        : t('skillGoals.limit.leftUntil', { value: formatGoalValue(goal, left), date: endText })
+    return (
+      <div data-limit="">
+        <div
+          role="progressbar"
+          aria-label={t('skillGoals.limit.used', { period: t(`skillGoals.thisPeriod.${goal.period}`) })}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(percent)}
+          className="h-2.5 rounded-full bg-hairline/60 overflow-hidden"
+        >
+          <div className={`h-full rounded-full ${over ? 'bg-red-700/70' : 'bg-moss'}`} style={{ width: `${percent}%` }} />
+        </div>
+        <p className="mt-1.5 flex justify-between gap-2 text-xs text-secondary">
+          <span>{t('skillGoals.limit.percentUsed', { percent: percentText })}</span>
+          <span className={`truncate ${over ? 'text-red-700 font-medium' : ''}`}>{limitText}</span>
+        </p>
+      </div>
+    )
+  }
   const remainingText = left === 0
     ? t('skillGoals.targetReached')
     : goal.period === 'day'
@@ -549,10 +591,11 @@ function CurrentPeriodProgress({ goal, progress }) {
 // the run of periods met so far (this one included once it's met).
 function LastPeriodLine({ goal, result, streak }) {
   const { t } = useLanguage()
+  const limit = isLimitGoal(goal)
   const resultText = result.sessions != null
     ? t('skillGoals.shape.sessionsDone', { done: result.sessions, needed: result.sessionsTarget })
     : result.target != null
-      ? t('skillGoals.dashboard.previousValueOfTarget', {
+      ? t(limit ? 'skillGoals.limit.valueOfLimit' : 'skillGoals.dashboard.previousValueOfTarget', {
           // "20 of 20 push-ups": the unit once, except on times ("12:30 of 15:00").
           value: goal.measure_kind === 'duration' ? formatGoalValue(goal, result.value) : formatNumber(result.value),
           target: formatGoalValue(goal, result.target),
@@ -560,8 +603,8 @@ function LastPeriodLine({ goal, result, streak }) {
       : formatGoalValue(goal, result.value)
   const met = result.status === 'met'
   const outcome = met
-    ? t('skillGoals.dashboard.completed')
-    : result.status === 'missed' ? t('skillGoals.dashboard.notCompleted') : null
+    ? t(limit ? 'skillGoals.limit.within' : 'skillGoals.dashboard.completed')
+    : result.status === 'missed' ? t(limit ? 'skillGoals.limit.over' : 'skillGoals.dashboard.notCompleted') : null
 
   const lastLabel = t(`skillGoals.dashboard.lastPeriod.${result.period}`)
   const streakText = streak > 0 ? t(`skillGoals.dashboard.streakShort.${goal.period}`, { count: streak }) : null
@@ -632,7 +675,7 @@ export function SkillGoalTile({
   const targetText = [
     shapeText
       ? `${t('skillGoals.targetShort')} ${shapeText.target}`
-      : goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
+      : goal.target_value != null ? `${t(isLimitGoal(goal) ? 'skillGoals.limitShort' : 'skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
     goal.target_date ? `${t('skillGoals.byShort')} ${shortDate(goal.target_date, displayLocale(language))}` : null,
   ].filter(Boolean).join(' · ')
 

@@ -138,3 +138,39 @@ describe('editing a goal', () => {
     expect(updateSkillGoal).toHaveBeenCalledWith(goal, expect.anything())
   })
 })
+
+describe('a limit', () => {
+  const coffeeLimit = {
+    ...weightGoal,
+    title: 'No more than 2 coffees a day',
+    metric: 'coffees',
+    measure_kind: 'count',
+    unit: 'coffees',
+    direction: 'lower',
+    aggregation: 'total',
+    period: 'day',
+    target_value: 2,
+    target_date: null,
+    tracker_question: 'How many coffees did you have?',
+    log_every_days: 1,
+    skill_name: 'Running',
+    skill_is_new: false,
+  }
+
+  it('keeps a drafted limit, asks for the limit instead of a target, and offers no sets', async () => {
+    const onSaved = await draftFromHome(coffeeLimit)
+    expect(screen.getByLabelText('A target or a limit?')).toHaveValue('lower')
+    expect(screen.getByLabelText('Limit (coffees)')).toHaveValue('2')
+    expect(screen.queryByText(/sets/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm goal' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(createSkillGoal).toHaveBeenCalledWith('skill-run', expect.objectContaining({ direction: 'lower', aggregation: 'total', period: 'day', target_value: 2, per_set: null }), [])
+  })
+
+  it('turns back into a target when the total stops repeating', async () => {
+    await draftFromHome(coffeeLimit)
+    fireEvent.change(screen.getByLabelText('Total for each'), { target: { value: '' } })
+    expect(screen.queryByLabelText('A target or a limit?')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Target (coffees)')).toBeInTheDocument()
+  })
+})

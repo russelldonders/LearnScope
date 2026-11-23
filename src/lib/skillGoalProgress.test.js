@@ -533,6 +533,50 @@ describe('goalPeriodBars', () => {
   })
 })
 
+describe('a limit: no more than 5 a week', () => {
+  // Weeks start Mon 5, 12, 19 and 26 October; "now" is Thu 29 October.
+  const limit = { ...pushUpGoal, aggregation: 'total', direction: 'lower', period: 'week', target_value: 5, started_on: '2026-10-05' }
+  const now = new Date('2026-10-29T15:00:00')
+
+  it('meets a week that ends at or under the limit, and misses one that goes over', () => {
+    const bars = goalPeriodBars(limit, [
+      entry('a', '2026-10-06', 5),
+      entry('b', '2026-10-13', 4),
+      entry('c', '2026-10-14', 3),
+      entry('d', '2026-10-27', 2),
+    ], now)
+    expect(bars.map((b) => [localDateString(b.start), b.value, b.status])).toEqual([
+      ['2026-10-05', 5, 'met'],
+      ['2026-10-12', 7, 'missed'],
+      ['2026-10-19', 0, 'met'],
+      ['2026-10-26', 2, 'inProgress'],
+    ])
+    expect(bars.some((b) => b.exceeded)).toBe(false)
+  })
+
+  it('misses this week as soon as it goes over', () => {
+    expect(goalPeriodBars(limit, [entry('a', '2026-10-27', 6)], now).at(-1).status).toBe('missed')
+  })
+
+  it('is never reached while the week runs, and says when it has gone over', () => {
+    const within = computeGoalProgress(limit, [entry('a', '2026-10-27', 3)], now)
+    expect(within).toMatchObject({ current: 3, target: 5, reached: false, overLimit: false, percent: null })
+    expect(computeGoalProgress(limit, [entry('a', '2026-10-27', 6)], now).overLimit).toBe(true)
+  })
+
+  it('counts a streak of weeks kept within the limit', () => {
+    const entries = [entry('a', '2026-10-13', 2), entry('b', '2026-10-20', 5), entry('c', '2026-10-27', 1)]
+    expect(goalStreak(limit, entries, now)).toBe(3)
+    expect(goalStreak(limit, [...entries, entry('d', '2026-10-28', 9)], now)).toBe(0)
+  })
+
+  it('shows this week as a bar against the limit, and sums up last week', () => {
+    expect(goalMiniHistory(limit, [], now)).toEqual({ kind: 'currentPeriod' })
+    expect(goalMiniHistory({ ...limit, target_date: '2026-10-30' }, [], now)).toEqual({ kind: 'currentPeriod' })
+    expect(previousPeriodResult(limit, [entry('a', '2026-10-20', 4)], now)).toMatchObject({ status: 'met', value: 4, target: 5 })
+  })
+})
+
 describe('goalStreak', () => {
   // Weeks start Mon 5, 12, 19 and 26 October; "now" is Thu 29 October.
   const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-05' }

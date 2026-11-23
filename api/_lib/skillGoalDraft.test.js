@@ -80,10 +80,20 @@ describe('normalizeGoalDraft', () => {
     expect(practice).toMatchObject({ metric: 'practice_minutes', unit: 'minutes' })
   })
 
-  it('makes totals higher-is-better and drops a period from best results', () => {
+  it('keeps a repeating total as a limit, makes other totals higher-is-better, and drops a period from best results', () => {
     expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, aggregation: 'total', direction: 'lower', period: 'week' } }, TODAY).goal)
-      .toMatchObject({ direction: 'higher', period: 'week' })
+      .toMatchObject({ direction: 'lower', period: 'week' })
+    expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, aggregation: 'total', direction: 'lower', period: null } }, TODAY).goal)
+      .toMatchObject({ direction: 'higher', period: null })
     expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, period: 'week' } }, TODAY).goal.period).toBeNull()
+  })
+
+  it('never gives a limit sets', () => {
+    const goal = normalizeGoalDraft({
+      outcome: 'goal',
+      goal: { ...pushUps, aggregation: 'total', direction: 'lower', period: 'week', target_value: 50, per_set: 10, sets_per_session: 1, sessions_per_period: 5 },
+    }, TODAY).goal
+    expect(goal).toMatchObject({ direction: 'lower', target_value: 50, per_set: null, sets_per_session: null, sessions_per_period: null })
   })
 
   it('makes a "count" of kilograms, kilometres or litres a decimal number', () => {

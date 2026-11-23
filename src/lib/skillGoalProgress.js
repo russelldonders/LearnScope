@@ -109,6 +109,13 @@ function isBetter(goal, a, b) {
   return goal.direction === 'lower' ? a < b : a > b
 }
 
+// A limit: a repeating total that should stay at or under its target ("no
+// more than 2 coffees a day"). Each period is met when it ends within the
+// limit and missed as soon as it goes over.
+export function isLimitGoal(goal) {
+  return goal.aggregation === 'total' && goal.direction === 'lower'
+}
+
 export function isTargetReached(goal, current) {
   if (goal.target_value == null || current == null) return false
   const target = Number(goal.target_value)
@@ -204,6 +211,23 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
       if (current === null || isBetter(goal, reading.value, current)) current = reading.value
     }
     baseline = earlier.length > 0 ? earlier[earlier.length - 1].value : sinceStart[0]?.value ?? null
+  }
+
+  // A limit can't be reached while its period is still running: only kept
+  // so far, or gone over.
+  if (isLimitGoal(goal)) {
+    const target = goal.target_value == null ? null : Number(goal.target_value)
+    return {
+      readings,
+      current,
+      baseline,
+      target,
+      reached: false,
+      percent: null,
+      lastLogged,
+      entryCount: readings.length,
+      overLimit: target !== null && current > target,
+    }
   }
 
   // A goal with a shape is judged on sessions (days that reached a session's
@@ -342,7 +366,7 @@ export const OVER_TARGET_COLOR = 'color-mix(in srgb, var(--color-moss) 55%, whit
 // A total with a target that doesn't repeat in practice: no period, or a
 // deadline that falls before the next period starts.
 export function isBuildUpGoal(goal, now = new Date()) {
-  if (goal.aggregation !== 'total' || goal.target_value == null) return false
+  if (goal.aggregation !== 'total' || goal.target_value == null || isLimitGoal(goal)) return false
   if (!goal.period) return true
   if (!goal.target_date) return false
   return goal.target_date < localDateString(nextPeriodStart(startOfPeriod(now, goal.period), goal.period))
@@ -482,11 +506,14 @@ function allPeriodBars(goal, statements, now) {
       bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target, sessions, sessionsTarget: shape.sessions })
       continue
     }
+    const limit = isLimitGoal(goal)
     let status = 'none'
-    if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
+    if (target !== null && limit) status = value > target ? 'missed' : isCurrent ? 'inProgress' : 'met'
+    else if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
     // A met period that went past the target, so a chart can tell it apart
     // from one that only just made it. It still counts as met everywhere.
-    const exceeded = target !== null && value > target
+    // Going past a limit is a miss, never a better result.
+    const exceeded = !limit && target !== null && value > target
     bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target })
   }
   return bars

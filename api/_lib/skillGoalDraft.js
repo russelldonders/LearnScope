@@ -171,7 +171,7 @@ ${skillNames ? `- skill_name: the skill this goal develops. Use one of their ski
 - metric: lowercase letters, digits and underscores only, in English, describing what is measured, such as push_ups or 5km_pace.
 - unit: short and plain, such as "push-ups", "kg" or "km". Use "seconds" for duration. Use "min/km" or "min/mi" for pace. Use "activities" for activities and "minutes" for practice_time.
 - direction: "lower" when a smaller value is better, such as pace or finish time; otherwise "higher".
-- aggregation: "best" when the goal is a single best result (40 push-ups in one set); "total" when values add up (100 push-ups a week, 12 books this year). Totals are always direction "higher".
+- aggregation: "best" when the goal is a single best result (40 push-ups in one set); "total" when values add up (100 push-ups a week, 12 books this year). Totals are direction "higher", except a limit: a total that repeats and should stay at or under a number ("no more than 2 coffees a day", "fewer than 3 takeaways a week", "under 5 hours of screen time a day") is direction "lower" with a period, and target_value is the most allowed. "Fewer than" or "less than" a whole number of things allows one less: "fewer than 3 takeaways a week" is target_value 2.
 - period: "day", "week", "month" or "year" for a repeating or calendar total; null for a best result or a one-off total. Wording such as "each month", "every week", "per day", "a month" or "monthly" always means a repeating total with that period, for activities too.
 - target_value: the number only, in the goal's unit. Use seconds for duration and seconds per km or mile for pace (5:00 per km is 300). Use minutes for practice_time. Null if they only want to keep track. Never invent a target they did not state.
 - target_date: YYYY-MM-DD if they gave a date or deadline, otherwise null. Never invent one. Work out a relative deadline from today: "in 12 weeks" is today plus 84 days, "by the end of the month" is the last day of this month, "this year" is 31 December.
@@ -223,7 +223,6 @@ function normalizeDraftGoal(goal, today) {
     unit = 'minutes'
     aggregation = 'total'
   }
-  if (aggregation === 'total') direction = 'higher'
   if (aggregation === 'best') period = null
   if (!metric || !unit) return null
 
@@ -232,10 +231,13 @@ function normalizeDraftGoal(goal, today) {
   // then follows from them.
   const days = { day: 1, week: 7, month: 31, year: 366 }
   const whole = (value, max) => Number.isInteger(value) && value >= 1 && value <= max
-  const shape = kind === 'count' && aggregation === 'total' && period
+  const shape = kind === 'count' && aggregation === 'total' && period && direction === 'higher'
     && whole(goal?.per_set, 100000) && whole(goal?.sets_per_session, 50) && whole(goal?.sessions_per_period, days[period])
     ? { per_set: goal.per_set, sets_per_session: goal.sets_per_session, sessions_per_period: goal.sessions_per_period }
     : null
+
+  // A total can only be a limit when it repeats, and a limit has no sets.
+  if (aggregation === 'total' && (!period || shape)) direction = 'higher'
 
   const target = shape ? shape.per_set * shape.sets_per_session * shape.sessions_per_period : goal?.target_value
   const targetDate = isRealDate(goal?.target_date) && goal.target_date >= today ? goal.target_date : null

@@ -57,8 +57,9 @@ function formFromGoal(goal, today) {
 const DAYS_IN_PERIOD = { day: 1, week: 7, month: 31, year: 366 }
 
 // Whether the goal can be done in sets: a counted total that repeats.
+// Sets are something to get through, so a limit never has them.
 function takesShape(form) {
-  return form.measure_kind === 'count' && form.aggregation === 'total' && Boolean(form.period)
+  return form.measure_kind === 'count' && form.aggregation === 'total' && Boolean(form.period) && form.direction !== 'lower'
 }
 
 // "3 sets of 100, 4 times a week", as typed. Returns { shape: null } when it
@@ -92,7 +93,8 @@ function applyKindRules(form) {
     next.unit = 'minutes'
     next.aggregation = 'total'
   }
-  if (next.aggregation === 'total') next.direction = 'higher'
+  // A total can be a limit ("no more than 2 a day") only when it repeats.
+  if (next.aggregation === 'total' && !next.period) next.direction = 'higher'
   if (next.aggregation === 'best') next.period = ''
   return next
 }
@@ -180,6 +182,7 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
     )
   const kind = form.measure_kind
   const clockKind = isClockKind(kind)
+  const limitForm = form.aggregation === 'total' && form.direction === 'lower'
   const typedShape = parseShape(form).shape
   const shapePreview = typedShape
     ? t('skillGoals.shape.total', {
@@ -498,6 +501,16 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
                   </select>
                 </div>
               )}
+
+              {form.aggregation === 'total' && form.period && (
+                <div>
+                  <label htmlFor="skill-goal-total-direction" className="block text-sm text-secondary mb-1">{t('skillGoals.totalDirectionLabel')}</label>
+                  <select id="skill-goal-total-direction" value={form.direction} onChange={update('direction')} className={INPUT_CLASS}>
+                    <option value="higher">{t('skillGoals.totalDirection.higher')}</option>
+                    <option value="lower">{t('skillGoals.totalDirection.lower')}</option>
+                  </select>
+                </div>
+              )}
             </>
           )}
 
@@ -532,7 +545,9 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="skill-goal-target" className="block text-sm text-secondary mb-1">
-                {clockKind ? t('skillGoals.targetTimeLabel') : t('skillGoals.targetLabel', { unit: form.unit || '' })}
+                {clockKind
+                  ? t('skillGoals.targetTimeLabel')
+                  : t(limitForm ? 'skillGoals.limitLabel' : 'skillGoals.targetLabel', { unit: form.unit || '' })}
               </label>
               {shapePreview ? (
                 <p id="skill-goal-target" className="py-2 text-sm text-ink">{shapePreview}</p>
@@ -546,7 +561,7 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
                     onChange={update('target')}
                     className={INPUT_CLASS}
                   />
-                  <p className="text-xs text-secondary mt-1">{t('skillGoals.targetHint')}</p>
+                  <p className="text-xs text-secondary mt-1">{t(limitForm ? 'skillGoals.limitHint' : 'skillGoals.targetHint')}</p>
                 </>
               )}
             </div>
