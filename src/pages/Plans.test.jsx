@@ -87,7 +87,10 @@ describe('Plans', () => {
     expect(preparing).toHaveTextContent('Next year')
     expect(preparing.querySelector('[role="progressbar"]')).toBeNull()
     expect(await screen.findByRole('link', { name: /Become a team lead/ })).toHaveAttribute('href', '/plans/p1')
-    expect(await screen.findByText('1 of 2 done')).toBeInTheDocument()
+    // Shown like the progress tile on the plan's own page.
+    expect(await screen.findByText('50%')).toBeInTheDocument()
+    expect(screen.getByText('1 completed')).toBeInTheDocument()
+    expect(screen.getByText('1 remaining')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: 'Progress on Become a team lead' })).toHaveAttribute('aria-valuenow', '50')
     // Archived plans stay out of the way until asked for.
     expect(screen.queryByText('Old plan')).not.toBeInTheDocument()

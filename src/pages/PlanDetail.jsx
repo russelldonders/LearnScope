@@ -183,6 +183,10 @@ export default function PlanDetail() {
   function renderItem(item, index, items, listKey) {
     const isDropTarget = dragOver?.kind === 'item' && dragOver.id === item.id && dragging?.id !== item.id
     const isDraggingItem = dragging?.kind === 'item' && dragging.id === item.id
+    // "What you'll do" tiles share one height, whatever details each shows,
+    // with their content centred; only a long note, a reflection or a form
+    // opened inside one makes it taller.
+    const evenTile = listKey !== 'skills' && editingItemId !== item.id
     return (
       <li
         key={item.id}
@@ -191,7 +195,7 @@ export default function PlanDetail() {
         data-drop-kind="item"
         data-drop-id={item.id}
         data-drop-list={listKey}
-        className={`relative rounded-md border bg-card p-3 scroll-mt-24 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : highlightedItemId === item.id ? 'border-gold ring-2 ring-gold/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' && !lockedIds.has(item.id) ? 'hover:border-moss/50' : ''}`}
+        className={`relative isolate rounded-md border bg-card p-3 scroll-mt-24 ${evenTile ? 'flex min-h-20 flex-col justify-center' : ''}transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : highlightedItemId === item.id ? 'border-gold ring-2 ring-gold/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' && !lockedIds.has(item.id) ? 'hover:border-moss/50' : ''}`}
       >
         {editingItemId === item.id ? (
           <ItemEditForm

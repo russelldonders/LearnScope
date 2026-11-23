@@ -227,7 +227,7 @@ export default function AppHeader({
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-full z-10 mt-2 max-h-[min(42rem,calc(100vh-5rem))] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-40 mt-2 max-h-[min(42rem,calc(100vh-5rem))] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] py-1 shadow-lg">
                   {(fullName || user?.email) && (
                     <div className="border-b border-hairline px-4 py-2.5">
                       {fullName && <p className="truncate text-sm font-medium text-[var(--org-text,var(--color-ink))]">{fullName}</p>}

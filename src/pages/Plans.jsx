@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import PlanProgressBar from '../components/PlanProgressBar'
 import { createPlan, listPlans, loadPlanContext, PLAN_DURATION_UNITS, recordPlanProgress } from '../lib/learnerPlans'
-import { formatPlanTimeframe, planItemStatus, planProgressEntry, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
+import { formatPlanTimeframe, paceOf, planItemStatus, planProgressEntry, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 
 // Plans by where they are: in use, still being prepared, done, and (on
 // request) archived.
@@ -97,6 +97,7 @@ export default function Plans() {
                     ? summariseProgress(plan.items.map((item) => planItemStatus(item, context)))
                     : { percent: 0, done: 0, total: plan.items.length }
                   const elapsed = timeElapsedPercent(plan)
+                  const pace = status === 'active' && context ? paceOf(progress, elapsed) : null
                   return (
                     <li key={plan.id}>
                       <Link
@@ -114,12 +115,29 @@ export default function Plans() {
                           {' · '}
                           {t('plans.itemCount', { count: plan.items.length })}
                         </p>
-                        {/* Progress only means something once a plan is in use. */}
+                        {/* Progress only means something once a plan is in use.
+                            Laid out like the progress tile on the plan's own page. */}
                         {status !== 'planning' && (
-                          <PlanProgressBar className="mt-3" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
-                        )}
-                        {status !== 'planning' && context && progress.total > 0 && (
-                          <p className="mt-1.5 text-xs text-secondary">{t('plans.doneCount', { done: progress.done, total: progress.total })}</p>
+                          <div data-plan-progress="" className="mt-3 border-t border-hairline pt-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="flex items-baseline gap-1.5 text-ink">
+                                <span className="font-display text-2xl tabular-nums leading-none">{progress.percent}%</span>
+                                <span className="text-xs text-secondary">{t('plans.complete')}</span>
+                              </p>
+                              {pace && (
+                                <span data-pace={pace} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${pace === 'behind' ? 'bg-red-700/15 text-red-700' : pace === 'ahead' ? 'bg-moss/15 text-moss' : 'bg-gold/15 text-gold'}`}>
+                                  {t(`plans.pace.${pace}`)}
+                                </span>
+                              )}
+                            </div>
+                            <PlanProgressBar className="mt-2.5" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
+                            {context && progress.total > 0 && (
+                              <div className="mt-1.5 flex items-center justify-between gap-4 text-xs text-secondary">
+                                <span>{t('plans.completedCount', { count: progress.done })}</span>
+                                <span>{t('plans.remainingCount', { count: Math.max(0, progress.total - progress.done) })}</span>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </Link>
                     </li>
