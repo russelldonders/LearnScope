@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: 'In arrivo',
     recommendedNextAction: 'Prossima azione consigliata',
+    headerCarousel: {
+      label: 'Cosa c’è dopo per questa competenza',
+      previous: 'Precedente',
+      next: 'Successivo',
+      slide: '{current} di {total}',
+      goTo: 'Mostra {current} di {total}',
+    },
     upcomingCards: {
       selfAssessDue: 'Autovalutazione da fare',
       selfAssessUpcoming: 'Prossima autovalutazione',

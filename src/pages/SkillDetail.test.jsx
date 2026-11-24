@@ -340,24 +340,31 @@ describe('SkillDetail', () => {
     expect(await screen.findByRole('dialog', { name: 'Skill settings' })).toBeInTheDocument()
   })
 
-  it('puts what is due or coming up in the header as cards, ahead of the recommended next action', async () => {
+  it('shows what is due or coming up in the header one card at a time, with the recommended next action last', async () => {
     fixtures.tables.skills = [skillRow({ next_checkin_date: '2020-01-15' })]
     fixtures.tables.skill_targets = [{ id: 't1', skill_id: 'skill-1', target_level: 4, target_date: '2099-03-01', created_at: '2026-01-01T10:00:00Z' }]
     renderPage()
     const selfAssess = await screen.findByRole('region', { name: 'Check in on your level' })
     expect(selfAssess).toHaveTextContent('Self-assessment due')
     expect(within(selfAssess).getByRole('button', { name: 'Self-assess' })).toBeInTheDocument()
-    // Targets load after the skill itself.
-    const target = await screen.findByRole('region', { name: /^Reach Skilled by .*2099$/ })
+
+    // Targets load after the skill itself; it's the next card along.
+    const carousel = await screen.findByRole('region', { name: 'What’s next for this skill' })
+    await within(carousel).findByRole('button', { name: /^Show 2 of / })
+    expect(screen.queryByRole('region', { name: /^Reach Skilled by/ })).not.toBeInTheDocument()
+    fireEvent.click(within(carousel).getByRole('button', { name: 'Next' }))
+    const target = screen.getByRole('region', { name: /^Reach Skilled by .*2099$/ })
     expect(target).toHaveTextContent(/days to go/)
     expect(within(target).getByRole('button', { name: 'View target' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
 
-    // Due and coming up first, then the recommended next action, then the tabs.
-    const recommended = screen.queryByText('Recommended next action')?.closest('section')
-    const order = [selfAssess, target, recommended, screen.getAllByRole('tab')[0]].filter(Boolean)
-    for (let i = 1; i < order.length; i += 1) {
-      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    }
+    // The last card is the recommended next action, when there is one.
+    const dots = within(carousel).getAllByRole('button', { name: /^Show \d+ of \d+$/ })
+    fireEvent.click(dots[dots.length - 1])
+    if (dots.length > 2) expect(screen.getByText('Recommended next action')).toBeVisible()
+
+    // In the header, ahead of the tabs.
+    expect(carousel.compareDocumentPosition(screen.getAllByRole('tab')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows no upcoming cards when nothing is coming up', async () => {

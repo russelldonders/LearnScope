@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: 'À venir',
     recommendedNextAction: 'Prochaine action recommandée',
+    headerCarousel: {
+      label: 'La suite pour cette compétence',
+      previous: 'Précédent',
+      next: 'Suivant',
+      slide: '{current} sur {total}',
+      goTo: 'Afficher {current} sur {total}',
+    },
     upcomingCards: {
       selfAssessDue: 'Auto-évaluation à faire',
       selfAssessUpcoming: 'Prochaine auto-évaluation',

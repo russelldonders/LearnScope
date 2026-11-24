@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: 'Binnenkort',
     recommendedNextAction: 'Aanbevolen volgende stap',
+    headerCarousel: {
+      label: 'Wat er hierna komt voor deze vaardigheid',
+      previous: 'Vorige',
+      next: 'Volgende',
+      slide: '{current} van {total}',
+      goTo: 'Toon {current} van {total}',
+    },
     upcomingCards: {
       selfAssessDue: 'Zelfbeoordeling gepland',
       selfAssessUpcoming: 'Volgende zelfbeoordeling',

@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: 'Bevorstehend',
     recommendedNextAction: 'Empfohlener nächster Schritt',
+    headerCarousel: {
+      label: 'Was als Nächstes für diese Fähigkeit ansteht',
+      previous: 'Zurück',
+      next: 'Weiter',
+      slide: '{current} von {total}',
+      goTo: '{current} von {total} anzeigen',
+    },
     upcomingCards: {
       selfAssessDue: 'Selbsteinschätzung fällig',
       selfAssessUpcoming: 'Nächste Selbsteinschätzung',

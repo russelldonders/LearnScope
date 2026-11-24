@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: 'Upcoming',
     recommendedNextAction: 'Recommended next action',
+    headerCarousel: {
+      label: 'What’s next for this skill',
+      previous: 'Previous',
+      next: 'Next',
+      slide: '{current} of {total}',
+      goTo: 'Show {current} of {total}',
+    },
     upcomingCards: {
       selfAssessDue: 'Self-assessment due',
       selfAssessUpcoming: 'Next self-assessment',

@@ -1290,6 +1290,13 @@ export default {
     },
     upcoming: '即将到来',
     recommendedNextAction: '推荐的下一步',
+    headerCarousel: {
+      label: '这项技能的下一步',
+      previous: '上一个',
+      next: '下一个',
+      slide: '第 {current} 个，共 {total} 个',
+      goTo: '显示第 {current} 个，共 {total} 个',
+    },
     upcomingCards: {
       selfAssessDue: '需要自我评估',
       selfAssessUpcoming: '下一次自我评估',

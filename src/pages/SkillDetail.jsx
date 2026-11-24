@@ -7,6 +7,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import SkillHeaderCard, { CalendarIcon, FlagIcon, TargetIcon } from '../components/SkillHeaderCard'
+import SkillHeaderCarousel from '../components/SkillHeaderCarousel'
 import BackLink from '../components/BackLink'
 import GrowthRing from '../components/GrowthRing'
 import { listSkillGoals } from '../lib/skillGoals'
@@ -569,83 +570,95 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
 
             {/* What's due or coming up for this skill -- the next
-                self-assessment and targets -- first, then the recommended
-                next action, all as cards in the header. */}
-            {(skill.next_checkin_date || currentTarget || targetSetByOthers || nextMilestone) && (
-              <div className="mt-4 space-y-3">
-                {skill.next_checkin_date && (
-                  <SkillHeaderCard
-                    id="skill-upcoming-self-assessment"
-                    tone={isSelfAssessmentDue(skill.next_checkin_date) ? 'gold' : 'neutral'}
-                    icon={<CalendarIcon />}
-                    label={isSelfAssessmentDue(skill.next_checkin_date)
-                      ? t('skillDetail.upcomingCards.selfAssessDue')
-                      : t('skillDetail.upcomingCards.selfAssessUpcoming')}
-                    title={t('skillDetail.upcomingCards.selfAssessTitle')}
-                    description={isSelfAssessmentDue(skill.next_checkin_date)
-                      ? t('skillDetail.upcomingCards.selfAssessDueDescription', { date: formatShortDate(skill.next_checkin_date) })
-                      : t('skillDetail.upcomingCards.selfAssessUpcomingDescription', { date: formatShortDate(skill.next_checkin_date) })}
-                    action={{ label: t('skillDetail.upcomingCards.selfAssessAction'), onClick: () => setSelfAssessOpen(true) }}
-                  />
-                )}
-                {currentTarget && (
-                  <SkillHeaderCard
-                    id="skill-upcoming-target"
-                    tone={currentTarget.target_date && daysUntil(currentTarget.target_date) < 0 ? 'gold' : 'neutral'}
-                    icon={<TargetIcon />}
-                    label={t('skillDetail.upcomingCards.yourTarget')}
-                    title={currentTarget.target_date
-                      ? t('skillDetail.upcomingCards.targetTitle', { level: LEVEL_LABELS[currentTarget.target_level], date: formatShortDate(currentTarget.target_date) })
-                      : t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[currentTarget.target_level] })}
-                    description={currentTarget.target_date ? targetTimeLeft(currentTarget.target_date, t) : null}
-                    action={{ label: t('skillDetail.upcomingCards.targetAction'), onClick: () => setTargetOpen(true) }}
-                  />
-                )}
-                {targetSetByOthers && (
-                  <SkillHeaderCard
-                    id="skill-upcoming-other-target"
-                    tone="neutral"
-                    icon={<TargetIcon />}
-                    label={t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}
-                    title={t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[targetSetByOthers.level] })}
-                    description={visibleTarget?.employerTargetMet
-                      ? (visibleTarget.source === 'personal'
-                        ? `${t('skillDetail.met')} · ${t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })}`
-                        : t('skillDetail.met'))
-                      : t('skillDetail.workingTowardsNeedsConfirmation')}
-                  />
-                )}
-                {nextMilestone && (
-                  <SkillHeaderCard
-                    id="skill-next-milestone"
-                    tone="moss"
-                    icon={<FlagIcon />}
-                    label={t('skillDetail.recommendedNextAction')}
-                    title={nextMilestone.label}
-                    description={nextMilestone.description}
-                    action={nextMilestoneAction ? { label: t('skillDetail.start'), onClick: nextMilestoneAction } : null}
-                  >
-                    {/* This stage's steps: done, this one, still to come. */}
-                    {upNextPreview.length > 1 && (
-                      <ol aria-hidden="true" className="flex items-center gap-1.5 mt-2.5">
-                        {upNextPreview.map((item) => (
-                          <li
-                            key={item.key}
-                            className={`h-1.5 rounded-full ${
-                              item.key === nextMilestone.key
-                                ? 'w-6 bg-moss'
-                                : item.done
-                                  ? 'w-1.5 bg-moss/60'
-                                  : 'w-1.5 bg-hairline/40'
-                            }`}
-                          />
-                        ))}
-                      </ol>
-                    )}
-                  </SkillHeaderCard>
-                )}
-              </div>
-            )}
+                self-assessment and targets -- then the recommended next
+                action, as cards in the header shown one at a time. */}
+            <SkillHeaderCarousel
+              slides={[
+                skill.next_checkin_date && {
+                  key: 'self-assessment',
+                  content: (
+                    <SkillHeaderCard
+                      id="skill-upcoming-self-assessment"
+                      tone={isSelfAssessmentDue(skill.next_checkin_date) ? 'gold' : 'neutral'}
+                      icon={<CalendarIcon />}
+                      label={isSelfAssessmentDue(skill.next_checkin_date)
+                        ? t('skillDetail.upcomingCards.selfAssessDue')
+                        : t('skillDetail.upcomingCards.selfAssessUpcoming')}
+                      title={t('skillDetail.upcomingCards.selfAssessTitle')}
+                      description={isSelfAssessmentDue(skill.next_checkin_date)
+                        ? t('skillDetail.upcomingCards.selfAssessDueDescription', { date: formatShortDate(skill.next_checkin_date) })
+                        : t('skillDetail.upcomingCards.selfAssessUpcomingDescription', { date: formatShortDate(skill.next_checkin_date) })}
+                      action={{ label: t('skillDetail.upcomingCards.selfAssessAction'), onClick: () => setSelfAssessOpen(true) }}
+                    />
+                  ),
+                },
+                currentTarget && {
+                  key: 'target',
+                  content: (
+                    <SkillHeaderCard
+                      id="skill-upcoming-target"
+                      tone={currentTarget.target_date && daysUntil(currentTarget.target_date) < 0 ? 'gold' : 'neutral'}
+                      icon={<TargetIcon />}
+                      label={t('skillDetail.upcomingCards.yourTarget')}
+                      title={currentTarget.target_date
+                        ? t('skillDetail.upcomingCards.targetTitle', { level: LEVEL_LABELS[currentTarget.target_level], date: formatShortDate(currentTarget.target_date) })
+                        : t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[currentTarget.target_level] })}
+                      description={currentTarget.target_date ? targetTimeLeft(currentTarget.target_date, t) : null}
+                      action={{ label: t('skillDetail.upcomingCards.targetAction'), onClick: () => setTargetOpen(true) }}
+                    />
+                  ),
+                },
+                targetSetByOthers && {
+                  key: 'other-target',
+                  content: (
+                    <SkillHeaderCard
+                      id="skill-upcoming-other-target"
+                      tone="neutral"
+                      icon={<TargetIcon />}
+                      label={t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}
+                      title={t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[targetSetByOthers.level] })}
+                      description={visibleTarget?.employerTargetMet
+                        ? (visibleTarget.source === 'personal'
+                          ? `${t('skillDetail.met')} · ${t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })}`
+                          : t('skillDetail.met'))
+                        : t('skillDetail.workingTowardsNeedsConfirmation')}
+                    />
+                  ),
+                },
+                nextMilestone && {
+                  key: 'recommended',
+                  content: (
+                    <SkillHeaderCard
+                      id="skill-next-milestone"
+                      tone="moss"
+                      icon={<FlagIcon />}
+                      label={t('skillDetail.recommendedNextAction')}
+                      title={nextMilestone.label}
+                      description={nextMilestone.description}
+                      action={nextMilestoneAction ? { label: t('skillDetail.start'), onClick: nextMilestoneAction } : null}
+                    >
+                      {/* This stage's steps: done, this one, still to come. */}
+                      {upNextPreview.length > 1 && (
+                        <ol aria-hidden="true" className="flex items-center gap-1.5 mt-2.5">
+                          {upNextPreview.map((item) => (
+                            <li
+                              key={item.key}
+                              className={`h-1.5 rounded-full ${
+                                item.key === nextMilestone.key
+                                  ? 'w-6 bg-moss'
+                                  : item.done
+                                    ? 'w-1.5 bg-moss/60'
+                                    : 'w-1.5 bg-hairline/40'
+                              }`}
+                            />
+                          ))}
+                        </ol>
+                      )}
+                    </SkillHeaderCard>
+                  ),
+                },
+              ].filter(Boolean)}
+            />
 
             <div
               role="tablist"
