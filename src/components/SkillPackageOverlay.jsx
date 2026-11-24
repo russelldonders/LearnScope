@@ -3,7 +3,39 @@ import FullScreenOverlay from './FullScreenOverlay'
 import { useLanguage } from '../context/LanguageContext'
 import { buildAdlLaunchUrl } from '../lib/adlLaunch'
 import { fetchShimmedLaunchDoc, xapiActivityId } from '../lib/courseContent'
-import { createSkillPackageLaunchSession, packageLaunchUrl } from '../lib/skillResources'
+import { createSkillPackageLaunchSession, findPackageToReopen, packageLaunchUrl } from '../lib/skillResources'
+
+// A package opened again from a session of it (the timeline), the same way
+// its skill page opens it: looked up first, since the session only says
+// which package it was. title: the session's name for it, shown meanwhile.
+export function ReopenPackageOverlay({ resourceId, skillId = null, title, userId, onClose }) {
+  const { t } = useLanguage()
+  const [found, setFound] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    findPackageToReopen(userId, resourceId, skillId)
+      .then((next) => !cancelled && setFound(next))
+      .catch((err) => !cancelled && setError(err.message))
+    return () => {
+      cancelled = true
+    }
+  }, [userId, resourceId, skillId])
+
+  if (found?.resource) {
+    return <SkillPackageOverlay resource={found.resource} userId={userId} skillId={found.skillId} onClose={onClose} />
+  }
+  return (
+    <FullScreenOverlay title={title} closeLabel={t('skillDetail.resources.closePackage')} onClose={onClose}>
+      {error || found ? (
+        <p role="alert" className="p-4 text-sm text-red-700">{error ?? t('skillDetail.resources.packageUnavailable')}</p>
+      ) : (
+        <p className="p-4 text-sm text-secondary">{t('skillDetail.resources.packageLoading')}</p>
+      )}
+    </FullScreenOverlay>
+  )
+}
 
 // A SCORM or xAPI package on a skill, opened over almost the whole screen.
 //

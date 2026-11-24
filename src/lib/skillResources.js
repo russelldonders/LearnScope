@@ -55,7 +55,33 @@ export async function createSkillPackageLaunchSession(resourceId, userId, skillI
   if (error) throw error
   return data
 }
-export const RESOURCE_AUDIENCES = ['private', 'selected', 'connections', 'skill_public']
+
+// A package to open again from somewhere other than its skill page (a
+// session on the timeline): the learner's own, else one shared with them on
+// skillId, their skill the session was on -- the same two ways the skill
+// page lists it, so nothing opens here that wouldn't open there. skillId
+// comes back only while that skill is still theirs, so the new session goes
+// on it as before. resource is null once it's gone, removed or unshared.
+export async function findPackageToReopen(userId, resourceId, skillId = null) {
+  const [own, skill] = await Promise.all([
+    supabase.from('skill_resources').select('*').eq('id', resourceId).eq('user_id', userId).maybeSingle(),
+    skillId
+      ? supabase.from('skills').select('id').eq('id', skillId).eq('user_id', userId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ])
+  if (own.error) throw own.error
+  if (skill.error) throw skill.error
+  const ownSkillId = skill.data?.id ?? null
+  let resource = own.data
+  if (!resource && ownSkillId) {
+    const shared = await listSharedResources(ownSkillId)
+    resource = shared.find((row) => row.id === resourceId) ?? null
+  }
+  if (!resource || !isPackageKind(resource.kind) || resource.moderation_removed_at) resource = null
+  return { resource, skillId: ownSkillId }
+}
+
+export const RESOURCE_AUDIENCES =['private', 'selected', 'connections', 'skill_public']
 
 // Who a resource can go to. An uploaded file is never shared with everyone
 // tracking the skill, and a skill not from the library has no one else

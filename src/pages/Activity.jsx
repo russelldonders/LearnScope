@@ -8,6 +8,7 @@ import ActivityTimeline from '../components/ActivityTimeline'
 import EditActivityModal from '../components/EditActivityModal'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { XAPI_VERBS, XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
+import { withoutSummarisedLessonStatements } from '../lib/activityTimeline'
 
 const PAGE_SIZE = 40
 
@@ -52,7 +53,7 @@ export default function Activity() {
       // shows here as one activity instead (0316).
       .is('skill_resource_id', null)
     if (error) setError(error.message)
-    else setStatements(data)
+    else setStatements(withoutSummarisedLessonStatements(data))
     setLoading(false)
   }
 

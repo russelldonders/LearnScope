@@ -1251,6 +1251,7 @@ export default {
       closePackage: '关闭',
       packageLoading: '加载中…',
       packageNoLaunch: '该课件包没有启动页面。',
+      packageUnavailable: '该课件包已无法打开。',
       packageRecordsActivity: '此课件包报告的学习活动会添加到你的学习记录中。',
       packageActivity: {
         recordedHeading: "课件包记录的内容",

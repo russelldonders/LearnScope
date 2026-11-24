@@ -1251,6 +1251,7 @@ export default {
       closePackage: 'Close',
       packageLoading: 'Loading…',
       packageNoLaunch: 'This package has no launch page.',
+      packageUnavailable: 'This package can no longer be opened.',
       packageRecordsActivity: 'Activity this package reports is added to your learning record.',
       packageActivity: {
         recordedHeading: "What the package recorded",

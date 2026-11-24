@@ -51,7 +51,7 @@ async function saveProgress(contentItemId, userId, { status, score, cmiData }) {
 // sessions; cmi.core.lesson_status and cmi.core.score.raw are additionally
 // promoted to course_content_progress's own status/score columns so
 // progress can be queried without unpacking the blob.
-export default function ScormPlayer({ contentItem, userId, onProgress }) {
+export default function ScormPlayer({ contentItem, userId, onProgress, fill = false }) {
   const [apiReady, setApiReady] = useState(false)
   const [error, setError] = useState(null)
   const [shimmedDoc, setShimmedDoc] = useState(null)
@@ -123,20 +123,20 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
     }
   }, [launchUrl])
 
-  if (error) return <p className="text-sm text-red-700">{error}</p>
-  if (!launchUrl) return <p className="text-sm text-red-700">This SCORM package has no launch page.</p>
-  if (!apiReady || !shimmedDoc) return <p className="text-sm text-secondary">Loading…</p>
+  if (error) return <p className={`${fill ? 'p-4 ' : ''}text-sm text-red-700`}>{error}</p>
+  if (!launchUrl) return <p className={`${fill ? 'p-4 ' : ''}text-sm text-red-700`}>This SCORM package has no launch page.</p>
+  if (!apiReady || !shimmedDoc) return <p className={`${fill ? 'p-4 ' : ''}text-sm text-secondary`}>Loading…</p>
 
   return (
     <>
-      <p className="text-xs text-secondary mb-2">
+      {!fill && <p className="text-xs text-secondary mb-2">
         SCORM progress tracking (completion, score) isn't wired up yet — content displays, but doesn't report
         back to your account.
-      </p>
+      </p>}
       <iframe
         title={contentItem.title}
         srcDoc={shimmedDoc}
-        className="w-full h-[600px] border border-hairline rounded-md bg-paper"
+        className={fill ? 'absolute inset-0 h-full w-full border-0 bg-paper' : 'w-full h-[600px] border border-hairline rounded-md bg-paper'}
         // Deliberately NOT allow-same-origin: content is served through
         // /course-content/*, same origin as the app itself (required so
         // SCORM's own window.parent.API lookup could work at all), which

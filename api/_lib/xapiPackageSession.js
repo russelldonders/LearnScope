@@ -1,9 +1,11 @@
 import { completionFromStatements, launchedActivityId } from './xapiCompletion.js'
 
-// One activity on a skill for each time a learner opens an xAPI package
-// resource (0316): "Did it: Fire drill · 14m · Earned: Gold stamp". The
-// package's own statements stay tied to the resource; this is what the
-// skill's activity list, goals and the Activity page show for the session.
+// One activity for each time a learner opens an xAPI package (0316): "Did
+// it: Fire drill · 14m · Earned: Gold stamp". The package's own statements
+// stay tied to it; this is what the timeline, the Activity page and -- for
+// a package on a skill -- the skill's activity list and goals show for the
+// session. A package resource on a skill is on that skill; a package in a
+// course (a course lesson) is on no skill, only on the learner's timeline.
 //
 // These IRIs must match src/lib/xapiStatement.js (checked by this module's
 // test), where the rest of the app reads them.
@@ -50,20 +52,23 @@ function isoDuration(ms) {
   return `PT${hours ? `${hours}H` : ''}${rest || !hours ? `${rest}M` : ''}`
 }
 
-// session: the launch session row (id, user_id, skill_resource_id,
-// created_at, summary_statement_id). rows: its statements, each with when
+// session: the launch session row (id, user_id, skill_resource_id -- or
+// resource_id and course_id for a course lesson -- created_at,
+// summary_statement_id). rows: its statements, each with when
 // the server received it ({ statement, received_at }). Returns the
 // xapi_statements row to upsert. Its time runs from the launch to the last
 // statement received, within the session's own lifetime -- never from the
 // package's own timestamps, so a package can't stretch it.
 export function buildSessionActivity({ session, rows, resourceTitle, skill = null }) {
   const statements = rows.map((row) => row.statement)
+  // What was launched: the skill's package resource, else the course lesson.
+  const launchedId = session.skill_resource_id ?? session.resource_id
   const start = new Date(session.created_at)
   const latest = Math.max(start.getTime(), ...rows.map((row) => new Date(row.received_at).getTime()).filter(Number.isFinite))
   const end = Math.min(latest, start.getTime() + MAX_SESSION_MS)
 
-  const outcome = completionFromStatements(statements, launchedActivityId(session.skill_resource_id))
-  const failed = !outcome && statements.some((s) => s?.verb?.id === VERB_FAILED && s?.object?.id === launchedActivityId(session.skill_resource_id))
+  const outcome = completionFromStatements(statements, launchedActivityId(launchedId))
+  const failed = !outcome && statements.some((s) => s?.verb?.id === VERB_FAILED && s?.object?.id === launchedActivityId(launchedId))
   const verb = outcome ? VERBS[outcome.status] : failed ? VERBS.failed : VERBS.experienced
   const earned = earnedNames(statements)
   const title = (resourceTitle ?? '').trim() || 'Course package'
@@ -81,7 +86,7 @@ export function buildSessionActivity({ session, rows, resourceTitle, skill = nul
     actor: { objectType: 'Agent', account: { homePage: 'https://learnscope.app', name: session.user_id } },
     verb: { id: verb.id, display: { 'en-US': verb.display } },
     object: {
-      id: launchedActivityId(session.skill_resource_id),
+      id: launchedActivityId(launchedId),
       objectType: 'Activity',
       definition: {
         name: { 'en-US': title },
@@ -95,7 +100,11 @@ export function buildSessionActivity({ session, rows, resourceTitle, skill = nul
         ...(skill ? { [SKILL_EXTENSION_IRI]: [{ id: skill.id, name: skill.name }] } : {}),
         [PROVENANCE_EXTENSION_IRI]: { source: PACKAGE_PROVENANCE_SOURCE, externalId: session.id },
         [PACKAGE_SESSION_EXTENSION_IRI]: {
-          resourceId: session.skill_resource_id,
+          // Which package, to open it again: a skill's package resource, or
+          // a lesson (courseItemId) in the learner's course (courseId).
+          ...(session.skill_resource_id
+            ? { resourceId: session.skill_resource_id }
+            : { courseItemId: session.resource_id, courseId: session.course_id }),
           sessionId: session.id,
           statementCount: rows.length,
           earned,
@@ -108,8 +117,10 @@ export function buildSessionActivity({ session, rows, resourceTitle, skill = nul
     id: session.summary_statement_id,
     user_id: session.user_id,
     skill_id: skill?.id ?? null,
-    // Not the resource's own statements (skill_resource_id), which the
-    // activity lists leave out: this is the activity they show instead.
+    // Not the package's own statements (skill_resource_id or resource_id),
+    // which the activity lists leave out: this is the activity they show
+    // instead. Left off the course too (course_id), so it's only ever the
+    // learner's own, like the rest of their timeline.
     skill_resource_id: null,
     resource_id: null,
     launch_session_id: session.id,

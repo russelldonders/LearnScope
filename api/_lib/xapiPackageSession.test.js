@@ -107,4 +107,22 @@ describe('one activity per package session', () => {
       { verb: { id: VERB('completed') }, object: stamp('C') },
     ])).toEqual(['A', 'B'])
   })
+
+  it('for a course lesson, says which lesson in which course, on no skill and off the course', () => {
+    const lesson = { id: 'sess-2', user_id: 'user-1', skill_resource_id: null, resource_id: 'item-1', course_id: 'course-1', created_at: '2026-11-18T10:00:00Z', summary_statement_id: 'sum-2' }
+    const lessonLaunched = 'https://learnscope.app/xapi/activities/item-1'
+    const rows = [
+      row(VERB('initialized'), { id: lessonLaunched }, '2026-11-18T10:00:05Z'),
+      row(VERB('completed'), { id: lessonLaunched }, '2026-11-18T10:20:00Z'),
+    ]
+    const activity = buildSessionActivity({ session: lesson, rows, resourceTitle: 'Manual handling' })
+    expect(activity).toMatchObject({ id: 'sum-2', skill_id: null, skill_resource_id: null, resource_id: null, launch_session_id: 'sess-2' })
+    expect(activity).not.toHaveProperty('course_id')
+    expect(activity.statement.verb.id).toBe(VERB('completed'))
+    expect(client.activityName(activity.statement)).toBe('Manual handling')
+    expect(client.relatedSkillsFromStatement(activity.statement)).toEqual([])
+    expect(client.packageSessionFromStatement(activity.statement)).toEqual({
+      courseItemId: 'item-1', courseId: 'course-1', sessionId: 'sess-2', statementCount: 2, earned: [],
+    })
+  })
 })

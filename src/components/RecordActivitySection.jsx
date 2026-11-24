@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
 import EditActivityModal from './EditActivityModal'
 import ActivityTimeline from './ActivityTimeline'
-import { timelineRows } from '../lib/activityTimeline'
+import { timelineRows, withoutSummarisedLessonStatements } from '../lib/activityTimeline'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { linkSkillToExperiences } from '../lib/currentRole'
 import { saveActivity } from '../lib/activitySkillLinks'
@@ -63,7 +63,7 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
       .is('skill_resource_id', null)
       .order('created_at', { ascending: false })
     if (error) setError(error.message)
-    else setStatements(data)
+    else setStatements(withoutSummarisedLessonStatements(data))
     setLoading(false)
   }
 

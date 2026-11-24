@@ -2,11 +2,14 @@ import { useState } from 'react'
 import ActivityRow, { SkillChip } from './ActivityRow'
 import ActivityReflection from './ActivityReflection'
 import { combinedSetRow, dayGroups, dayLabel, displayLocale, foldTimeline, packageGroupSummary, describeCheckIn } from '../lib/activityTimeline'
-import { formatMinutes } from '../lib/xapiStatement'
+import { formatMinutes, packageSessionFromStatement } from '../lib/xapiStatement'
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates'
 import { REFLECTION_PROMPTS, canRepeatRow } from '../lib/quickActivityLog'
 import { canEditActivity } from '../lib/activityEdits'
 import { useLanguage } from '../context/LanguageContext'
+import { useAuth } from '../context/AuthContext'
+import { ReopenPackageOverlay } from './SkillPackageOverlay'
+import { ReopenLessonOverlay } from './CoursePackageLauncher'
 
 const ACTION_CLASS = 'text-xs font-medium text-moss hover:underline'
 
@@ -25,6 +28,18 @@ export function AchievementMark({ className = '' }) {
     <span aria-hidden="true" className={`flex items-center justify-center w-4 h-4 rounded-full bg-gold text-paper ring-4 ring-paper text-[9px] leading-none ${className}`}>
       ★
     </span>
+  )
+}
+
+// The package a session was in, opened over the page as its skill page --
+// or, for a course lesson, its course -- opens it. Only mounted once asked
+// for, so a timeline needs no signed-in learner until then.
+function ReopenPackage({ session, skillId, title, onClose }) {
+  const { user } = useAuth()
+  return session.resourceId ? (
+    <ReopenPackageOverlay resourceId={session.resourceId} skillId={skillId} title={title} userId={user.id} onClose={onClose} />
+  ) : (
+    <ReopenLessonOverlay courseId={session.courseId} itemId={session.courseItemId} title={title} userId={user.id} onClose={onClose} />
   )
 }
 
@@ -53,8 +68,13 @@ export function PackageSessions({
 }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
+  const [launching, setLaunching] = useState(false)
   const summary = packageGroupSummary(rows)
   const newest = summary.sessions[0].row
+  // Its name opens the package itself, as its skill page does; onOpen is
+  // only for a session that can't say which package it was in.
+  const session = packageSessionFromStatement(newest.statement)
+  const reopenable = Boolean(session?.resourceId || (session?.courseItemId && session?.courseId))
   const outcomeText = summary.outcome
     ? [t(`activity.verbs.${summary.outcome}`), summary.bestScore != null ? `${summary.bestScore}%` : null].filter(Boolean).join(' · ')
     : null
@@ -79,7 +99,11 @@ export function PackageSessions({
       {titled ? (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {onOpen ? (
+            {reopenable ? (
+              <button type="button" onClick={() => setLaunching(true)} aria-haspopup="dialog" className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
+                {summary.title}
+              </button>
+            ) : onOpen ? (
               <button type="button" onClick={() => onOpen(newest)} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
                 {summary.title}
               </button>
@@ -142,6 +166,14 @@ export function PackageSessions({
         </ol>
       )}
       {open && children}
+      {launching && (
+        <ReopenPackage
+          session={session}
+          skillId={summary.skills[0]?.id ?? null}
+          title={summary.title}
+          onClose={() => setLaunching(false)}
+        />
+      )}
     </div>
   )
 }

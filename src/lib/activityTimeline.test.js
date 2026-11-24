@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activitySource, checkInLevel, combinedSetRow, describeCheckIn, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, packageGroupSummary, timelineRows } from './activityTimeline'
+import { activitySource, checkInLevel, combinedSetRow, describeCheckIn, dayGroups, dayLabel, foldTimeline, withoutSummarisedLessonStatements, isCheckIn, isJustAdded, packageGroupSummary, timelineRows } from './activityTimeline'
 import { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SHARED_WITH_EXTENSION_IRI, SKILL_EXTENSION_IRI, measurementsFromStatement } from './xapiStatement'
 
 // Sunday 8 November 2026, midday local time.
@@ -217,5 +217,30 @@ describe('describeCheckIn', () => {
   it('names a knowledge check by its skill', () => {
     const row = { id: 'd', statement: { object: { definition: { name: { 'en-US': 'Confirming baseline: SQL (Knowledge level 3)' } } }, result: { extensions: { [DIAGNOSTIC_EXTENSION_IRI]: { confirmedLevel: 3 } } }, context: { extensions: { [SKILL_EXTENSION_IRI]: [{ id: 's', name: 'SQL' }] } } } }
     expect(describeCheckIn(row)).toEqual({ kind: 'knowledgeCheck', name: null, skill: 'SQL', level: 3 })
+  })
+})
+
+describe('withoutSummarisedLessonStatements', () => {
+  const PKG = 'https://learnscope.app/xapi/extensions/package-session'
+  const lessonStatement = (id, sessionId) => ({ id, resource_id: 'item-1', launch_session_id: sessionId, statement: { verb: { id: 'x' } } })
+  const lessonSession = (id, sessionId, extension = { courseItemId: 'item-1', courseId: 'course-1', sessionId }) => ({
+    id, resource_id: null, launch_session_id: sessionId, statement: { context: { extensions: { [PKG]: extension } } },
+  })
+
+  it('shows a lesson launch as its one activity, not the statements the package sent', () => {
+    const rows = [lessonSession('sum-1', 's1'), lessonStatement('a', 's1'), lessonStatement('b', 's1'), lessonStatement('c', 's0')]
+    expect(withoutSummarisedLessonStatements(rows).map((r) => r.id)).toEqual(['sum-1', 'c'])
+  })
+
+  it('only trusts an activity the LRS wrote, not a package statement claiming to be one', () => {
+    const spoof = { ...lessonSession('fake', 's1'), resource_id: 'item-1' }
+    const rows = [spoof, lessonStatement('a', 's1')]
+    expect(withoutSummarisedLessonStatements(rows)).toEqual(rows)
+  })
+
+  it('folds a lesson\'s sessions into one timeline entry', () => {
+    const items = foldTimeline([lessonSession('sum-2', 's2'), lessonSession('sum-1', 's1')])
+    expect(items).toHaveLength(1)
+    expect(items[0].type).toBe('package')
   })
 })

@@ -23,6 +23,7 @@ import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
 import Cmi5Player from '../components/Cmi5Player'
 import LtiPlayer from '../components/LtiPlayer'
+import CoursePackageLauncher from '../components/CoursePackageLauncher'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 import BackLink from '../components/BackLink'
@@ -105,13 +106,24 @@ export function CourseItemPlayer({
         </a>
       )}
 
+      {/* Packages open over the whole window, as one on a skill does. */}
       {item.type === 'scorm' && (
-        <ScormPlayer key={item.id} contentItem={item} userId={userId} onProgress={onProgress} />
+        <CoursePackageLauncher key={item.id} item={item}>
+          <ScormPlayer contentItem={item} userId={userId} onProgress={onProgress} fill />
+        </CoursePackageLauncher>
       )}
 
-      {item.type === 'xapi' && <XapiPlayer key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
+      {item.type === 'xapi' && (
+        <CoursePackageLauncher key={item.id} item={item} recordsActivity>
+          <XapiPlayer contentItem={item} userId={userId} courseId={courseId} fill />
+        </CoursePackageLauncher>
+      )}
 
-      {item.type === 'cmi5' && <Cmi5Player key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
+      {item.type === 'cmi5' && (
+        <CoursePackageLauncher key={item.id} item={item} recordsActivity>
+          <Cmi5Player contentItem={item} userId={userId} courseId={courseId} fill />
+        </CoursePackageLauncher>
+      )}
 
       {item.type === 'lti' && <LtiPlayer key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
 

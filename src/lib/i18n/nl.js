@@ -1251,6 +1251,7 @@ export default {
       closePackage: 'Sluiten',
       packageLoading: 'Laden…',
       packageNoLaunch: 'Dit pakket heeft geen startpagina.',
+      packageUnavailable: 'Dit pakket kan niet meer worden geopend.',
       packageRecordsActivity: 'Activiteit die dit pakket meldt, wordt aan je leerhistorie toegevoegd.',
       packageActivity: {
         recordedHeading: "Wat het pakket heeft vastgelegd",

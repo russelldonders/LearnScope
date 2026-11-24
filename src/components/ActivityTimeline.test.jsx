@@ -16,6 +16,19 @@ vi.mock('../context/LanguageContext', async () => {
   return { useLanguage: () => ({ language: 'en-GB', setLanguage: vi.fn(), t }) }
 })
 
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
+vi.mock('./SkillPackageOverlay', () => ({
+  ReopenPackageOverlay: ({ resourceId, skillId, title, userId }) => (
+    <div role="dialog" aria-label={title}>{[resourceId, skillId, userId].join(' ')}</div>
+  ),
+}))
+
+vi.mock('./CoursePackageLauncher', () => ({
+  ReopenLessonOverlay: ({ courseId, itemId, title, userId }) => (
+    <div role="dialog" aria-label={title}>{[courseId, itemId, userId].join(' ')}</div>
+  ),
+}))
+
 const { default: ActivityTimeline } = await import('./ActivityTimeline')
 const { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI } = await import('../lib/xapiStatement')
 
@@ -202,8 +215,31 @@ describe('course package sessions', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show sessions/ }))
     expect(screen.getByText(/· Passed 85%/)).toBeInTheDocument()
     expect(screen.getByText(/· ★ Gold stamp, Spurter/)).toBeInTheDocument()
+    // Its name opens the package itself, as on its skill page.
     fireEvent.click(screen.getByRole('button', { name: 'Cycle around and learn Dutch' }))
-    expect(onOpen).toHaveBeenCalledWith(rows[0])
+    expect(screen.getByRole('dialog', { name: 'Cycle around and learn Dutch' })).toHaveTextContent('pkg-1 skill-dutch me')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('opens a course lesson from its session, in its own course', () => {
+    const lesson = {
+      id: 'sum-1',
+      recorded_at: new Date(2026, 10, 8, 10).toISOString(),
+      created_at: new Date(2026, 10, 8, 10).toISOString(),
+      resource_id: null,
+      launch_session_id: 's1',
+      statement: {
+        verb: { id: 'http://adlnet.gov/expapi/verbs/completed' },
+        object: { definition: { name: { 'en-US': 'Manual handling' } } },
+        context: { extensions: {
+          [PROVENANCE_EXTENSION_IRI]: { source: 'package', externalId: 's1' },
+          ['https://learnscope.app/xapi/extensions/package-session']: { courseItemId: 'item-1', courseId: 'course-1', sessionId: 's1', statementCount: 3, earned: [] },
+        } },
+      },
+    }
+    render(<MemoryRouter><ActivityTimeline rows={[lesson]} now={NOW} /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: 'Manual handling' }))
+    expect(screen.getByRole('dialog', { name: 'Manual handling' })).toHaveTextContent('course-1 item-1 me')
   })
 
   it('says it was worked through when nothing was earned or finished', () => {

@@ -1251,6 +1251,7 @@ export default {
       closePackage: 'Chiudi',
       packageLoading: 'Caricamento…',
       packageNoLaunch: 'Questo pacchetto non ha una pagina di avvio.',
+      packageUnavailable: 'Questo pacchetto non può più essere aperto.',
       packageRecordsActivity: 'Le attività registrate da questo pacchetto vengono aggiunte al tuo percorso di apprendimento.',
       packageActivity: {
         recordedHeading: "Cosa ha registrato il pacchetto",

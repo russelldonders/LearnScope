@@ -162,7 +162,24 @@ export function setKey(row) {
 // for anything that isn't a package session.
 export function packageKey(row) {
   const session = packageSessionFromStatement(row.statement)
-  return session?.resourceId ? `package|${session.resourceId}` : null
+  if (session?.resourceId) return `package|${session.resourceId}`
+  return session?.courseItemId ? `lesson|${session.courseItemId}` : null
+}
+
+// A course lesson's own statements (resource_id, 0079) once the launch they
+// came from has its one activity, which shows instead -- as a skill
+// package's own statements never show beside its sessions. Only an
+// activity the LRS wrote counts (no resource_id of its own); a launch from
+// before there were any keeps its statements showing as they always have.
+export function withoutSummarisedLessonStatements(rows) {
+  const summarised = new Set()
+  for (const row of rows) {
+    if (!row.resource_id && row.launch_session_id && packageSessionFromStatement(row.statement)?.courseItemId) {
+      summarised.add(row.launch_session_id)
+    }
+  }
+  if (summarised.size === 0) return rows
+  return rows.filter((row) => !(row.resource_id && summarised.has(row.launch_session_id)))
 }
 
 // One day's rows for the timeline, newest first. A day's sessions in the same

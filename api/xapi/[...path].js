@@ -145,21 +145,28 @@ async function recordPackageCompletion(admin, session, statements) {
   if (error) throw error
 }
 
-// The session's one activity on the skill it was launched from (0316),
-// rebuilt from the session's statements each time new ones arrive -- only
+// The session's one activity (0316) -- on the skill it was launched from,
+// or for a course lesson on the learner's timeline only -- rebuilt from the session's statements each time new ones arrive -- only
 // the parts it uses, and timed by when the server received them.
 // insertedCount: how many of this request's statements were new. A session
 // whose activity the learner deleted (summary_dismissed, 0316) isn't given
 // it back.
 async function recordSessionActivity(admin, session, insertedCount) {
-  if (!session.skill_resource_id || insertedCount === 0 || session.summary_dismissed) return
+  // A lesson opened outside a learner's course (an organisation previewing
+  // its own library) isn't part of anyone's learning, so it gets none.
+  const isSkillPackage = Boolean(session.skill_resource_id)
+  if (!isSkillPackage && !session.course_id) return
+  if (insertedCount === 0 || session.summary_dismissed) return
   const [{ data: parts, error: rowsError }, { data: resource, error: resourceError }, { data: skill, error: skillError }] = await Promise.all([
+    // The session's own statements, never its activity (which has neither).
     admin.from('xapi_statements')
       .select('created_at, verb:statement->verb, object:statement->object, result:statement->result')
       .eq('launch_session_id', session.id)
       .eq('user_id', session.user_id)
-      .not('skill_resource_id', 'is', null),
-    admin.from('skill_resources').select('title').eq('id', session.skill_resource_id).maybeSingle(),
+      .not(isSkillPackage ? 'skill_resource_id' : 'resource_id', 'is', null),
+    isSkillPackage
+      ? admin.from('skill_resources').select('title').eq('id', session.skill_resource_id).maybeSingle()
+      : admin.from('content_resources').select('title').eq('id', session.resource_id).maybeSingle(),
     session.skill_id
       ? admin.from('skills').select('id, name').eq('id', session.skill_id).eq('user_id', session.user_id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),

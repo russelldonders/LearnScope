@@ -142,6 +142,22 @@ export async function listCourseResources(courseId) {
   }))
 }
 
+// A package lesson in the learner's own course, to open again from a
+// session of it on the timeline. Null once the course isn't theirs or the
+// lesson is no longer in it (say, a newer version of the course replaced it).
+export async function findCourseLessonToReopen(userId, courseId, itemId) {
+  const { data: course, error } = await supabase
+    .from('courses')
+    .select('id, catalogue_course_id')
+    .eq('id', courseId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  if (!course?.catalogue_course_id) return null
+  const item = (await listCourseResources(course.catalogue_course_id)).find((row) => row.id === itemId)
+  return item && (item.type === 'xapi' || item.type === 'cmi5') ? { item, courseId: course.id } : null
+}
+
 // -- course_sections (0078): named, ordered groups of a course's content --
 
 export async function listCourseSections(courseId) {
