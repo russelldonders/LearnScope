@@ -8,16 +8,24 @@ import AccessibleDialog from './AccessibleDialog'
 import SkillLevelFilter from './SkillLevelFilter'
 import { LEVEL_FILTER_THRESHOLD, atLeastLevel, sortByLevel } from '../lib/peopleByLevel'
 import { useLanguage } from '../context/LanguageContext'
+import { requestCoaching } from '../lib/coaching'
 
 const SEARCH_THRESHOLD = 10
 
-export default function PeopleWithSkillModal({ librarySkillId, skillName, skillId, onClose }) {
+// Everyone findable with a skill, experts first. People offering coaching on
+// it (0335) are marked Coach and can be shown alone (coachesOnly starts it
+// that way, from "Find a coach"). canAskForCoaching: the skill is the
+// learner's own, so they can ask a coach to coach them in it; onCoachingChange
+// is told when they do.
+export default function PeopleWithSkillModal({ librarySkillId, skillName, skillId, onClose, coachesOnly: startCoachesOnly = false, canAskForCoaching = false, onCoachingChange = null }) {
   const { t } = useLanguage()
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [minLevel, setMinLevel] = useState(0)
+  const [coachesOnly, setCoachesOnly] = useState(startCoachesOnly)
+  // Which form is open: `connect:<user id>` or `coach:<user id>`.
   const [openRequestFor, setOpenRequestFor] = useState(null)
 
   useEffect(() => {
@@ -32,7 +40,9 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   // Experts at the top; a level filter once there are enough people to need
   // one (see peopleByLevel.js), as on the skill's Network tab.
   const showLevelFilter = matches.length > LEVEL_FILTER_THRESHOLD
-  const byLevel = sortByLevel(atLeastLevel(matches, showLevelFilter ? minLevel : 0), (m) => m.level, (m) => m.full_name)
+  const hasCoaches = matches.some((m) => m.is_coach)
+  const shown = coachesOnly ? matches.filter((m) => m.is_coach) : matches
+  const byLevel = sortByLevel(atLeastLevel(shown, showLevelFilter ? minLevel : 0), (m) => m.level, (m) => m.full_name)
   const visible =
     search.trim() && matches.length > SEARCH_THRESHOLD
       ? byLevel.filter((m) => (m.full_name || '').toLowerCase().includes(search.trim().toLowerCase()))
@@ -41,6 +51,16 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   function handleRequested(userId) {
     setMatches((prev) => prev.map((m) => (m.user_id === userId ? { ...m, has_pending_request: true } : m)))
     setOpenRequestFor(null)
+  }
+
+  function handleCoachingRequested(userId) {
+    setMatches((prev) => prev.map((m) => (m.user_id === userId ? { ...m, my_coaching_status: 'requested' } : m)))
+    setOpenRequestFor(null)
+    onCoachingChange?.()
+  }
+
+  function toggleForm(key) {
+    setOpenRequestFor(openRequestFor === key ? null : key)
   }
 
   return (
@@ -58,6 +78,18 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
         <p className="text-xs text-secondary mb-4">
           {t('modals.peopleWithSkill.subtitle')}
         </p>
+
+        {(hasCoaches || coachesOnly) && (
+          <label className="flex items-center gap-2 mb-4 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={coachesOnly}
+              onChange={(e) => setCoachesOnly(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            {t('modals.peopleWithSkill.coachesOnly')}
+          </label>
+        )}
 
         {showLevelFilter && (
           <SkillLevelFilter id="people-with-skill-level" value={minLevel} onChange={setMinLevel} className="mb-4" />
@@ -78,7 +110,9 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
 
         {!loading && !error && visible.length === 0 && (
           <p className="text-sm text-secondary">
-            {matches.length === 0 ? t('modals.peopleWithSkill.noOneDiscoverable') : t('modals.peopleWithSkill.noMatches')}
+            {coachesOnly && !hasCoaches
+              ? t('modals.peopleWithSkill.noCoaches')
+              : matches.length === 0 ? t('modals.peopleWithSkill.noOneDiscoverable') : t('modals.peopleWithSkill.noMatches')}
           </p>
         )}
 
@@ -96,7 +130,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                       <span className="block text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
                         {m.full_name || t('modals.peopleWithSkill.someone')}
                       </span>
-                      {m.level ? <span className="block text-xs text-secondary">{LEVEL_LABELS[m.level]}</span> : null}
+                      <PersonDetail match={m} />
                     </span>
                   </Link>
                 ) : (
@@ -104,7 +138,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                     <PersonAvatar name={m.full_name} avatarUrl={m.avatar_url} />
                     <span className="min-w-0">
                       <span className="block text-sm text-ink font-medium truncate">{m.full_name || t('modals.peopleWithSkill.someone')}</span>
-                      {m.level ? <span className="block text-xs text-secondary">{LEVEL_LABELS[m.level]}</span> : null}
+                      <PersonDetail match={m} />
                     </span>
                   </div>
                 )}
@@ -120,19 +154,44 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setOpenRequestFor(openRequestFor === m.user_id ? null : m.user_id)}
+                    onClick={() => toggleForm(`connect:${m.user_id}`)}
                     className="rounded-full border border-hairline px-3 py-1 text-xs font-medium text-ink hover:border-moss hover:text-moss shrink-0"
                   >
                     {t('modals.peopleWithSkill.connect')}
                   </button>
                 )}
               </div>
-              {openRequestFor === m.user_id && (
-                <ConnectRequestForm
-                  recipientId={m.user_id}
-                  recipientName={m.full_name || t('modals.peopleWithSkill.thisPerson')}
-                  skillId={skillId}
+              {canAskForCoaching && m.is_coach && (
+                <div className="mt-2 flex justify-end">
+                  {m.my_coaching_status ? (
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-moss">
+                      {m.my_coaching_status === 'active' ? t('modals.peopleWithSkill.yourCoach') : t('modals.peopleWithSkill.coachingRequested')}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleForm(`coach:${m.user_id}`)}
+                      className="rounded-full bg-moss px-3 py-1 text-xs font-medium text-paper hover:opacity-90"
+                    >
+                      {t('modals.peopleWithSkill.askToCoach')}
+                    </button>
+                  )}
+                </div>
+              )}
+              {openRequestFor === `connect:${m.user_id}` && (
+                <RequestForm
+                  placeholder={t('modals.peopleWithSkill.connectPromptPlaceholder', { name: m.full_name || t('modals.peopleWithSkill.thisPerson') })}
+                  send={(message) => sendConnectionRequest({ recipientId: m.user_id, skillId, message })}
                   onSent={() => handleRequested(m.user_id)}
+                  onCancel={() => setOpenRequestFor(null)}
+                />
+              )}
+              {openRequestFor === `coach:${m.user_id}` && (
+                <RequestForm
+                  placeholder={t('modals.peopleWithSkill.coachPromptPlaceholder', { name: m.full_name || t('modals.peopleWithSkill.thisPerson') })}
+                  note={t('modals.peopleWithSkill.coachConnectsNote')}
+                  send={(message) => requestCoaching(skillId, m.coach_skill_id, message)}
+                  onSent={() => handleCoachingRequested(m.user_id)}
                   onCancel={() => setOpenRequestFor(null)}
                 />
               )}
@@ -143,7 +202,26 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   )
 }
 
-function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCancel }) {
+// Their level in words, and Coach if they offer coaching on the skill.
+function PersonDetail({ match }) {
+  const { t } = useLanguage()
+  if (!match.level && !match.is_coach) return null
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-secondary">
+      {match.is_coach && (
+        <span className="rounded-full bg-moss/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-moss">
+          {t('modals.peopleWithSkill.coachBadge')}
+        </span>
+      )}
+      {match.level ? LEVEL_LABELS[match.level] : null}
+    </span>
+  )
+}
+
+// An optional message and Send, for a connection request or asking someone
+// to coach you. send(message) does the sending; note says what sending it
+// will lead to.
+function RequestForm({ placeholder, note = null, send, onSent, onCancel }) {
   const { t } = useLanguage()
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -153,7 +231,7 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
     setSending(true)
     setError(null)
     try {
-      await sendConnectionRequest({ recipientId, skillId, message })
+      await send(message)
       onSent()
     } catch (err) {
       if (isDuplicatePendingRequestError(err)) {
@@ -172,10 +250,11 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
         rows={2}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder={t('modals.peopleWithSkill.connectPromptPlaceholder', { name: recipientName })}
+        placeholder={placeholder}
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs focus:outline-none focus:ring-2 focus:ring-moss"
       />
-      {error && <p role="alert" className="text-xs text-red-700 mt-1">{error}</p>}
+      {note && <p className="text-xs text-secondary mt-1">{note}</p>}
+      {error &&<p role="alert" className="text-xs text-red-700 mt-1">{error}</p>}
       <div className="flex items-center gap-2 mt-2">
         <button
           type="button"

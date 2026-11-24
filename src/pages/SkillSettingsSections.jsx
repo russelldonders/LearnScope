@@ -430,6 +430,7 @@ export function SettingsSection({ skill, user, onUpdated }) {
   const [visible, setVisible] = useState(skill.visible_on_profile ?? false)
   const [validateConnections, setValidateConnections] = useState(skill.offer_validate_connections ?? false)
   const [validateOthers, setValidateOthers] = useState(skill.offer_validate_others ?? false)
+  const [offerCoaching, setOfferCoaching] = useState(skill.offer_coaching ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const canOfferValidation = skill.lifecycle_stage === 'validated' || skill.lifecycle_stage === 'maintained'
@@ -571,6 +572,27 @@ export function SettingsSection({ skill, user, onUpdated }) {
               <span className="text-sm text-ink">{t('skillDetail.letAnyoneValidate')}</span>
             </label>
           </div>
+        </div>
+      )}
+
+      {/* Coaching (0335): only once another person has validated the skill,
+          which the database checks -- its refusal is shown as the error. */}
+      {canOfferValidation && skill.library_skill_id && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('skillDetail.coaching.settingsHeading')}</h4>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={offerCoaching}
+              disabled={saving}
+              onChange={(e) => handleValidationToggle('offer_coaching', e.target.checked, setOfferCoaching)}
+              className="mt-0.5 rounded border-hairline"
+            />
+            <span className="text-sm text-ink">
+              {t('skillDetail.coaching.offerCoaching')}
+              <span className="block text-xs text-secondary mt-0.5">{t('skillDetail.coaching.offerCoachingDescription')}</span>
+            </span>
+          </label>
         </div>
       )}
 

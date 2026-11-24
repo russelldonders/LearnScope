@@ -185,7 +185,7 @@ export function RatingsFromOthers({ ratings = [], raterAvatars = {}, rateInvites
 // One of the parts, as a section card styled like Goals and Learning: title
 // and one-line explanation with its action beside them, then what's
 // happened so far.
-function Part({ id, title, description, action, children }) {
+export function Part({ id, title, description, action, children }) {
   return (
     <section aria-labelledby={id} className="mt-4 rounded-md border border-hairline bg-paper p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
