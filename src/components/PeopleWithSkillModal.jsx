@@ -8,7 +8,8 @@ import AccessibleDialog from './AccessibleDialog'
 import SkillLevelFilter from './SkillLevelFilter'
 import { LEVEL_FILTER_THRESHOLD, atLeastLevel, sortByLevel } from '../lib/peopleByLevel'
 import { useLanguage } from '../context/LanguageContext'
-import { requestCoaching } from '../lib/coaching'
+import { listCoachRatings, requestCoaching } from '../lib/coaching'
+import { CoachReviewList, RatingSummary } from './CoachReviews'
 
 const SEARCH_THRESHOLD = 10
 
@@ -27,6 +28,9 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   const [coachesOnly, setCoachesOnly] = useState(startCoachesOnly)
   // Which form is open: `connect:<user id>` or `coach:<user id>`.
   const [openRequestFor, setOpenRequestFor] = useState(null)
+  // Coaches' average stars by user id (0337), and whose reviews are open.
+  const [ratings, setRatings] = useState({})
+  const [reviewsFor, setReviewsFor] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -35,6 +39,10 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
       .then(setMatches)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+    // Ratings are extra: the list still shows without them.
+    listCoachRatings(librarySkillId)
+      .then((rows) => setRatings(Object.fromEntries(rows.map((row) => [row.coach_id, row]))))
+      .catch(() => setRatings({}))
   }, [librarySkillId])
 
   // Experts at the top; a level filter once there are enough people to need
@@ -161,6 +169,26 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                   </button>
                 )}
               </div>
+              {m.is_coach && ratings[m.user_id] && (
+                <div className="mt-2">
+                  <div className="flex flex-wrap items-center gap-x-3">
+                    <RatingSummary average={ratings[m.user_id].average_rating} count={ratings[m.user_id].review_count} />
+                    <button
+                      type="button"
+                      aria-expanded={reviewsFor === m.user_id}
+                      onClick={() => setReviewsFor(reviewsFor === m.user_id ? null : m.user_id)}
+                      className="text-xs font-medium text-moss hover:underline"
+                    >
+                      {reviewsFor === m.user_id ? t('skillDetail.coaching.reviews.hide') : t('skillDetail.coaching.reviews.read')}
+                    </button>
+                  </div>
+                  {reviewsFor === m.user_id && (
+                    <div className="mt-2">
+                      <CoachReviewList coachId={m.user_id} librarySkillId={librarySkillId} />
+                    </div>
+                  )}
+                </div>
+              )}
               {canAskForCoaching && m.is_coach && (
                 <div className="mt-2 flex justify-end">
                   {m.my_coaching_status ? (

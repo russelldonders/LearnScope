@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import PersonAvatar from './PersonAvatar'
 import ConfirmDialog from './ConfirmDialog'
 import CoachingSessions from './CoachingSessions'
+import { CoachReviewList, MyCoachReview } from './CoachReviews'
 import { Part } from './SkillNetworkSection'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
@@ -13,6 +14,7 @@ import {
   listMyCoachInterests,
   listMyCoaching,
   listMyCoachingSessions,
+  listMyCoachReviews,
   registerCoachInterest,
   respondToCoachingRequest,
   withdrawCoachInterest,
@@ -30,6 +32,7 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
   const k = (key, params) => t(`skillDetail.coaching.${key}`, params)
   const [rows, setRows] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [myReviews, setMyReviews] = useState([])
   const [coachCount, setCoachCount] = useState(null)
   const [interest, setInterest] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -38,20 +41,22 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
 
   const load = useCallback(async () => {
     try {
-      const [mine, count, interests, allSessions] = await Promise.all([
+      const [mine, count, interests, allSessions, reviews] = await Promise.all([
         listMyCoaching(),
         countSkillCoaches(skill.library_skill_id),
         listMyCoachInterests(),
         listMyCoachingSessions(),
+        listMyCoachReviews(userId),
       ])
       setRows(mine)
       setSessions(allSessions)
+      setMyReviews(reviews)
       setCoachCount(count)
       setInterest(interests.find((row) => row.skill_id === skill.id) ?? null)
     } catch (err) {
       setError(err.message)
     }
-  }, [skill.id, skill.library_skill_id])
+  }, [skill.id, skill.library_skill_id, userId])
 
   useEffect(() => {
     load()
@@ -83,6 +88,9 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
   const coaching = asCoach.filter((row) => row.status === 'active')
   const coachedBefore = asCoach.filter((row) => row.status === 'ended')
   const noCoaches = coachCount === 0 && myCoaches.length === 0
+  const sessionsOf = (row) => sessions.filter((session) => session.relationship_id === row.id)
+  const hasDoneSession = (row) => sessionsOf(row).some((session) => session.status === 'done')
+  const reviewOf = (row) => myReviews.find((review) => review.relationship_id === row.id) ?? null
 
   return (
     <>
@@ -101,7 +109,12 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
                 key={row.id}
                 row={row}
                 detail={k('coachingYouSince', { date: formatFullDate(row.started_at) })}
-                below={<CoachingSessions relationship={row} sessions={sessions.filter((s) => s.relationship_id === row.id)} onChange={load} />}
+                below={(
+                  <>
+                    <CoachingSessions relationship={row} sessions={sessionsOf(row)} onChange={load} />
+                    <MyCoachReview relationship={row} review={reviewOf(row)} canReview={hasDoneSession(row)} onChange={load} />
+                  </>
+                )}
               >
                 <TextButton onClick={() => setEnding(row)} disabled={busyId === row.id}>{k('endCoaching')}</TextButton>
               </CoachingPerson>
@@ -146,7 +159,16 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
 
         {myPast.length > 0 && (
           <CoachingList heading={k('earlierHeading')}>
-            {myPast.map((row) => <CoachingPerson key={row.id} row={row} detail={pastDetail(row, k)} />)}
+            {myPast.map((row) => (
+              <CoachingPerson
+                key={row.id}
+                row={row}
+                detail={pastDetail(row, k)}
+                below={row.status === 'ended' && (
+                  <MyCoachReview relationship={row} review={reviewOf(row)} canReview={hasDoneSession(row)} onChange={load} />
+                )}
+              />
+            ))}
           </CoachingList>
         )}
       </Part>
@@ -182,7 +204,7 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
                   key={row.id}
                   row={row}
                   detail={k('since', { date: formatFullDate(row.started_at) })}
-                  below={<CoachingSessions relationship={row} sessions={sessions.filter((s) => s.relationship_id === row.id)} onChange={load} />}
+                  below={<CoachingSessions relationship={row} sessions={sessionsOf(row)} onChange={load} />}
                 >
                   <TextButton onClick={() => setEnding(row)} disabled={busyId === row.id}>{k('endCoaching')}</TextButton>
                 </CoachingPerson>
@@ -194,6 +216,10 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
               {coachedBefore.map((row) => <CoachingPerson key={row.id} row={row} detail={pastDetail(row, k)} />)}
             </CoachingList>
           )}
+          <div>
+            <p className="text-xs text-secondary mb-1">{k('reviews.aboutYouHeading')}</p>
+            <CoachReviewList coachId={userId} librarySkillId={skill.library_skill_id} emptyText={k('reviews.noneAboutYou')} />
+          </div>
         </Part>
       )}
 

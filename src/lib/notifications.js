@@ -16,7 +16,7 @@ import { loadActionSources } from './actionLoading'
 import { listIncomingPlanInvitations } from './learnerPlans'
 import { listActiveGoalsForAttention } from './skillGoals'
 import { listSharedActivitySuggestions } from './sharedActivities'
-import { listMyCoachInterests, listMyCoaching, listMyCoachingSessions } from './coaching'
+import { listMyCoachInterests, listMyCoaching, listMyCoachingSessions, listMyRecentCoachReviews } from './coaching'
 import { supabase } from './supabaseClient'
 import { LEVEL_LABELS } from './levels'
 
@@ -88,7 +88,7 @@ export async function dismissNotification(userId, notificationId) {
 // the learner, while recent; and a coach becoming available for a skill the
 // learner is looking for one in. Each opens the skill's Network tab, where
 // coaching is.
-export function coachingNotifications(coaching, interests, now = Date.now(), sessions = []) {
+export function coachingNotifications(coaching, interests, now = Date.now(), sessions = [], reviews = []) {
   const recent = (at) => at && now - new Date(at).getTime() < COACHING_REPLY_DAYS * 24 * 60 * 60 * 1000
   const network = (skillId) => `/skills/${skillId}?tab=network`
   const relationships = new Map(coaching.map((row) => [row.id, row]))
@@ -142,7 +142,19 @@ export function coachingNotifications(coaching, interests, now = Date.now(), ses
     }
     return []
   })
+  // A learner's review of the coach's coaching (0337), while recent.
+  const reviewItems = reviews
+    .filter((review) => review.coach_skill_id && recent(review.updated_at))
+    .map((review) => notification({
+      id: review.id,
+      kind: 'coach-review',
+      title: 'Coaching Review',
+      detail: `${review.reviewer_name || 'A learner'} reviewed your coaching in ${review.skill_name || 'a skill'}: ${review.rating} out of 5 stars.`,
+      occurredAt: review.updated_at,
+      actions: [{ label: 'Read review', href: network(review.coach_skill_id) }],
+    }))
   return [
+    ...reviewItems,
     ...sessionItems,
     ...coaching
       .filter((row) => row.role === 'coach' && row.status === 'requested' && row.coach_skill_id)
@@ -205,7 +217,7 @@ export function buildNotificationItems(values, profiles = {}) {
       occurredAt: item.created_at,
       actions: [{ label: 'Review recommendation', href: `/recommend/${item.share_code}` }],
     })),
-    ...coachingNotifications(values.coaching ?? [], values.coachInterests ?? [], Date.now(), values.coachingSessions ?? []),
+    ...coachingNotifications(values.coaching ?? [], values.coachInterests ?? [], Date.now(), values.coachingSessions ?? [], values.coachReviews ?? []),
     ...(values.sharedActivities ?? []).map((item) => notification({
       id: item.id,
       kind: 'shared-activity',
@@ -360,6 +372,7 @@ export async function loadNotifications(userId) {
     { key: 'coaching', label: 'coaching', fallback: [], load: listMyCoaching },
     { key: 'coachInterests', label: 'coach availability', fallback: [], load: listMyCoachInterests },
     { key: 'coachingSessions', label: 'coaching sessions', fallback: [], load: listMyCoachingSessions },
+    { key: 'coachReviews', label: 'coaching reviews', fallback: [], load: listMyRecentCoachReviews },
     { key: 'selfAssessments', label: 'self-assessment reminders', fallback: [], load: () => listUpcomingSelfAssessments(userId) },
     { key: 'targets', label: 'skill target reminders', fallback: [], load: () => listUpcomingTargets(userId) },
     { key: 'goals', label: 'goal reminders', fallback: [], load: () => listActiveGoalsForAttention(userId) },

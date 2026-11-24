@@ -123,3 +123,17 @@ describe('coaching session notifications', () => {
     expect(coachingNotifications([learnerSide], [], NOW, [session({ status: 'cancelled', cancelled_by_me: true, cancelled_at: '2026-11-24T08:00:00Z' })])).toEqual([])
   })
 })
+
+describe('coach review notifications', () => {
+  it('tells the coach about a recent review, opening the skill they coach from', () => {
+    const NOW = new Date('2026-11-24T12:00:00Z').getTime()
+    const review = { id: 'v1', rating: 4, reviewer_name: 'Rae', skill_name: 'Mentoring', coach_skill_id: 'theirs', updated_at: '2026-11-23T10:00:00Z' }
+    const [item] = coachingNotifications([], [], NOW, [], [review])
+    expect(item).toMatchObject({
+      id: 'coach-review:v1',
+      detail: 'Rae reviewed your coaching in Mentoring: 4 out of 5 stars.',
+      actions: [{ href: '/skills/theirs?tab=network' }],
+    })
+    expect(coachingNotifications([], [], NOW, [], [{ ...review, updated_at: '2026-09-01T10:00:00Z' }])).toEqual([])
+  })
+})

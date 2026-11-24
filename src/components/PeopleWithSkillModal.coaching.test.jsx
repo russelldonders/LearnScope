@@ -19,10 +19,14 @@ vi.mock('../lib/skillDiscovery', async (importOriginal) => ({
 vi.mock('../lib/coaching', async (importOriginal) => ({
   ...(await importOriginal()),
   requestCoaching: vi.fn().mockResolvedValue('new-id'),
+  listCoachRatings: vi.fn().mockResolvedValue([]),
+  listCoachReviews: vi.fn().mockResolvedValue([
+    { id: 'v1', rating: 5, comment: 'Brilliant coach', reviewer_name: 'Rae Learner', reviewer_avatar_url: null, updated_at: '2026-11-20T10:00:00Z' },
+  ]),
 }))
 
 const { listSkillMatches } = await import('../lib/skillDiscovery')
-const { requestCoaching } = await import('../lib/coaching')
+const { listCoachRatings, requestCoaching } = await import('../lib/coaching')
 const { default: PeopleWithSkillModal } = await import('./PeopleWithSkillModal')
 
 const person = (fields) => ({
@@ -80,5 +84,15 @@ describe('PeopleWithSkillModal coaches', () => {
     await waitFor(() => expect(requestCoaching).toHaveBeenCalledWith('mine', 'theirs', 'My first talk'))
     expect(await screen.findByText('Coaching requested')).toBeInTheDocument()
     expect(onCoachingChange).toHaveBeenCalled()
+  })
+
+  it('shows the stars of each coach and opens their named reviews', async () => {
+    listSkillMatches.mockResolvedValue([person({ user_id: 'c', full_name: 'Coral', is_coach: true, coach_skill_id: 'theirs' })])
+    listCoachRatings.mockResolvedValue([{ coach_id: 'c', average_rating: 4.5, review_count: 2 }])
+    open()
+    expect(await screen.findByText('4.5 · 2 reviews')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Read reviews' }))
+    expect(await screen.findByText('Brilliant coach')).toBeInTheDocument()
+    expect(screen.getByText('Rae Learner')).toBeInTheDocument()
   })
 })

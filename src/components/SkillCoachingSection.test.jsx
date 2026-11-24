@@ -15,6 +15,8 @@ vi.mock('../lib/coaching', async (importOriginal) => ({
   ...(await importOriginal()),
   listMyCoaching: vi.fn(),
   listMyCoachingSessions: vi.fn(),
+  listMyCoachReviews: vi.fn().mockResolvedValue([]),
+  listCoachReviews: vi.fn().mockResolvedValue([]),
   countSkillCoaches: vi.fn(),
   listMyCoachInterests: vi.fn(),
   registerCoachInterest: vi.fn().mockResolvedValue(),

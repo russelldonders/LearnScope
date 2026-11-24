@@ -178,3 +178,51 @@ export async function myDisplayName(userId) {
   const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle()
   return data?.full_name ?? ''
 }
+
+// -- Reviews (20261124170000_0337_coach_reviews.sql) --
+// Named: shown with the learner's name to anyone looking at the coach for
+// that skill while the coach offers coaching on it.
+
+// Each coach's average stars and number of reviews on a library skill.
+export async function listCoachRatings(librarySkillId) {
+  const { data, error } = await supabase.rpc('list_coach_ratings', { p_library_skill_id: librarySkillId })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function listCoachReviews(coachId, librarySkillId) {
+  const { data, error } = await supabase.rpc('list_coach_reviews', { p_coach_id: coachId, p_library_skill_id: librarySkillId })
+  if (error) throw error
+  return data ?? []
+}
+
+// The reviews the learner wrote, by coaching relationship.
+export async function listMyCoachReviews(userId) {
+  const { data, error } = await supabase
+    .from('coach_reviews')
+    .select('id, relationship_id, rating, comment, created_at, updated_at')
+    .eq('learner_id', userId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function saveCoachReview(relationshipId, rating, comment = '') {
+  const { error } = await supabase.rpc('save_coach_review', {
+    p_relationship_id: relationshipId,
+    p_rating: rating,
+    p_comment: comment?.trim() || null,
+  })
+  if (error) throw error
+}
+
+export async function deleteCoachReview(relationshipId) {
+  const { error } = await supabase.rpc('delete_coach_review', { p_relationship_id: relationshipId })
+  if (error) throw error
+}
+
+// Reviews about the caller as a coach from the last 30 days.
+export async function listMyRecentCoachReviews() {
+  const { data, error } = await supabase.rpc('list_my_recent_coach_reviews')
+  if (error) throw error
+  return data ?? []
+}

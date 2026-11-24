@@ -9,6 +9,7 @@ vi.mock('../lib/skillDiscovery', () => ({
   isDuplicatePendingRequestError: () => false,
 }))
 vi.mock('./GrowthRing', () => ({ default: () => null }))
+vi.mock('../lib/coaching', () => ({ requestCoaching: vi.fn(), listCoachRatings: vi.fn(() => Promise.resolve([])), listCoachReviews: vi.fn() }))
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
   const t = (key, params) => {
