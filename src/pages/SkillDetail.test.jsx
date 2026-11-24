@@ -346,6 +346,7 @@ describe('SkillDetail', () => {
     renderPage()
     const selfAssess = await screen.findByRole('region', { name: /^Due since / })
     expect(selfAssess).toHaveTextContent('Self-assessment')
+    expect(selfAssess).toHaveTextContent('Takes about a minute.')
     expect(within(selfAssess).getByRole('button', { name: 'Rate your level' })).toBeInTheDocument()
 
     // Targets load after the skill itself; it's the next card along.

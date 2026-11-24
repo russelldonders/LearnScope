@@ -587,6 +587,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       title={isSelfAssessmentDue(skill.next_checkin_date)
                         ? t('skillDetail.upcomingCards.dueSince', { date: formatShortDate(skill.next_checkin_date) })
                         : t('skillDetail.upcomingCards.dueOn', { date: formatShortDate(skill.next_checkin_date) })}
+                      description={isSelfAssessmentDue(skill.next_checkin_date)
+                        ? t('skillDetail.upcomingCards.selfAssessDueNote')
+                        : t('skillDetail.upcomingCards.selfAssessEarlyNote')}
                       action={{ label: t('skillDetail.upcomingCards.selfAssessAction'), onClick: () => setSelfAssessOpen(true) }}
                     />
                   ),
@@ -638,22 +641,15 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       description={nextMilestone.description}
                       action={nextMilestoneAction ? { label: t('skillDetail.start'), onClick: nextMilestoneAction } : null}
                     >
-                      {/* This stage's steps: done, this one, still to come. */}
-                      {upNextPreview.length > 1 && (
-                        <ol aria-hidden="true" className="flex items-center gap-1.5 mt-2.5">
-                          {upNextPreview.map((item) => (
-                            <li
-                              key={item.key}
-                              className={`h-1.5 rounded-full ${
-                                item.key === nextMilestone.key
-                                  ? 'w-6 bg-moss'
-                                  : item.done
-                                    ? 'w-1.5 bg-moss/60'
-                                    : 'w-1.5 bg-hairline/40'
-                              }`}
-                            />
-                          ))}
-                        </ol>
+                      {/* Where this step sits in the stage, in words: a second
+                          set of dots would read as the slider's. */}
+                      {upNextPreview.length > 1 && upNextPreview.some((item) => item.key === nextMilestone.key) && (
+                        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                          · {t('skillDetail.upcomingCards.stepOf', {
+                            current: upNextPreview.findIndex((item) => item.key === nextMilestone.key) + 1,
+                            total: upNextPreview.length,
+                          })}
+                        </span>
                       )}
                     </SkillHeaderCard>
                   ),

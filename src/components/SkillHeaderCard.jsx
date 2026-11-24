@@ -1,9 +1,9 @@
 // One card in a skill page's header -- what's due or coming up, and the
-// recommended next action -- each with an icon, a small label, a title, a
+// recommended next step -- each with an icon, a small label, a title, one
 // line of detail and, if there's something to do, a button.
-//   tone: 'moss' (the recommended next action), 'gold' (something due) or
+//   tone: 'moss' (the recommended next step), 'gold' (something due) or
 //         'neutral' (coming up).
-//   children: anything more under the description (e.g. a stage's steps).
+//   children: small extras beside the label (e.g. a stage's steps).
 const TONES = {
   moss: {
     card: 'border-moss/30 bg-moss/5',
@@ -37,10 +37,13 @@ export default function SkillHeaderCard({ id, tone = 'neutral', icon, label, tit
           {icon}
         </span>
         <div className="min-w-0">
-          <p className={`font-mono text-[10px] uppercase tracking-wide ${style.label}`}>{label}</p>
+          <div className="flex items-center gap-2">
+            <p className={`font-mono text-[10px] uppercase tracking-wide ${style.label}`}>{label}</p>
+            {children}
+          </div>
           <h2 id={id} className="font-display text-lg text-ink leading-snug mt-0.5 text-balance">{title}</h2>
-          {description && <p className="text-sm text-secondary mt-0.5 text-pretty">{description}</p>}
-          {children}
+          {/* One line, so every card stays compact; the rest on hover. */}
+          {description && <p className="text-sm text-secondary mt-0.5 truncate" title={description}>{description}</p>}
         </div>
       </div>
       {action && (
