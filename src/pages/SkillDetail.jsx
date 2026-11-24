@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
+import SkillHeaderCard, { CalendarIcon, FlagIcon, TargetIcon } from '../components/SkillHeaderCard'
 import BackLink from '../components/BackLink'
 import GrowthRing from '../components/GrowthRing'
 import { listSkillGoals } from '../lib/skillGoals'
@@ -567,84 +568,63 @@ export default function SkillDetail({ skillId, embedded = false }) {
               </div>
             </div>
 
-            {/* What's coming up for this skill -- the next self-assessment and
-                targets -- as small pills in the header rather than a section
-                at the bottom of every tab. */}
-            {(skill.next_checkin_date || currentTarget || targetSetByOthers) && (
-              <ul aria-label={t('skillDetail.upcoming')} className="mt-3 flex flex-wrap items-center gap-2">
+            {/* What's due or coming up for this skill -- the next
+                self-assessment and targets -- first, then the recommended
+                next action, all as cards in the header. */}
+            {(skill.next_checkin_date || currentTarget || targetSetByOthers || nextMilestone) && (
+              <div className="mt-4 space-y-3">
                 {skill.next_checkin_date && (
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => setSelfAssessOpen(true)}
-                      className={`${UPCOMING_PILL} ${isSelfAssessmentDue(skill.next_checkin_date)
-                        ? 'border-gold/60 bg-gold/10 text-ink hover:border-gold'
-                        : 'border-hairline bg-paper text-secondary hover:border-moss/60'}`}
-                    >
-                      <CalendarIcon className={isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-moss'} />
-                      <span>{t('skillDetail.nextSelfAssessment')}</span>
-                      <span className={`font-medium ${isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-ink'}`}>
-                        {isSelfAssessmentDue(skill.next_checkin_date)
-                          ? t('skillDetail.dueSuffix')
-                          : formatShortDate(skill.next_checkin_date)}
-                      </span>
-                    </button>
-                  </li>
+                  <SkillHeaderCard
+                    id="skill-upcoming-self-assessment"
+                    tone={isSelfAssessmentDue(skill.next_checkin_date) ? 'gold' : 'neutral'}
+                    icon={<CalendarIcon />}
+                    label={isSelfAssessmentDue(skill.next_checkin_date)
+                      ? t('skillDetail.upcomingCards.selfAssessDue')
+                      : t('skillDetail.upcomingCards.selfAssessUpcoming')}
+                    title={t('skillDetail.upcomingCards.selfAssessTitle')}
+                    description={isSelfAssessmentDue(skill.next_checkin_date)
+                      ? t('skillDetail.upcomingCards.selfAssessDueDescription', { date: formatShortDate(skill.next_checkin_date) })
+                      : t('skillDetail.upcomingCards.selfAssessUpcomingDescription', { date: formatShortDate(skill.next_checkin_date) })}
+                    action={{ label: t('skillDetail.upcomingCards.selfAssessAction'), onClick: () => setSelfAssessOpen(true) }}
+                  />
                 )}
                 {currentTarget && (
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => setTargetOpen(true)}
-                      className={`${UPCOMING_PILL} border-hairline bg-paper text-secondary hover:border-moss/60`}
-                    >
-                      <TargetIcon className="text-moss" />
-                      <span>{t('skillDetail.target')} <span className="text-ink">{LEVEL_LABELS[currentTarget.target_level]}</span></span>
-                      {currentTarget.target_date && (
-                        <span className="font-medium text-ink">{formatShortDate(currentTarget.target_date)}</span>
-                      )}
-                    </button>
-                  </li>
+                  <SkillHeaderCard
+                    id="skill-upcoming-target"
+                    tone={currentTarget.target_date && daysUntil(currentTarget.target_date) < 0 ? 'gold' : 'neutral'}
+                    icon={<TargetIcon />}
+                    label={t('skillDetail.upcomingCards.yourTarget')}
+                    title={currentTarget.target_date
+                      ? t('skillDetail.upcomingCards.targetTitle', { level: LEVEL_LABELS[currentTarget.target_level], date: formatShortDate(currentTarget.target_date) })
+                      : t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[currentTarget.target_level] })}
+                    description={currentTarget.target_date ? targetTimeLeft(currentTarget.target_date, t) : null}
+                    action={{ label: t('skillDetail.upcomingCards.targetAction'), onClick: () => setTargetOpen(true) }}
+                  />
                 )}
                 {targetSetByOthers && (
-                  <li
-                    className={`${UPCOMING_PILL} border-hairline bg-paper text-secondary`}
-                    title={visibleTarget?.employerTargetMet && visibleTarget.source === 'personal'
-                      ? t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })
-                      : undefined}
-                  >
-                    <TargetIcon className={visibleTarget?.employerTargetMet ? 'text-moss' : 'text-secondary'} />
-                    <span>
-                      {t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}{' '}
-                      <span className="text-ink">{LEVEL_LABELS[targetSetByOthers.level]}</span>
-                    </span>
-                    <span className={`font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
-                      {visibleTarget?.employerTargetMet ? `✓ ${t('skillDetail.met')}` : t('skillDetail.workingTowardsNeedsConfirmation')}
-                    </span>
-                  </li>
+                  <SkillHeaderCard
+                    id="skill-upcoming-other-target"
+                    tone="neutral"
+                    icon={<TargetIcon />}
+                    label={t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}
+                    title={t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[targetSetByOthers.level] })}
+                    description={visibleTarget?.employerTargetMet
+                      ? (visibleTarget.source === 'personal'
+                        ? `${t('skillDetail.met')} · ${t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })}`
+                        : t('skillDetail.met'))
+                      : t('skillDetail.workingTowardsNeedsConfirmation')}
+                  />
                 )}
-              </ul>
-            )}
-
-            {nextMilestone && (
-              <section
-                aria-labelledby="skill-next-milestone"
-                className="mt-4 rounded-lg border border-moss/30 bg-moss/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4"
-              >
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  {/* A flag: where this skill is heading next. */}
-                  <span aria-hidden="true" className="shrink-0 flex h-9 w-9 items-center justify-center rounded-full bg-moss/15 text-moss">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 22V4" />
-                      <path d="M4 4h12l-2 4 2 4H4" />
-                    </svg>
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-mono text-[10px] uppercase tracking-wide text-moss">{t('skillDetail.nextMilestone')}</p>
-                    <h2 id="skill-next-milestone" className="font-display text-lg text-ink leading-snug mt-0.5 text-balance">
-                      {nextMilestone.label}
-                    </h2>
-                    <p className="text-sm text-secondary mt-0.5 text-pretty">{nextMilestone.description}</p>
+                {nextMilestone && (
+                  <SkillHeaderCard
+                    id="skill-next-milestone"
+                    tone="moss"
+                    icon={<FlagIcon />}
+                    label={t('skillDetail.recommendedNextAction')}
+                    title={nextMilestone.label}
+                    description={nextMilestone.description}
+                    action={nextMilestoneAction ? { label: t('skillDetail.start'), onClick: nextMilestoneAction } : null}
+                  >
                     {/* This stage's steps: done, this one, still to come. */}
                     {upNextPreview.length > 1 && (
                       <ol aria-hidden="true" className="flex items-center gap-1.5 mt-2.5">
@@ -662,19 +642,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         ))}
                       </ol>
                     )}
-                  </div>
-                </div>
-                {nextMilestoneAction && (
-                  <button
-                    type="button"
-                    onClick={nextMilestoneAction}
-                    className="self-start ml-12 sm:ml-0 sm:self-center shrink-0 inline-flex items-center gap-1.5 rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-offset-2"
-                  >
-                    {t('skillDetail.start')}
-                    <span aria-hidden="true">→</span>
-                  </button>
+                  </SkillHeaderCard>
                 )}
-              </section>
+              </div>
             )}
 
             <div
@@ -899,8 +869,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
   )
 }
 
-// One pill in the skill header's "upcoming" row.
-const UPCOMING_PILL = 'inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors'
 
 // "12 Dec", with the year only when it isn't this one.
 function formatShortDate(dateString) {
@@ -909,21 +877,18 @@ function formatShortDate(dateString) {
   return date.toLocaleDateString(undefined, sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function CalendarIcon({ className = '' }) {
-  return (
-    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`}>
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18" />
-    </svg>
-  )
+// Whole days from today to a date (negative once it has passed).
+function daysUntil(dateString) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((new Date(`${dateString}T00:00:00`) - today) / (24 * 60 * 60 * 1000))
 }
 
-function TargetIcon({ className = '' }) {
-  return (
-    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`}>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="5" />
-      <circle cx="12" cy="12" r="1" />
-    </svg>
-  )
+// How long is left to reach a target by its date.
+function targetTimeLeft(dateString, t) {
+  const days = daysUntil(dateString)
+  if (days < 0) return t('skillDetail.upcomingCards.targetPassed', { date: formatShortDate(dateString) })
+  if (days === 0) return t('skillDetail.upcomingCards.targetToday')
+  if (days === 1) return t('skillDetail.upcomingCards.targetOneDayLeft')
+  return t('skillDetail.upcomingCards.targetDaysLeft', { count: days })
 }

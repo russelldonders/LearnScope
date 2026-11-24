@@ -340,22 +340,30 @@ describe('SkillDetail', () => {
     expect(await screen.findByRole('dialog', { name: 'Skill settings' })).toBeInTheDocument()
   })
 
-  it('shows what is coming up as small pills in the header', async () => {
+  it('puts what is due or coming up in the header as cards, ahead of the recommended next action', async () => {
     fixtures.tables.skills = [skillRow({ next_checkin_date: '2020-01-15' })]
     fixtures.tables.skill_targets = [{ id: 't1', skill_id: 'skill-1', target_level: 4, target_date: '2099-03-01', created_at: '2026-01-01T10:00:00Z' }]
     renderPage()
-    const upcoming = await screen.findByRole('list', { name: 'Upcoming' })
-    expect(within(upcoming).getByRole('button', { name: /^Next self-assessment\s*Due$/ })).toBeInTheDocument()
+    const selfAssess = await screen.findByRole('region', { name: 'Check in on your level' })
+    expect(selfAssess).toHaveTextContent('Self-assessment due')
+    expect(within(selfAssess).getByRole('button', { name: 'Self-assess' })).toBeInTheDocument()
     // Targets load after the skill itself.
-    expect(await within(upcoming).findByRole('button', { name: /^Target\s*Skilled\s*.*2099$/ })).toBeInTheDocument()
-    // In the header, ahead of the tabs -- not a section at the bottom.
-    const tabs = screen.getAllByRole('tab')[0]
-    expect(upcoming.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const target = await screen.findByRole('region', { name: /^Reach Skilled by .*2099$/ })
+    expect(target).toHaveTextContent(/days to go/)
+    expect(within(target).getByRole('button', { name: 'View target' })).toBeInTheDocument()
+
+    // Due and coming up first, then the recommended next action, then the tabs.
+    const recommended = screen.queryByText('Recommended next action')?.closest('section')
+    const order = [selfAssess, target, recommended, screen.getAllByRole('tab')[0]].filter(Boolean)
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
   })
 
-  it('shows no upcoming pills when nothing is coming up', async () => {
+  it('shows no upcoming cards when nothing is coming up', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Negotiation', level: 1 })
-    expect(screen.queryByRole('list', { name: 'Upcoming' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Your target')).not.toBeInTheDocument()
   })
 })
