@@ -31,18 +31,18 @@ describe('SkillHeaderCarousel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('slides from the first card to the last, one at a time, without wrapping round', () => {
+  it('slides from the first card to the last, one at a time, with an arrow only where there is a card that way', () => {
     render(<SkillHeaderCarousel slides={three} />)
     expect(screen.getByRole('region', { name: 'What’s next for this skill' })).toBeInTheDocument()
     expect(shown()).toBe('Due')
     expect(screen.getByRole('group')).toHaveAccessibleName('1 of 3')
-    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(shown()).toBe('Target')
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(shown()).toBe('Recommended')
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
     expect(shown()).toBe('Target')
