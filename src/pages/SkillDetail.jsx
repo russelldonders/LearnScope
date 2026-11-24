@@ -567,6 +567,65 @@ export default function SkillDetail({ skillId, embedded = false }) {
               </div>
             </div>
 
+            {/* What's coming up for this skill -- the next self-assessment and
+                targets -- as small pills in the header rather than a section
+                at the bottom of every tab. */}
+            {(skill.next_checkin_date || currentTarget || targetSetByOthers) && (
+              <ul aria-label={t('skillDetail.upcoming')} className="mt-3 flex flex-wrap items-center gap-2">
+                {skill.next_checkin_date && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => setSelfAssessOpen(true)}
+                      className={`${UPCOMING_PILL} ${isSelfAssessmentDue(skill.next_checkin_date)
+                        ? 'border-gold/60 bg-gold/10 text-ink hover:border-gold'
+                        : 'border-hairline bg-paper text-secondary hover:border-moss/60'}`}
+                    >
+                      <CalendarIcon className={isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-moss'} />
+                      <span>{t('skillDetail.nextSelfAssessment')}</span>
+                      <span className={`font-medium ${isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-ink'}`}>
+                        {isSelfAssessmentDue(skill.next_checkin_date)
+                          ? t('skillDetail.dueSuffix')
+                          : formatShortDate(skill.next_checkin_date)}
+                      </span>
+                    </button>
+                  </li>
+                )}
+                {currentTarget && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => setTargetOpen(true)}
+                      className={`${UPCOMING_PILL} border-hairline bg-paper text-secondary hover:border-moss/60`}
+                    >
+                      <TargetIcon className="text-moss" />
+                      <span>{t('skillDetail.target')} <span className="text-ink">{LEVEL_LABELS[currentTarget.target_level]}</span></span>
+                      {currentTarget.target_date && (
+                        <span className="font-medium text-ink">{formatShortDate(currentTarget.target_date)}</span>
+                      )}
+                    </button>
+                  </li>
+                )}
+                {targetSetByOthers && (
+                  <li
+                    className={`${UPCOMING_PILL} border-hairline bg-paper text-secondary`}
+                    title={visibleTarget?.employerTargetMet && visibleTarget.source === 'personal'
+                      ? t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })
+                      : undefined}
+                  >
+                    <TargetIcon className={visibleTarget?.employerTargetMet ? 'text-moss' : 'text-secondary'} />
+                    <span>
+                      {t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}{' '}
+                      <span className="text-ink">{LEVEL_LABELS[targetSetByOthers.level]}</span>
+                    </span>
+                    <span className={`font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
+                      {visibleTarget?.employerTargetMet ? `✓ ${t('skillDetail.met')}` : t('skillDetail.workingTowardsNeedsConfirmation')}
+                    </span>
+                  </li>
+                )}
+              </ul>
+            )}
+
             {nextMilestone && (
               <section
                 aria-labelledby="skill-next-milestone"
@@ -802,66 +861,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 validateOpen={validateOpen}
               />
 
-            {(skill.next_checkin_date || currentTarget || targetSetByOthers) && (
-              <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">{t('skillDetail.upcoming')}</h3>
-                <div className="space-y-2">
-                  {targetSetByOthers && (
-                    <div className="flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2">
-                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        {t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })} {LEVEL_LABELS[targetSetByOthers.level]}
-                      </span>
-                      <span className={`text-sm font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
-                        {visibleTarget?.employerTargetMet
-                          ? t('skillDetail.met')
-                          : t('skillDetail.workingTowardsNeedsConfirmation')}
-                      </span>
-                    </div>
-                  )}
-                  {targetSetByOthers && visibleTarget?.employerTargetMet && visibleTarget.source === 'personal' && (
-                    <p className="text-xs text-secondary px-1">
-                      {t('skillDetail.otherTargetMetWorkingTowardOwn', { name: targetSetByOthers.contextName })}
-                    </p>
-                  )}
-                  {skill.next_checkin_date && (
-                    <div
-                      className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                        isSelfAssessmentDue(skill.next_checkin_date)
-                          ? 'border-gold bg-gold/10'
-                          : 'border-hairline bg-paper'
-                      }`}
-                    >
-                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        {t('skillDetail.nextSelfAssessment')}
-                      </span>
-                      <span
-                        className={`text-sm font-medium ${
-                          isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-ink'
-                        }`}
-                      >
-                        {new Date(`${skill.next_checkin_date}T00:00:00`).toLocaleDateString()}
-                        {isSelfAssessmentDue(skill.next_checkin_date) ? ` · ${t('skillDetail.dueSuffix')}` : ''}
-                      </span>
-                    </div>
-                  )}
-                  {currentTarget && (
-                    <button
-                      type="button"
-                      onClick={() => setTargetOpen(true)}
-                      className="w-full flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2 text-left hover:border-moss/60 transition-colors"
-                    >
-                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        {t('skillDetail.target')} {LEVEL_LABELS[currentTarget.target_level]}
-                      </span>
-                      <span className="text-sm font-medium text-ink">
-                        {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
             {historyOpen && (
               <AccessibleDialog
                 labelledBy="skill-history-dialog-title"
@@ -897,5 +896,34 @@ export default function SkillDetail({ skillId, embedded = false }) {
         )}
       </main>
     </div>
+  )
+}
+
+// One pill in the skill header's "upcoming" row.
+const UPCOMING_PILL = 'inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors'
+
+// "12 Dec", with the year only when it isn't this one.
+function formatShortDate(dateString) {
+  const date = new Date(`${dateString}T00:00:00`)
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleDateString(undefined, sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function CalendarIcon({ className = '' }) {
+  return (
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  )
+}
+
+function TargetIcon({ className = '' }) {
+  return (
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </svg>
   )
 }
