@@ -583,13 +583,10 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       id="skill-upcoming-self-assessment"
                       tone={isSelfAssessmentDue(skill.next_checkin_date) ? 'gold' : 'neutral'}
                       icon={<CalendarIcon />}
-                      label={isSelfAssessmentDue(skill.next_checkin_date)
-                        ? t('skillDetail.upcomingCards.selfAssessDue')
-                        : t('skillDetail.upcomingCards.selfAssessUpcoming')}
-                      title={t('skillDetail.upcomingCards.selfAssessTitle')}
-                      description={isSelfAssessmentDue(skill.next_checkin_date)
-                        ? t('skillDetail.upcomingCards.selfAssessDueDescription', { date: formatShortDate(skill.next_checkin_date) })
-                        : t('skillDetail.upcomingCards.selfAssessUpcomingDescription', { date: formatShortDate(skill.next_checkin_date) })}
+                      label={t('skillDetail.upcomingCards.selfAssessLabel')}
+                      title={isSelfAssessmentDue(skill.next_checkin_date)
+                        ? t('skillDetail.upcomingCards.dueSince', { date: formatShortDate(skill.next_checkin_date) })
+                        : t('skillDetail.upcomingCards.dueOn', { date: formatShortDate(skill.next_checkin_date) })}
                       action={{ label: t('skillDetail.upcomingCards.selfAssessAction'), onClick: () => setSelfAssessOpen(true) }}
                     />
                   ),
@@ -619,12 +616,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       tone="neutral"
                       icon={<TargetIcon />}
                       label={t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })}
-                      title={t('skillDetail.upcomingCards.targetTitleNoDate', { level: LEVEL_LABELS[targetSetByOthers.level] })}
+                      title={LEVEL_LABELS[targetSetByOthers.level]}
                       description={visibleTarget?.employerTargetMet
                         ? (visibleTarget.source === 'personal'
-                          ? `${t('skillDetail.met')} · ${t('modals.skillCard.otherTargetMetWorkingTowardOwnSuffix', { name: targetSetByOthers.contextName })}`
-                          : t('skillDetail.met'))
-                        : t('skillDetail.workingTowardsNeedsConfirmation')}
+                          ? t('skillDetail.upcomingCards.otherMetOwnNext')
+                          : t('skillDetail.upcomingCards.otherMet'))
+                        : t('skillDetail.upcomingCards.otherInProgress', { name: targetSetByOthers.contextName })}
                     />
                   ),
                 },

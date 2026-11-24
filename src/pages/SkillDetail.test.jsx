@@ -344,24 +344,24 @@ describe('SkillDetail', () => {
     fixtures.tables.skills = [skillRow({ next_checkin_date: '2020-01-15' })]
     fixtures.tables.skill_targets = [{ id: 't1', skill_id: 'skill-1', target_level: 4, target_date: '2099-03-01', created_at: '2026-01-01T10:00:00Z' }]
     renderPage()
-    const selfAssess = await screen.findByRole('region', { name: 'Check in on your level' })
-    expect(selfAssess).toHaveTextContent('Self-assessment due')
-    expect(within(selfAssess).getByRole('button', { name: 'Self-assess' })).toBeInTheDocument()
+    const selfAssess = await screen.findByRole('region', { name: /^Due since / })
+    expect(selfAssess).toHaveTextContent('Self-assessment')
+    expect(within(selfAssess).getByRole('button', { name: 'Rate your level' })).toBeInTheDocument()
 
     // Targets load after the skill itself; it's the next card along.
     const carousel = await screen.findByRole('region', { name: 'What’s next for this skill' })
     await within(carousel).findByRole('button', { name: /^Show 2 of / })
-    expect(screen.queryByRole('region', { name: /^Reach Skilled by/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Skilled by/ })).not.toBeInTheDocument()
     fireEvent.click(within(carousel).getByRole('button', { name: 'Next' }))
-    const target = screen.getByRole('region', { name: /^Reach Skilled by .*2099$/ })
-    expect(target).toHaveTextContent(/days to go/)
+    const target = screen.getByRole('region', { name: /^Skilled by .*2099$/ })
+    expect(target).toHaveTextContent(/days left/)
     expect(within(target).getByRole('button', { name: 'View target' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Due / })).not.toBeInTheDocument()
 
     // The last card is the recommended next action, when there is one.
     const dots = within(carousel).getAllByRole('button', { name: /^Show \d+ of \d+$/ })
     fireEvent.click(dots[dots.length - 1])
-    if (dots.length > 2) expect(screen.getByText('Recommended next action')).toBeVisible()
+    if (dots.length > 2) expect(screen.getByText('Recommended next step')).toBeVisible()
 
     // In the header, ahead of the tabs.
     expect(carousel.compareDocumentPosition(screen.getAllByRole('tab')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -372,14 +372,14 @@ describe('SkillDetail', () => {
     fixtures.tables.skill_targets = [{ id: 't1', skill_id: 'skill-1', target_level: 4, target_date: '2099-03-01', created_at: '2026-01-01T10:00:00Z' }]
     renderPage()
     // The target, due sooner, leads once it has loaded.
-    expect(await screen.findByRole('region', { name: /^Reach Skilled by .*2099$/ })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: /^Skilled by .*2099$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Due / })).not.toBeInTheDocument()
   })
 
   it('shows no upcoming cards when nothing is coming up', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Negotiation', level: 1 })
-    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Due / })).not.toBeInTheDocument()
     expect(screen.queryByText('Your target')).not.toBeInTheDocument()
   })
 })
