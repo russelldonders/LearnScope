@@ -147,6 +147,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
     if (!skill || !requestedAction) return
     if (requestedAction === 'self-assess') setSelfAssessOpen(true)
     if (requestedAction === 'change-target') setTargetOpen(true)
+    // From "you're approved as a coach" (0339), to switch coaching on.
+    if (requestedAction === 'settings' && skill.user_id === user.id) setSettingsOpen(true)
     setSearchParams(buildTabParams({ action: null }), { replace: true })
     // The query parameter is consumed once after the skill is available.
     // eslint-disable-next-line react-hooks/exhaustive-deps

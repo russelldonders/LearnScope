@@ -241,6 +241,10 @@ function PersonDetail({ match }) {
           {t('modals.peopleWithSkill.coachBadge')}
         </span>
       )}
+      {/* Approved by LearnScope (0339) rather than validated by someone with the skill. */}
+      {match.is_coach && match.coach_approved && (
+        <span className="text-moss">{t('modals.peopleWithSkill.approvedCoach')}</span>
+      )}
       {match.level ? LEVEL_LABELS[match.level] : null}
     </span>
   )

@@ -137,3 +137,13 @@ describe('coach review notifications', () => {
     expect(coachingNotifications([], [], NOW, [], [{ ...review, updated_at: '2026-09-01T10:00:00Z' }])).toEqual([])
   })
 })
+
+describe('coach approval notifications', () => {
+  it('tells someone LearnScope approved them as a coach, opening the skill settings to switch it on', () => {
+    const NOW = new Date('2026-11-24T12:00:00Z').getTime()
+    const approval = { id: 'a1', skill_name: 'Leadership', skill_id: 's1', approved_at: '2026-11-23T10:00:00Z', revoked_at: null }
+    const [item] = coachingNotifications([], [], NOW, [], [], [approval])
+    expect(item).toMatchObject({ id: 'coach-approved:a1', actions: [{ href: '/skills/s1?action=settings' }] })
+    expect(coachingNotifications([], [], NOW, [], [], [{ ...approval, revoked_at: '2026-11-24T09:00:00Z' }])).toEqual([])
+  })
+})

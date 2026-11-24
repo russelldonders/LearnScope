@@ -7,6 +7,7 @@ import { IMPERSONATION_BOOTSTRAP_KEY } from '../../lib/supabaseClient'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import { formatMonthYear } from '../../lib/dates'
 import GrowthRing from '../../components/GrowthRing'
+import AdminCoachApprovals from './AdminCoachApprovals'
 
 const EXPERIENCE_TYPE_LABELS = { employment: 'Employment', education: 'Education' }
 
@@ -169,6 +170,10 @@ export default function AdminUserDetail() {
                   ))}
                 </ul>
               )}
+            </Section>
+
+            <Section title="Coaching approvals">
+              <AdminCoachApprovals userId={userId} skills={data.skills} />
             </Section>
 
             <Section title={`Courses (${data.courses.length})`}>

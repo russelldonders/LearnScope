@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: 'Andere coachen',
       offerCoaching: 'Coaching für diese Fähigkeit anbieten',
       offerCoachingDescription: 'Alle mit dieser Fähigkeit sehen dich als Coach, wenn sie nach Expert:innen suchen, und können dich um Coaching bitten. Möglich, sobald eine andere Person deine Fähigkeit bestätigt hat.',
+      offerCoachingApprovedDescription: 'LearnScope hat dich als Coach für diese Fähigkeit bestätigt. Alle mit dieser Fähigkeit sehen dich bei der Suche nach Expert:innen als von LearnScope bestätigten Coach und können dich um Coaching bitten.',
       reviews: {
         starsLabel: '{rating} von 5 Sternen',
         oneReview: '1 Bewertung',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: 'Warum möchtest du dich mit {name} verbinden? (optional)',
       coachesOnly: 'Nur Coaches',
       coachBadge: 'Coach',
+      approvedCoach: 'Von LearnScope bestätigt',
       noCoaches: 'Für diese Fähigkeit bietet noch niemand Coaching an.',
       askToCoach: 'Um Coaching bitten',
       coachingRequested: 'Coaching angefragt',

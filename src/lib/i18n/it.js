@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: 'Fare da coach',
       offerCoaching: 'Offri coaching per questa competenza',
       offerCoachingDescription: 'Tutti coloro che hanno questa competenza ti vedranno come coach quando cercano un esperto e potranno chiederti un coaching. Puoi offrirlo dopo che un’altra persona ha convalidato la tua competenza.',
+      offerCoachingApprovedDescription: 'LearnScope ti ha approvato come coach per questa competenza. Chi la possiede ti vedrà come coach approvato da LearnScope quando cerca un esperto e potrà chiederti un coaching.',
       reviews: {
         starsLabel: '{rating} su 5 stelle',
         oneReview: '1 recensione',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: 'Perché vuoi connetterti con {name}? (facoltativo)',
       coachesOnly: 'Solo coach',
       coachBadge: 'Coach',
+      approvedCoach: 'Approvato da LearnScope',
       noCoaches: 'Nessuno offre ancora coaching per questa competenza.',
       askToCoach: 'Chiedi un coaching',
       coachingRequested: 'Coaching richiesto',

@@ -251,3 +251,35 @@ export async function adminResolveCoachReviewReports(reviewId, action) {
   const { error } = await supabase.rpc('admin_resolve_coach_review_reports', { p_review_id: reviewId, p_action: action })
   if (error) throw error
 }
+
+// -- Coaches approved by LearnScope (20261125090000_0339_coach_approvals.sql) --
+// An approval lets someone offer coaching on a skill without it being
+// validated; others see them as "Approved by LearnScope", not as validated.
+
+// The caller's own approvals, in force or withdrawn.
+export async function listMyCoachApprovals() {
+  const { data, error } = await supabase.rpc('list_my_coach_approvals')
+  if (error) throw error
+  return data ?? []
+}
+
+// Platform admins: a person's approvals, newest first.
+export async function adminListCoachApprovals(userId) {
+  const { data, error } = await supabase.rpc('admin_list_coach_approvals', { p_user_id: userId })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function adminApproveCoach(userId, librarySkillId, note = '') {
+  const { error } = await supabase.rpc('admin_approve_coach', {
+    p_user_id: userId,
+    p_library_skill_id: librarySkillId,
+    p_note: note?.trim() || null,
+  })
+  if (error) throw error
+}
+
+export async function adminRevokeCoachApproval(approvalId) {
+  const { error } = await supabase.rpc('admin_revoke_coach_approval', { p_approval_id: approvalId })
+  if (error) throw error
+}

@@ -95,4 +95,10 @@ describe('PeopleWithSkillModal coaches', () => {
     expect(await screen.findByText('Brilliant coach')).toBeInTheDocument()
     expect(screen.getByText('Rae Learner')).toBeInTheDocument()
   })
+
+  it('marks a coach approved by LearnScope as such', async () => {
+    listSkillMatches.mockResolvedValue([person({ user_id: 'c', full_name: 'Coral', is_coach: true, coach_skill_id: 'theirs', coach_approved: true })])
+    open()
+    expect(await screen.findByText('Approved by LearnScope')).toBeInTheDocument()
+  })
 })

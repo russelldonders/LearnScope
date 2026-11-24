@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: 'Acompañar a otras personas',
       offerCoaching: 'Ofrecer coaching en esta habilidad',
       offerCoachingDescription: 'Todas las personas con esta habilidad te verán como coach al buscar a un experto y podrán pedirte coaching. Puedes ofrecerlo cuando otra persona haya validado tu habilidad.',
+      offerCoachingApprovedDescription: 'LearnScope te ha aprobado como coach en esta habilidad. Quienes la tengan te verán como coach aprobado por LearnScope al buscar a un experto y podrán pedirte coaching.',
       reviews: {
         starsLabel: '{rating} de 5 estrellas',
         oneReview: '1 reseña',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: '¿Por qué quieres conectar con {name}? (opcional)',
       coachesOnly: 'Solo coaches',
       coachBadge: 'Coach',
+      approvedCoach: 'Aprobado por LearnScope',
       noCoaches: 'Todavía nadie ofrece coaching en esta habilidad.',
       askToCoach: 'Pedir coaching',
       coachingRequested: 'Coaching pedido',

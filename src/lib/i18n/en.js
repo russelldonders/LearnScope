@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: 'Coaching others',
       offerCoaching: 'Offer coaching on this skill',
       offerCoachingDescription: 'Everyone with this skill will see you as a coach when they look for an expert, and can ask you to coach them. You can offer this once another person has validated your skill.',
+      offerCoachingApprovedDescription: 'LearnScope has approved you as a coach for this skill. Everyone with it will see you as a coach approved by LearnScope when they look for an expert, and can ask you to coach them.',
       reviews: {
         starsLabel: '{rating} out of 5 stars',
         oneReview: '1 review',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: 'Why do you want to connect with {name}? (optional)',
       coachesOnly: 'Coaches only',
       coachBadge: 'Coach',
+      approvedCoach: 'Approved by LearnScope',
       noCoaches: 'No one is offering coaching on this skill yet.',
       askToCoach: 'Ask to coach you',
       coachingRequested: 'Coaching requested',

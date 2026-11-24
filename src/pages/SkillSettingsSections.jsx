@@ -10,6 +10,7 @@ import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDu
 import TagsField from '../components/TagsField'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { deleteSkillWithFiles } from '../lib/skillDeletion'
+import { listMyCoachApprovals } from '../lib/coaching'
 
 export function ScheduleSection({ skill, onUpdated }) {
   const { t } = useLanguage()
@@ -431,6 +432,22 @@ export function SettingsSection({ skill, user, onUpdated }) {
   const [validateConnections, setValidateConnections] = useState(skill.offer_validate_connections ?? false)
   const [validateOthers, setValidateOthers] = useState(skill.offer_validate_others ?? false)
   const [offerCoaching, setOfferCoaching] = useState(skill.offer_coaching ?? false)
+  // Approved as a coach for this skill by LearnScope (0339), without it
+  // needing to be validated.
+  const [approvedCoach, setApprovedCoach] = useState(false)
+
+  useEffect(() => {
+    if (!skill.library_skill_id) return undefined
+    let cancelled = false
+    listMyCoachApprovals()
+      .then((rows) => {
+        if (!cancelled) setApprovedCoach(rows.some((row) => row.library_skill_id === skill.library_skill_id && !row.revoked_at))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [skill.library_skill_id])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const canOfferValidation = skill.lifecycle_stage === 'validated' || skill.lifecycle_stage === 'maintained'
@@ -577,7 +594,7 @@ export function SettingsSection({ skill, user, onUpdated }) {
 
       {/* Coaching (0335): only once another person has validated the skill,
           which the database checks -- its refusal is shown as the error. */}
-      {canOfferValidation && skill.library_skill_id && (
+      {(canOfferValidation || approvedCoach) && skill.library_skill_id && (
         <div>
           <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('skillDetail.coaching.settingsHeading')}</h4>
           <label className="flex items-start gap-3">
@@ -590,7 +607,9 @@ export function SettingsSection({ skill, user, onUpdated }) {
             />
             <span className="text-sm text-ink">
               {t('skillDetail.coaching.offerCoaching')}
-              <span className="block text-xs text-secondary mt-0.5">{t('skillDetail.coaching.offerCoachingDescription')}</span>
+              <span className="block text-xs text-secondary mt-0.5">
+                {approvedCoach ? t('skillDetail.coaching.offerCoachingApprovedDescription') : t('skillDetail.coaching.offerCoachingDescription')}
+              </span>
             </span>
           </label>
         </div>

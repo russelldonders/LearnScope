@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: 'Anderen coachen',
       offerCoaching: 'Coaching aanbieden voor deze vaardigheid',
       offerCoachingDescription: 'Iedereen met deze vaardigheid ziet je als coach wanneer ze een expert zoeken, en kan je vragen hen te coachen. Dit kan zodra iemand anders je vaardigheid heeft gevalideerd.',
+      offerCoachingApprovedDescription: 'LearnScope heeft je goedgekeurd als coach voor deze vaardigheid. Iedereen met deze vaardigheid ziet je als door LearnScope goedgekeurde coach wanneer ze een expert zoeken, en kan je vragen hen te coachen.',
       reviews: {
         starsLabel: '{rating} van de 5 sterren',
         oneReview: '1 beoordeling',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: 'Waarom wil je contact maken met {name}? (optioneel)',
       coachesOnly: 'Alleen coaches',
       coachBadge: 'Coach',
+      approvedCoach: 'Goedgekeurd door LearnScope',
       noCoaches: 'Nog niemand biedt coaching aan voor deze vaardigheid.',
       askToCoach: 'Vraag om coaching',
       coachingRequested: 'Coaching gevraagd',

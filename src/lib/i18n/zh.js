@@ -1207,6 +1207,7 @@ export default {
       settingsHeading: '辅导他人',
       offerCoaching: '为这项技能提供辅导',
       offerCoachingDescription: '拥有这项技能的人在寻找专家时会看到你是教练，并可以请你辅导他们。在其他人验证你的这项技能后即可提供。',
+      offerCoachingApprovedDescription: 'LearnScope 已认可你为这项技能的教练。拥有这项技能的人在寻找专家时会看到你是 LearnScope 认可的教练，并可以请你辅导他们。',
       reviews: {
         starsLabel: '{rating} 星（满分 5 星）',
         oneReview: '1 条评价',
@@ -1578,6 +1579,7 @@ export default {
       connectPromptPlaceholder: '你为什么想与 {name} 建立联系？（可选）',
       coachesOnly: '仅显示教练',
       coachBadge: '教练',
+      approvedCoach: 'LearnScope 认可',
       noCoaches: '目前还没有人为这项技能提供辅导。',
       askToCoach: '请求辅导',
       coachingRequested: '已请求辅导',
