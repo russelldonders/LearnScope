@@ -570,12 +570,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
 
             {/* What's due or coming up for this skill -- the next
-                self-assessment and targets -- then the recommended next
-                action, as cards in the header shown one at a time. */}
+                self-assessment and targets, soonest (or most overdue) first
+                -- then the recommended next action, as cards in the header
+                shown one at a time. */}
             <SkillHeaderCarousel
               slides={[
                 skill.next_checkin_date && {
                   key: 'self-assessment',
+                  when: skill.next_checkin_date,
                   content: (
                     <SkillHeaderCard
                       id="skill-upcoming-self-assessment"
@@ -594,6 +596,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 },
                 currentTarget && {
                   key: 'target',
+                  when: currentTarget.target_date ?? null,
                   content: (
                     <SkillHeaderCard
                       id="skill-upcoming-target"
@@ -627,6 +630,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 },
                 nextMilestone && {
                   key: 'recommended',
+                  last: true,
                   content: (
                     <SkillHeaderCard
                       id="skill-next-milestone"
@@ -657,7 +661,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     </SkillHeaderCard>
                   ),
                 },
-              ].filter(Boolean)}
+              ].filter(Boolean).sort(byTimeRelevance)}
             />
 
             <div
@@ -904,4 +908,14 @@ function targetTimeLeft(dateString, t) {
   if (days === 0) return t('skillDetail.upcomingCards.targetToday')
   if (days === 1) return t('skillDetail.upcomingCards.targetOneDayLeft')
   return t('skillDetail.upcomingCards.targetDaysLeft', { count: days })
+}
+
+// The header's cards in time order: dated ones by date, earliest first (so
+// whatever is overdue leads), then those with no date, keeping their order,
+// and the recommended next action last.
+function byTimeRelevance(a, b) {
+  if (Boolean(a.last) !== Boolean(b.last)) return a.last ? 1 : -1
+  if (a.when && b.when) return a.when < b.when ? -1 : a.when > b.when ? 1 : 0
+  if (a.when || b.when) return a.when ? -1 : 1
+  return 0
 }

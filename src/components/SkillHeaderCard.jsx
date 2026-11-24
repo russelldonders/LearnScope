@@ -30,7 +30,7 @@ export default function SkillHeaderCard({ id, tone = 'neutral', icon, label, tit
   return (
     <section
       aria-labelledby={id}
-      className={`rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 ${style.card}`}
+      className={`h-full rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 ${style.card}`}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         <span aria-hidden="true" className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-full ${style.icon}`}>

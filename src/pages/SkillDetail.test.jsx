@@ -367,6 +367,15 @@ describe('SkillDetail', () => {
     expect(carousel.compareDocumentPosition(screen.getAllByRole('tab')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('puts the most time-relevant card first', async () => {
+    fixtures.tables.skills = [skillRow({ next_checkin_date: '2099-06-01' })]
+    fixtures.tables.skill_targets = [{ id: 't1', skill_id: 'skill-1', target_level: 4, target_date: '2099-03-01', created_at: '2026-01-01T10:00:00Z' }]
+    renderPage()
+    // The target, due sooner, leads once it has loaded.
+    expect(await screen.findByRole('region', { name: /^Reach Skilled by .*2099$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Check in on your level' })).not.toBeInTheDocument()
+  })
+
   it('shows no upcoming cards when nothing is coming up', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Negotiation', level: 1 })
