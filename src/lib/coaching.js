@@ -200,7 +200,7 @@ export async function listCoachReviews(coachId, librarySkillId) {
 export async function listMyCoachReviews(userId) {
   const { data, error } = await supabase
     .from('coach_reviews')
-    .select('id, relationship_id, rating, comment, created_at, updated_at')
+    .select('id, relationship_id, rating, comment, created_at, updated_at, moderation_removed_at')
     .eq('learner_id', userId)
   if (error) throw error
   return data ?? []
@@ -225,4 +225,29 @@ export async function listMyRecentCoachReviews() {
   const { data, error } = await supabase.rpc('list_my_recent_coach_reviews')
   if (error) throw error
   return data ?? []
+}
+
+// -- Moderating reviews (20261124200000_0338_coach_review_moderation.sql) --
+
+// Report a review the reader can see (not their own), for moderators.
+export async function reportCoachReview(reviewId, reason, details = '') {
+  const { error } = await supabase.rpc('report_coach_review', {
+    p_review_id: reviewId,
+    p_reason: reason,
+    p_details: details?.trim() || null,
+  })
+  if (error) throw error
+}
+
+// Platform admins: reviews with open reports, most reported first.
+export async function adminListCoachReviewReports() {
+  const { data, error } = await supabase.rpc('admin_list_coach_review_reports')
+  if (error) throw error
+  return data ?? []
+}
+
+// Platform admins: 'remove' (hidden from all but its author) or 'dismiss'.
+export async function adminResolveCoachReviewReports(reviewId, action) {
+  const { error } = await supabase.rpc('admin_resolve_coach_review_reports', { p_review_id: reviewId, p_action: action })
+  if (error) throw error
 }

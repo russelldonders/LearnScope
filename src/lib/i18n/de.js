@@ -1227,6 +1227,12 @@ export default {
         cancel: 'Abbrechen',
         aboutYouHeading: 'Bewertungen deines Coachings',
         noneAboutYou: 'Noch keine Bewertungen.',
+        report: 'Melden',
+        reported: 'Gemeldet. Das LearnScope-Moderationsteam sieht es sich an.',
+        reportTitle: 'Was stimmt mit dieser Bewertung nicht?',
+        reportHint: 'Das LearnScope-Moderationsteam prüft sie und kann sie entfernen.',
+        removedByModerators: 'Vom LearnScope-Moderationsteam entfernt. Nur du siehst sie, und sie zählt nicht mehr.',
+        cantReviewAgain: 'Das LearnScope-Moderationsteam hat deine Bewertung dieses Coachings entfernt, daher kann es nicht erneut bewertet werden.',
       },
       sessions: {
         heading: 'Sitzungen',

@@ -56,6 +56,7 @@ const TITLES = [
   [/^\/admin\/tags$/, { text: 'Admin skill tags' }],
   [/^\/admin\/ai-usage$/, { text: 'Admin AI usage' }],
   [/^\/admin\/reported-resources$/, { text: 'Admin reported resources' }],
+  [/^\/admin\/reported-reviews$/, { text: 'Admin reported reviews' }],
   [/^\/admin\/audit-log$/, { text: 'Admin audit log' }],
   [/^\/admin\/whats-new$/, { text: "Admin what's new" }],
   [/^\/admin\/settings$/, { text: 'Admin settings' }],

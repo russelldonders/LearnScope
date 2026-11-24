@@ -1227,6 +1227,12 @@ export default {
         cancel: 'Annulla',
         aboutYouHeading: 'Recensioni del tuo coaching',
         noneAboutYou: 'Ancora nessuna recensione.',
+        report: 'Segnala',
+        reported: 'Segnalata. I moderatori di LearnScope la esamineranno.',
+        reportTitle: 'Qual è il problema di questa recensione?',
+        reportHint: 'I moderatori di LearnScope la esamineranno e potranno rimuoverla.',
+        removedByModerators: 'Rimossa dai moderatori di LearnScope. Solo tu la vedi e non viene più conteggiata.',
+        cantReviewAgain: 'I moderatori di LearnScope hanno rimosso la tua recensione di questo coaching, quindi non può essere recensito di nuovo.',
       },
       sessions: {
         heading: 'Sessioni',

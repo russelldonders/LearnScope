@@ -1227,6 +1227,12 @@ export default {
         cancel: 'Annuleren',
         aboutYouHeading: 'Beoordelingen van je coaching',
         noneAboutYou: 'Nog geen beoordelingen.',
+        report: 'Melden',
+        reported: 'Gemeld. De moderators van LearnScope bekijken het.',
+        reportTitle: 'Wat is er mis met deze beoordeling?',
+        reportHint: 'De moderators van LearnScope bekijken de beoordeling en kunnen die verwijderen.',
+        removedByModerators: 'Verwijderd door de moderators van LearnScope. Alleen jij ziet deze nog, en hij telt niet meer mee.',
+        cantReviewAgain: 'De moderators van LearnScope hebben je beoordeling van deze coaching verwijderd, dus die kan niet opnieuw worden beoordeeld.',
       },
       sessions: {
         heading: 'Sessies',

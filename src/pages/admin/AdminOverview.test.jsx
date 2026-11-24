@@ -9,6 +9,7 @@ vi.mock('../../lib/admin/onboardingSteps', () => ({ listAllOnboardingSteps: vi.f
 vi.mock('../../lib/admin/overview', () => ({
   countCoursesAwaitingApproval: vi.fn(),
   countOpenResourceReports: vi.fn(),
+  countOpenReviewReports: vi.fn(),
   countRejectedCourses: vi.fn(),
   countBlockedUsers: vi.fn(),
   countInactiveProviders: vi.fn(),
@@ -21,6 +22,7 @@ afterEach(cleanup)
 function setCounts(counts) {
   overview.countCoursesAwaitingApproval.mockResolvedValue(counts.approvals ?? 0)
   overview.countOpenResourceReports.mockResolvedValue(counts.reports ?? 0)
+  overview.countOpenReviewReports.mockResolvedValue(counts.reviews ?? 0)
   overview.countRejectedCourses.mockResolvedValue(counts.rejected ?? 0)
   overview.countBlockedUsers.mockResolvedValue(counts.blocked ?? 0)
   overview.countInactiveProviders.mockResolvedValue(counts.inactive ?? 0)
@@ -35,13 +37,15 @@ beforeEach(() => setCounts({}))
 
 describe('AdminOverview', () => {
   it('leads with what needs an admin decision, linking to where it is dealt with', async () => {
-    setCounts({ approvals: 3, reports: 1 })
+    setCounts({ approvals: 3, reports: 1, reviews: 2 })
     renderOverview()
     const action = await screen.findByRole('region', { name: 'Needs your action' })
     expect(within(action).getByRole('link', { name: /Courses awaiting approval/ }))
       .toHaveAttribute('href', '/admin/courses?status=pending_approval')
     expect(within(action).getByRole('link', { name: /Reported resources/ }))
       .toHaveAttribute('href', '/admin/reported-resources')
+    expect(within(action).getByRole('link', { name: /Reported reviews/ }))
+      .toHaveAttribute('href', '/admin/reported-reviews')
     expect(within(action).getByText('3')).toBeInTheDocument()
   })
 

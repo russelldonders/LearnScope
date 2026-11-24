@@ -4,6 +4,7 @@ import AdminLayout from './AdminLayout'
 import {
   countCoursesAwaitingApproval,
   countOpenResourceReports,
+  countOpenReviewReports,
   countRejectedCourses,
   countBlockedUsers,
   countInactiveProviders,
@@ -37,6 +38,13 @@ const TILE_GROUPS = [
         to: '/admin/reported-resources',
         load: countOpenResourceReports,
         describe: (n) => `${plural(n, 'shared resource')} reported by learners`,
+      },
+      {
+        key: 'reportedReviews',
+        heading: 'Reported reviews',
+        to: '/admin/reported-reviews',
+        load: countOpenReviewReports,
+        describe: (n) => `${plural(n, 'coach review')} reported`,
       },
     ],
   },

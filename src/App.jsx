@@ -73,6 +73,7 @@ const AdminSkillDetail = lazyRoute(() => import('./pages/admin/AdminSkillDetail'
 const AdminTags = lazyRoute(() => import('./pages/admin/AdminTags'))
 const AdminAiUsage = lazyRoute(() => import('./pages/admin/AdminAiUsage'))
 const AdminResourceReports = lazyRoute(() => import('./pages/admin/AdminResourceReports'))
+const AdminReviewReports = lazyRoute(() => import('./pages/admin/AdminReviewReports'))
 const AdminSettings = lazyRoute(() => import('./pages/admin/AdminSettings'))
 const AdminOrganisationDetail = lazyRoute(() => import('./pages/admin/AdminOrganisationDetail'))
 const AdminActivityLog = lazyRoute(() => import('./pages/admin/AdminActivityLog'))
@@ -495,6 +496,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminResourceReports />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reported-reviews"
+            element={
+              <PlatformAdminRoute>
+                <AdminReviewReports />
               </PlatformAdminRoute>
             }
           />

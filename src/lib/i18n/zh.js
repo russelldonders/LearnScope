@@ -1227,6 +1227,12 @@ export default {
         cancel: '取消',
         aboutYouHeading: '对你辅导的评价',
         noneAboutYou: '还没有评价。',
+        report: '举报',
+        reported: '已举报。LearnScope 管理员会进行查看。',
+        reportTitle: '这条评价有什么问题？',
+        reportHint: 'LearnScope 管理员会查看这条评价，并可能将其删除。',
+        removedByModerators: '已被 LearnScope 管理员删除。只有你能看到，且不再计入评分。',
+        cantReviewAgain: 'LearnScope 管理员删除了你对这次辅导的评价，因此无法再次评价。',
       },
       sessions: {
         heading: '辅导课',

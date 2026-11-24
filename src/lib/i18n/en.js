@@ -1227,6 +1227,12 @@ export default {
         cancel: 'Cancel',
         aboutYouHeading: 'Reviews of your coaching',
         noneAboutYou: 'No reviews yet.',
+        report: 'Report',
+        reported: 'Reported. LearnScope moderators will look at it.',
+        reportTitle: 'What’s wrong with this review?',
+        reportHint: 'LearnScope moderators will look at it and can remove it.',
+        removedByModerators: 'Removed by LearnScope moderators. Only you can see it, and it no longer counts.',
+        cantReviewAgain: 'LearnScope moderators removed your review of this coaching, so it can’t be reviewed again.',
       },
       sessions: {
         heading: 'Sessions',

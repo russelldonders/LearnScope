@@ -78,6 +78,13 @@ export async function countCoursesAwaitingApproval() {
 
 // Shared resources with at least one open report (one row per resource --
 // admin_list_skill_resource_reports groups open reports by resource).
+// Coach reviews with open reports (0338).
+export async function countOpenReviewReports() {
+  const { data, error } = await supabase.rpc('admin_list_coach_review_reports')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 export async function countOpenResourceReports() {
   const { data, error } = await supabase.rpc('admin_list_skill_resource_reports')
   if (error) throw error

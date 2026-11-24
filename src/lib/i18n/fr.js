@@ -1227,6 +1227,12 @@ export default {
         cancel: 'Annuler',
         aboutYouHeading: 'Avis sur votre coaching',
         noneAboutYou: 'Aucun avis pour l’instant.',
+        report: 'Signaler',
+        reported: 'Signalé. Les modérateurs de LearnScope vont l’examiner.',
+        reportTitle: 'Quel est le problème avec cet avis ?',
+        reportHint: 'Les modérateurs de LearnScope l’examineront et pourront le retirer.',
+        removedByModerators: 'Retiré par les modérateurs de LearnScope. Vous seul le voyez, et il ne compte plus.',
+        cantReviewAgain: 'Les modérateurs de LearnScope ont retiré votre avis sur ce coaching, il ne peut donc plus être évalué.',
       },
       sessions: {
         heading: 'Séances',

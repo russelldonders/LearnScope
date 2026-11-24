@@ -3,7 +3,8 @@ import ConfirmDialog from './ConfirmDialog'
 import PersonAvatar from './PersonAvatar'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
-import { deleteCoachReview, listCoachReviews, saveCoachReview } from '../lib/coaching'
+import { deleteCoachReview, listCoachReviews, reportCoachReview, saveCoachReview } from '../lib/coaching'
+import { REPORT_REASONS } from '../lib/skillResources'
 
 // Reviews of a coach (0337): stars, the learner's own review of their coach,
 // and the reviews others can read.
@@ -77,11 +78,20 @@ export function MyCoachReview({ relationship, review, canReview, onChange }) {
           <p className="text-secondary">{k('yourReview')}</p>
           <p className="mt-0.5"><Stars rating={review.rating} /></p>
           {review.comment && <p className="mt-0.5 whitespace-pre-wrap text-ink">{review.comment}</p>}
+          {/* Removed by moderators (0338): only its author sees it, and it
+              can be deleted but not changed back into view. */}
+          {review.moderation_removed_at && <p className="mt-1 text-red-700">{k('removedByModerators')}</p>}
           <div className="mt-1 flex gap-3">
-            <button type="button" onClick={() => setEditing(true)} className="text-xs font-medium text-moss hover:underline">{k('change')}</button>
+            {!review.moderation_removed_at && (
+              <button type="button" onClick={() => setEditing(true)} className="text-xs font-medium text-moss hover:underline">{k('change')}</button>
+            )}
             <button type="button" onClick={() => setDeleting(true)} disabled={busy} className="text-xs font-medium text-moss hover:underline disabled:opacity-60">{k('delete')}</button>
           </div>
         </div>
+      ) : relationship.review_removed ? (
+        // Moderators removed their review of this coaching, which they've
+        // since deleted: it can't be reviewed again (0338).
+        <p className="text-xs text-secondary">{k('cantReviewAgain')}</p>
       ) : (
         <button type="button" onClick={() => setEditing(true)} className="text-xs font-medium text-moss hover:underline">
           {k('write', { name: relationship.other_name })}
@@ -195,9 +205,92 @@ export function CoachReviewList({ coachId, librarySkillId, emptyText = null }) {
               <span className="text-secondary">{formatFullDate(review.updated_at)}</span>
             </p>
             {review.comment && <p className="mt-0.5 whitespace-pre-wrap text-ink">{review.comment}</p>}
+            {!review.is_mine && (
+              <ReportReview
+                review={review}
+                onReported={() => setReviews((rows) => rows.map((row) => (row.id === review.id ? { ...row, reported_by_me: true } : row)))}
+              />
+            )}
           </div>
         </li>
       ))}
     </ul>
+  )
+}
+
+// Report a review to LearnScope's moderators (0338): a reason and, if they
+// like, more detail. Once sent, it says so.
+function ReportReview({ review, onReported }) {
+  const { t } = useLanguage()
+  const k = (key, params) => t(`skillDetail.coaching.reviews.${key}`, params)
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [details, setDetails] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState(null)
+  const id = useId()
+
+  if (review.reported_by_me) return <p className="mt-1 text-secondary">{k('reported')}</p>
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-1 text-xs text-secondary hover:text-ink hover:underline">
+        {k('report')}
+      </button>
+    )
+  }
+
+  async function handleSend(e) {
+    e.preventDefault()
+    if (!reason) {
+      setError(t('skillDetail.resources.reportErrorReason'))
+      return
+    }
+    setSending(true)
+    setError(null)
+    try {
+      await reportCoachReview(review.id, reason, details)
+      onReported()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSend} className="mt-2 space-y-2 rounded-md border border-hairline bg-card p-3">
+      <fieldset>
+        <legend className="text-xs font-medium text-ink">{k('reportTitle')}</legend>
+        <p className="text-xs text-secondary">{k('reportHint')}</p>
+        <div className="mt-1 space-y-1">
+          {REPORT_REASONS.map((option) => (
+            <label key={option} className="flex items-center gap-2 text-xs text-ink">
+              <input type="radio" name={`${id}-reason`} value={option} checked={reason === option} onChange={() => setReason(option)} />
+              {t(`skillDetail.resources.reportReasons.${option}`)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <label className="block text-xs text-secondary" htmlFor={`${id}-details`}>
+        {t('skillDetail.resources.reportDetailsLabel')}
+        <textarea
+          id={`${id}-details`}
+          rows={2}
+          maxLength={1000}
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          className="mt-1 block w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
+        />
+      </label>
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={sending} className="rounded-md bg-moss px-3 py-1.5 text-xs font-medium text-paper hover:opacity-90 disabled:opacity-60">
+          {t('skillDetail.resources.reportSend')}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink">
+          {k('cancel')}
+        </button>
+      </div>
+    </form>
   )
 }

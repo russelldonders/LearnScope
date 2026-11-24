@@ -15,6 +15,7 @@ vi.mock('../lib/coaching', async (importOriginal) => ({
   saveCoachReview: vi.fn().mockResolvedValue(),
   deleteCoachReview: vi.fn().mockResolvedValue(),
   listCoachReviews: vi.fn(),
+  reportCoachReview: vi.fn().mockResolvedValue(),
 }))
 
 const coaching = await import('../lib/coaching')
@@ -83,5 +84,42 @@ describe('RatingSummary', () => {
   it('shows the average and how many reviews', () => {
     render(<RatingSummary average="4.5" count={2} />)
     expect(screen.getByText('4.5 · 2 reviews')).toBeInTheDocument()
+  })
+})
+
+describe('reporting and removed reviews', () => {
+  const review = (fields) => ({ id: 'v1', rating: 1, comment: 'Avoid', reviewer_name: 'Rae', reviewer_avatar_url: null, updated_at: '2026-11-20T10:00:00Z', is_mine: false, reported_by_me: false, ...fields })
+
+  it('reports a review by someone else with a reason, then says it was reported', async () => {
+    coaching.listCoachReviews.mockResolvedValue([review()])
+    render(<CoachReviewList coachId="coach" librarySkillId="lib" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Report' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a reason.')
+    fireEvent.click(screen.getByLabelText('Offensive or inappropriate'))
+    fireEvent.change(screen.getByLabelText('Anything else moderators should know? (optional)'), { target: { value: 'Personal attack' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    await waitFor(() => expect(coaching.reportCoachReview).toHaveBeenCalledWith('v1', 'inappropriate', 'Personal attack'))
+    expect(await screen.findByText(/^Reported./)).toBeInTheDocument()
+  })
+
+  it('offers no report on your own review, and shows one already reported', async () => {
+    coaching.listCoachReviews.mockResolvedValue([review({ is_mine: true }), review({ id: 'v2', reported_by_me: true })])
+    render(<CoachReviewList coachId="coach" librarySkillId="lib" />)
+    expect(await screen.findByText(/^Reported./)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument()
+  })
+
+  it('tells the writer moderators removed their review, which they can delete but not change', () => {
+    render(<MyCoachReview relationship={relationship} review={{ rating: 1, comment: 'Avoid', moderation_removed_at: '2026-11-22T10:00:00Z' }} canReview onChange={vi.fn()} />)
+    expect(screen.getByText(/Removed by LearnScope moderators/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('says coaching whose review moderators removed cannot be reviewed again', () => {
+    render(<MyCoachReview relationship={{ ...relationship, review_removed: true }} review={null} canReview onChange={vi.fn()} />)
+    expect(screen.getByText(/can.t be reviewed again/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Review Coral as a coach' })).not.toBeInTheDocument()
   })
 })
