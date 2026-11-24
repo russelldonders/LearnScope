@@ -10,9 +10,11 @@ vi.mock('../context/LanguageContext', async () => {
   }
   return { useLanguage: () => ({ language: 'en-GB', setLanguage: vi.fn(), t }) }
 })
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }) }))
 vi.mock('../lib/coaching', async (importOriginal) => ({
   ...(await importOriginal()),
   listMyCoaching: vi.fn(),
+  listMyCoachingSessions: vi.fn(),
   countSkillCoaches: vi.fn(),
   listMyCoachInterests: vi.fn(),
   registerCoachInterest: vi.fn().mockResolvedValue(),
@@ -32,7 +34,8 @@ const row = (fields) => ({
   responded_at: null, started_at: null, ended_at: null, message: null, ...fields,
 })
 
-function setUp({ rows = [], coaches = 0, interests = [] } = {}) {
+function setUp({ rows = [], coaches = 0, interests = [], sessions = [] } = {}) {
+  coaching.listMyCoachingSessions.mockResolvedValue(sessions)
   coaching.listMyCoaching.mockResolvedValue(rows)
   coaching.countSkillCoaches.mockResolvedValue(coaches)
   coaching.listMyCoachInterests.mockResolvedValue(interests)
@@ -99,5 +102,22 @@ describe('SkillCoachingSection', () => {
     expect(screen.getByText('“Help with my talk”')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(coaching.respondToCoachingRequest).toHaveBeenCalledWith('r1', true))
+  })
+})
+
+describe('SkillCoachingSection sessions', () => {
+  it('shows the sessions of each active coaching, under the person', async () => {
+    setUp({
+      coaches: 1,
+      rows: [row({ role: 'learner', status: 'active', started_at: '2026-11-21T10:00:00Z' })],
+      sessions: [
+        { id: 's1', relationship_id: 'r1', status: 'proposed', proposed_by_me: false, starts_at: '2099-01-05T10:00:00Z', duration_minutes: 45, location: null, agenda: null },
+        { id: 's0', relationship_id: 'other', status: 'proposed', proposed_by_me: false, starts_at: '2099-01-06T10:00:00Z', duration_minutes: 30, location: null, agenda: null },
+      ],
+    })
+    render(<SkillCoachingSection skill={skill} userId="me" onFindCoach={vi.fn()} />)
+    expect(await screen.findByText('Coral proposed this time')).toBeInTheDocument()
+    expect(screen.getAllByText(/45 min/)).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Plan a session' })).toBeInTheDocument()
   })
 })

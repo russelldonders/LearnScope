@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import PersonAvatar from './PersonAvatar'
 import ConfirmDialog from './ConfirmDialog'
+import CoachingSessions from './CoachingSessions'
 import { Part } from './SkillNetworkSection'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
@@ -11,6 +12,7 @@ import {
   endCoaching,
   listMyCoachInterests,
   listMyCoaching,
+  listMyCoachingSessions,
   registerCoachInterest,
   respondToCoachingRequest,
   withdrawCoachInterest,
@@ -27,6 +29,7 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
   const { t } = useLanguage()
   const k = (key, params) => t(`skillDetail.coaching.${key}`, params)
   const [rows, setRows] = useState(null)
+  const [sessions, setSessions] = useState([])
   const [coachCount, setCoachCount] = useState(null)
   const [interest, setInterest] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -35,12 +38,14 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
 
   const load = useCallback(async () => {
     try {
-      const [mine, count, interests] = await Promise.all([
+      const [mine, count, interests, allSessions] = await Promise.all([
         listMyCoaching(),
         countSkillCoaches(skill.library_skill_id),
         listMyCoachInterests(),
+        listMyCoachingSessions(),
       ])
       setRows(mine)
+      setSessions(allSessions)
       setCoachCount(count)
       setInterest(interests.find((row) => row.skill_id === skill.id) ?? null)
     } catch (err) {
@@ -92,7 +97,12 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
         {myCoaches.length > 0 && (
           <CoachingList heading={myCoaches.length === 1 ? k('yourCoach') : k('yourCoaches')}>
             {myCoaches.map((row) => (
-              <CoachingPerson key={row.id} row={row} detail={k('coachingYouSince', { date: formatFullDate(row.started_at) })}>
+              <CoachingPerson
+                key={row.id}
+                row={row}
+                detail={k('coachingYouSince', { date: formatFullDate(row.started_at) })}
+                below={<CoachingSessions relationship={row} sessions={sessions.filter((s) => s.relationship_id === row.id)} onChange={load} />}
+              >
                 <TextButton onClick={() => setEnding(row)} disabled={busyId === row.id}>{k('endCoaching')}</TextButton>
               </CoachingPerson>
             ))}
@@ -168,7 +178,12 @@ export default function SkillCoachingSection({ skill, userId, onFindCoach, refre
           {coaching.length > 0 && (
             <CoachingList heading={k('coachingHeading')}>
               {coaching.map((row) => (
-                <CoachingPerson key={row.id} row={row} detail={k('since', { date: formatFullDate(row.started_at) })}>
+                <CoachingPerson
+                  key={row.id}
+                  row={row}
+                  detail={k('since', { date: formatFullDate(row.started_at) })}
+                  below={<CoachingSessions relationship={row} sessions={sessions.filter((s) => s.relationship_id === row.id)} onChange={load} />}
+                >
                   <TextButton onClick={() => setEnding(row)} disabled={busyId === row.id}>{k('endCoaching')}</TextButton>
                 </CoachingPerson>
               ))}
@@ -217,7 +232,8 @@ function CoachingList({ heading, note = null, children }) {
   )
 }
 
-function CoachingPerson({ row, detail, message = null, children = null }) {
+// below: shown under the person, the width of the list (their sessions).
+function CoachingPerson({ row, detail, message = null, children = null, below = null }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <PersonAvatar name={row.other_name} avatarUrl={row.other_avatar_url} size={6} />
@@ -227,6 +243,7 @@ function CoachingPerson({ row, detail, message = null, children = null }) {
         {message && <span className="mt-1 block whitespace-pre-wrap text-xs text-ink">“{message}”</span>}
       </span>
       {children && <span className="flex items-center gap-3">{children}</span>}
+      {below && <div className="w-full">{below}</div>}
     </li>
   )
 }

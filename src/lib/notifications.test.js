@@ -95,3 +95,31 @@ describe('coachingNotifications', () => {
     expect(items[0]).toMatchObject({ id: 'coach-available:i1', actions: [{ label: 'Find a coach', href: '/skills/mine?tab=network' }] })
   })
 })
+
+describe('coaching session notifications', () => {
+  const NOW = new Date('2026-11-24T12:00:00Z').getTime()
+  const learnerSide = { id: 'r1', role: 'learner', status: 'active', other_name: 'Coral', learner_skill_id: 'mine', coach_skill_id: 'theirs' }
+  const coachSide = { ...learnerSide, role: 'coach', other_name: 'Lee' }
+  const session = (fields) => ({ id: 's1', relationship_id: 'r1', starts_at: '2026-11-30T10:00:00Z', created_at: '2026-11-23T10:00:00Z', ...fields })
+
+  it('asks for an answer to a time the other person proposed, on the skill page of whoever reads it', () => {
+    const [item] = coachingNotifications([coachSide], [], NOW, [session({ status: 'proposed', proposed_by_me: false })])
+    expect(item).toMatchObject({ kind: 'coaching-session-proposed', actions: [{ href: '/skills/theirs?tab=network' }] })
+    expect(item.detail).toMatch(/^Lee proposed a coaching session on /)
+    expect(coachingNotifications([coachSide], [], NOW, [session({ status: 'proposed', proposed_by_me: true })])).toEqual([])
+  })
+
+  it('reminds the learner to mark a session that has happened as done', () => {
+    const [item] = coachingNotifications([learnerSide], [], NOW, [session({ status: 'confirmed', starts_at: '2026-11-24T09:00:00Z' })])
+    expect(item).toMatchObject({ kind: 'coaching-session-done', actions: [{ label: 'Mark as done', href: '/skills/mine?tab=network' }] })
+    expect(coachingNotifications([coachSide], [], NOW, [session({ status: 'confirmed', starts_at: '2026-11-24T09:00:00Z' })])).toEqual([])
+  })
+
+  it('says when the other person confirmed or cancelled', () => {
+    const confirmed = coachingNotifications([learnerSide], [], NOW, [session({ status: 'confirmed', proposed_by_me: true, responded_at: '2026-11-24T08:00:00Z' })])
+    expect(confirmed[0].kind).toBe('coaching-session-confirmed')
+    const cancelled = coachingNotifications([learnerSide], [], NOW, [session({ status: 'cancelled', cancelled_by_me: false, cancelled_at: '2026-11-24T08:00:00Z' })])
+    expect(cancelled[0].kind).toBe('coaching-session-cancelled')
+    expect(coachingNotifications([learnerSide], [], NOW, [session({ status: 'cancelled', cancelled_by_me: true, cancelled_at: '2026-11-24T08:00:00Z' })])).toEqual([])
+  })
+})

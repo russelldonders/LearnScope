@@ -16,7 +16,7 @@ import { loadActionSources } from './actionLoading'
 import { listIncomingPlanInvitations } from './learnerPlans'
 import { listActiveGoalsForAttention } from './skillGoals'
 import { listSharedActivitySuggestions } from './sharedActivities'
-import { listMyCoachInterests, listMyCoaching } from './coaching'
+import { listMyCoachInterests, listMyCoaching, listMyCoachingSessions } from './coaching'
 import { supabase } from './supabaseClient'
 import { LEVEL_LABELS } from './levels'
 
@@ -88,10 +88,62 @@ export async function dismissNotification(userId, notificationId) {
 // the learner, while recent; and a coach becoming available for a skill the
 // learner is looking for one in. Each opens the skill's Network tab, where
 // coaching is.
-export function coachingNotifications(coaching, interests, now = Date.now()) {
+export function coachingNotifications(coaching, interests, now = Date.now(), sessions = []) {
   const recent = (at) => at && now - new Date(at).getTime() < COACHING_REPLY_DAYS * 24 * 60 * 60 * 1000
   const network = (skillId) => `/skills/${skillId}?tab=network`
+  const relationships = new Map(coaching.map((row) => [row.id, row]))
+  const sessionTime = (at) => new Date(at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  // The skill page the session is on, for whichever of them is reading.
+  const sessionSkill = (row) => (row.role === 'learner' ? row.learner_skill_id : row.coach_skill_id)
+  const sessionItems = sessions.flatMap((session) => {
+    const row = relationships.get(session.relationship_id)
+    if (!row || !sessionSkill(row)) return []
+    const who = row.other_name || 'Your coaching partner'
+    const href = network(sessionSkill(row))
+    if (session.status === 'proposed' && !session.proposed_by_me) {
+      return [notification({
+        id: session.id,
+        kind: 'coaching-session-proposed',
+        title: 'Coaching Session',
+        detail: `${who} proposed a coaching session on ${sessionTime(session.starts_at)}.`,
+        occurredAt: session.created_at,
+        actions: [{ label: 'Answer', href }],
+      })]
+    }
+    if (session.status === 'confirmed' && session.proposed_by_me && recent(session.responded_at) && new Date(session.starts_at).getTime() > now) {
+      return [notification({
+        id: session.id,
+        kind: 'coaching-session-confirmed',
+        title: 'Coaching Session',
+        detail: `${who} confirmed the coaching session on ${sessionTime(session.starts_at)}.`,
+        occurredAt: session.responded_at,
+        actions: [{ label: 'Open', href }],
+      })]
+    }
+    if (session.status === 'confirmed' && row.role === 'learner' && new Date(session.starts_at).getTime() <= now) {
+      return [notification({
+        id: session.id,
+        kind: 'coaching-session-done',
+        title: 'Coaching Session',
+        detail: `Did your coaching session with ${who} on ${sessionTime(session.starts_at)} happen? Mark it done to add it to your record.`,
+        occurredAt: session.starts_at,
+        actions: [{ label: 'Mark as done', href }],
+      })]
+    }
+    if (session.status === 'cancelled' && !session.cancelled_by_me && recent(session.cancelled_at)) {
+      return [notification({
+        id: session.id,
+        kind: 'coaching-session-cancelled',
+        title: 'Coaching Session',
+        detail: `${who} cancelled the coaching session on ${sessionTime(session.starts_at)}.`,
+        occurredAt: session.cancelled_at,
+        actions: [{ label: 'Open', href }],
+      })]
+    }
+    return []
+  })
   return [
+    ...sessionItems,
     ...coaching
       .filter((row) => row.role === 'coach' && row.status === 'requested' && row.coach_skill_id)
       .map((row) => notification({
@@ -153,7 +205,7 @@ export function buildNotificationItems(values, profiles = {}) {
       occurredAt: item.created_at,
       actions: [{ label: 'Review recommendation', href: `/recommend/${item.share_code}` }],
     })),
-    ...coachingNotifications(values.coaching ?? [], values.coachInterests ?? []),
+    ...coachingNotifications(values.coaching ?? [], values.coachInterests ?? [], Date.now(), values.coachingSessions ?? []),
     ...(values.sharedActivities ?? []).map((item) => notification({
       id: item.id,
       kind: 'shared-activity',
@@ -307,6 +359,7 @@ export async function loadNotifications(userId) {
     { key: 'sharedActivities', label: 'shared activities', fallback: [], load: listSharedActivitySuggestions },
     { key: 'coaching', label: 'coaching', fallback: [], load: listMyCoaching },
     { key: 'coachInterests', label: 'coach availability', fallback: [], load: listMyCoachInterests },
+    { key: 'coachingSessions', label: 'coaching sessions', fallback: [], load: listMyCoachingSessions },
     { key: 'selfAssessments', label: 'self-assessment reminders', fallback: [], load: () => listUpcomingSelfAssessments(userId) },
     { key: 'targets', label: 'skill target reminders', fallback: [], load: () => listUpcomingTargets(userId) },
     { key: 'goals', label: 'goal reminders', fallback: [], load: () => listActiveGoalsForAttention(userId) },
