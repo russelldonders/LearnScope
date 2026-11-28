@@ -2675,6 +2675,8 @@ export default {
     byShort: 'By',
     edit: 'Edit',
     bestSoFar: 'Best so far',
+    latestValue: 'Latest',
+    underTargetUntil: 'Under target so far, judged on {date}',
     totalSoFar: 'Total so far',
     progressLabel: 'Progress towards your target',
     targetReached: 'Target reached',

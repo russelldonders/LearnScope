@@ -2678,6 +2678,8 @@ export default {
     byShort: 'Bis',
     edit: 'Bearbeiten',
     bestSoFar: 'Bisher bester Wert',
+    latestValue: 'Letzter Wert',
+    underTargetUntil: 'Bisher unter dem Ziel, gewertet am {date}',
     totalSoFar: 'Bisher insgesamt',
     progressLabel: 'Fortschritt zu deinem Ziel',
     targetReached: 'Ziel erreicht',

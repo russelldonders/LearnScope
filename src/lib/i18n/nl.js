@@ -2676,6 +2676,8 @@ export default {
     byShort: 'Vóór',
     edit: 'Bewerken',
     bestSoFar: 'Beste tot nu toe',
+    latestValue: 'Laatste waarde',
+    underTargetUntil: 'Tot nu toe onder het doel, beoordeeld op {date}',
     totalSoFar: 'Totaal tot nu toe',
     progressLabel: 'Voortgang naar je doel',
     targetReached: 'Doel bereikt',

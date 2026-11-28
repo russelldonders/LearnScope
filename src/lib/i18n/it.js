@@ -2678,6 +2678,8 @@ export default {
     byShort: 'Entro',
     edit: 'Modifica',
     bestSoFar: 'Migliore finora',
+    latestValue: 'Ultimo valore',
+    underTargetUntil: 'Sotto l’obiettivo per ora, valutato il {date}',
     totalSoFar: 'Totale finora',
     progressLabel: 'Progressi verso il tuo obiettivo',
     targetReached: 'Obiettivo raggiunto',

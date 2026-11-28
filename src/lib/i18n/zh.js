@@ -2657,6 +2657,8 @@ export default {
     byShort: '截止',
     edit: '编辑',
     bestSoFar: '目前最佳',
+    latestValue: '最新',
+    underTargetUntil: '目前低于目标，将于 {date} 判定',
     totalSoFar: '目前总计',
     progressLabel: '目标进度',
     targetReached: '已达到目标',

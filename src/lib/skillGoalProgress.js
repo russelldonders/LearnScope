@@ -116,6 +116,14 @@ export function isLimitGoal(goal) {
   return goal.aggregation === 'total' && goal.direction === 'lower'
 }
 
+// A number to bring down and keep down ("get down to 96 kg"): a lower-is-better
+// count or number. Unlike a personal best (a faster pace, a shorter time), one
+// low entry doesn't settle it -- it's judged on the latest entry, and with a
+// target date only once that date comes, on the latest entry up to it.
+export function isLevelGoal(goal) {
+  return goal.aggregation === 'best' && goal.direction === 'lower' && (goal.measure_kind === 'number' || goal.measure_kind === 'count')
+}
+
 export function isTargetReached(goal, current) {
   if (goal.target_value == null || current == null) return false
   const target = Number(goal.target_value)
@@ -206,6 +214,11 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
     const counted = readings.filter((r) => r.date >= from)
     current = counted.reduce((sum, r) => sum + r.value, 0)
     baseline = 0
+  } else if (isLevelGoal(goal)) {
+    const deadlineEnd = goal.target_date ? nextPeriodStart(startOfDayFromString(goal.target_date), 'day') : null
+    const judged = deadlineEnd ? sinceStart.filter((r) => r.date < deadlineEnd) : sinceStart
+    current = judged.length > 0 ? judged[judged.length - 1].value : null
+    baseline = earlier.length > 0 ? earlier[earlier.length - 1].value : sinceStart[0]?.value ?? null
   } else {
     for (const reading of sinceStart) {
       if (current === null || isBetter(goal, reading.value, current)) current = reading.value
@@ -260,7 +273,11 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
   }
 
   const target = goal.target_value == null ? null : Number(goal.target_value)
-  const reached = isTargetReached(goal, current)
+  // Before a level goal's target date, being under the target is only
+  // tracking towards it; the goal is judged when the date comes.
+  const judgingLater = isLevelGoal(goal) && goal.target_date != null && localDateString(now) < goal.target_date
+  const underTarget = isTargetReached(goal, current)
+  const reached = underTarget && !judgingLater
   // A starting point already past the target (99 push-ups in the past, aiming
   // for 40 now) says nothing about progress towards it, so measure from the
   // first value since the goal began instead.
@@ -268,12 +285,14 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
   const start = baselineStillAhead ? sinceStart[0]?.value ?? null : baseline
   let percent = null
   if (target !== null && current !== null && start !== null) {
-    if (reached) percent = 100
+    if (underTarget) percent = 100
     else if (start === target) percent = 0
     else percent = Math.max(0, Math.min(100, ((current - start) / (target - start)) * 100))
   }
 
-  return { readings, current, baseline, target, reached, percent, lastLogged, entryCount: readings.length }
+  const result = { readings, current, baseline, target, reached, percent, lastLogged, entryCount: readings.length }
+  if (judgingLater) result.underTargetSoFar = underTarget
+  return result
 }
 
 // Points for the chart. Best-value goals plot each entry; period totals plot
@@ -592,6 +611,7 @@ export function goalLogFeedback(goal, before, after) {
   if (!before.reached && after.reached) return 'skillGoals.dashboard.reachedNow'
   if (
     goal.aggregation === 'best' &&
+    !isLevelGoal(goal) &&
     before.current != null &&
     after.current != null &&
     isBetter(goal, after.current, before.current)

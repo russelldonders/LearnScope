@@ -16,6 +16,7 @@ import {
   goalShapeText,
   goalStreak,
   isGoalAchieved,
+  isLevelGoal,
   isLimitGoal,
   lastGoalEntry,
   localDateString,
@@ -120,7 +121,7 @@ export default function SkillGoalsDashboardPanel({
 // encouraging true thing (a streak, the target reached), else when it was last
 // logged. A streak comes before "Target reached" because on a repeating goal
 // it already says this period's target was met.
-function statusFor({ note, progress, streak, goal, t }) {
+function statusFor({ note, progress, streak, goal, t, locale }) {
   if (note) return { text: t(note), tone: 'text-moss', role: 'status' }
   // A run of one is just "this week was met", so only from two.
   if (streak >= 2) return { text: t(`skillGoals.streak.${goal.period}`, { count: streak }), tone: 'text-moss font-medium' }
@@ -131,6 +132,10 @@ function statusFor({ note, progress, streak, goal, t }) {
       : { text: t('skillGoals.limit.withinSoFar'), tone: 'text-moss' }
   }
   if (progress.reached) return { text: t('skillGoals.targetReached'), tone: 'text-moss font-medium' }
+  // A number to bring down, under its target before the date it's judged on.
+  if (progress.underTargetSoFar) {
+    return { text: t('skillGoals.underTargetUntil', { date: shortDate(goal.target_date, locale) }), tone: 'text-moss' }
+  }
   if (progress.lastLogged) {
     return { text: t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) }), tone: 'text-secondary' }
   }
@@ -659,14 +664,16 @@ export function SkillGoalTile({
   const due = nextLog != null && nextLog <= today
   const achieved = isGoalAchieved({ goal, progress })
   const formId = `dashboard-goal-form-${goal.id}`
-  const currentLabelKey = goal.aggregation === 'best'
+  const currentLabelKey = isLevelGoal(goal)
+    ? 'skillGoals.latestValue'
+    : goal.aggregation === 'best'
     ? 'skillGoals.bestSoFar'
     : goal.period
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
   // A repeating goal past its first period sums up the last one, and its
   // streak, under the chart; anything just saved still takes that place.
-  const status = statusFor({ note, progress, streak, goal, t })
+  const status = statusFor({ note, progress, streak, goal, t, locale: displayLocale(language) })
   const showLastPeriod = previousResult && !note
   const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
   // Sessions lead for a goal done in sets across a week or month; a daily one

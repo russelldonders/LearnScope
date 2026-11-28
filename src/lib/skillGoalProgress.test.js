@@ -853,3 +853,51 @@ describe('openGoalsFirst', () => {
     expect(openGoalsFirst(items).map((i) => i.goal.id)).toEqual(['b', 'a'])
   })
 })
+describe('a number to bring down (lower is better)', () => {
+  const weight = { ...pushUpGoal, metric: 'weight', measure_kind: 'number', unit: 'kg', direction: 'lower', target_value: 96, started_on: '2026-11-01' }
+  const kg = (id, date, value) => ({
+    id,
+    recorded_at: `${date}T12:00:00`,
+    statement: { result: { extensions: { [MEASUREMENT_EXTENSION_IRI]: [{ metric: 'weight', kind: 'number', unit: 'kg', value }] } } },
+  })
+
+  it('is judged on the latest entry, not the lowest one', () => {
+    const statements = [kg('a', '2026-11-02', 100), kg('b', '2026-11-09', 95), kg('c', '2026-11-16', 97)]
+    const progress = computeGoalProgress(weight, statements, new Date('2026-11-20T09:00:00'))
+    expect(progress.current).toBe(97)
+    expect(progress.reached).toBe(false)
+    expect(computeGoalProgress(weight, statements.slice(0, 2), new Date('2026-11-20T09:00:00')).reached).toBe(true)
+  })
+
+  it('with a target date, is only tracking towards it until that date comes', () => {
+    const byDate = { ...weight, target_date: '2026-11-30' }
+    const statements = [kg('a', '2026-11-02', 100), kg('b', '2026-11-09', 95)]
+    const before = computeGoalProgress(byDate, statements, new Date('2026-11-20T09:00:00'))
+    expect(before.reached).toBe(false)
+    expect(before.underTargetSoFar).toBe(true)
+    expect(before.percent).toBe(100)
+    const on = computeGoalProgress(byDate, statements, new Date('2026-11-30T09:00:00'))
+    expect(on.reached).toBe(true)
+    expect(on.underTargetSoFar).toBeUndefined()
+  })
+
+  it('judges the latest entry on or before the target date, ignoring later ones', () => {
+    const byDate = { ...weight, target_date: '2026-11-30' }
+    const statements = [kg('a', '2026-11-29', 95), kg('b', '2026-12-03', 99)]
+    expect(computeGoalProgress(byDate, statements, new Date('2026-12-05T09:00:00'))).toMatchObject({ current: 95, reached: true })
+    const missed = [kg('a', '2026-11-10', 95), kg('b', '2026-11-28', 98)]
+    expect(computeGoalProgress(byDate, missed, new Date('2026-12-05T09:00:00'))).toMatchObject({ current: 98, reached: false })
+  })
+
+  it('does not call a lower entry a new best', () => {
+    const now = new Date('2026-11-20T09:00:00')
+    const before = computeGoalProgress(weight, [kg('a', '2026-11-02', 100), kg('b', '2026-11-09', 99)], now)
+    const after = computeGoalProgress(weight, [kg('a', '2026-11-02', 100), kg('b', '2026-11-09', 99), kg('c', '2026-11-16', 98)], now)
+    expect(goalLogFeedback(weight, before, after)).toBeNull()
+  })
+
+  it('leaves a pace, a personal best, reached by its best entry', () => {
+    const statements = [entry('a', '2026-10-02', 290, '5km_pace'), entry('b', '2026-10-09', 310, '5km_pace')]
+    expect(computeGoalProgress(paceGoal, statements, new Date('2026-10-20T09:00:00'))).toMatchObject({ current: 290, reached: true })
+  })
+})
