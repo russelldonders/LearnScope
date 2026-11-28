@@ -1,126 +1,162 @@
-import { useMemo, useRef, useState } from 'react'
-import { contentFileUrl, updateVideoEdit } from '../lib/courseContent'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
+import VideoOverlayContent from './VideoOverlayContent'
+import FilmstripTimeline from './videoEditor/FilmstripTimeline'
+import TextEntryOverlay from './videoEditor/TextEntryOverlay'
+import { contentFileUrl, updateVideoEdit } from '../lib/courseContent'
 import {
-  OVERLAY_SIZE_PX,
+  FILTER_PRESETS,
+  OVERLAY_SCALE_MAX,
+  OVERLAY_SCALE_MIN,
   PLAYBACK_RATES,
   STICKER_EMOJI,
-  TEXT_BACKGROUND_PRESETS,
-  TEXT_COLOR_PRESETS,
   buildFilterCss,
   clamp,
   createIconOverlay,
   createTextOverlay,
   formatTime,
+  meaningfulEdit,
   normalizeVideoEdit,
+  overlayTransform,
+  pinchTransform,
+  presetFilter,
+  presetIdFor,
+  snapToCentre,
+  stepPreset,
   useTrimPlayback,
 } from '../lib/videoEdit'
 
-function TextToolIcon() {
+const SWIPE_DISTANCE = 50
+const TAP_DISTANCE = 6
+
+function Icon({ children, size = 22 }) {
   return (
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" />
-    </svg>
-  )
-}
-function StickerToolIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9" y2="9.5" /><line x1="15" y1="9" x2="15" y2="9.5" />
-    </svg>
-  )
-}
-function TrimToolIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" />
-    </svg>
-  )
-}
-function AdjustToolIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
-      <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
     </svg>
   )
 }
 
-const TABS = [
-  { id: 'text', label: 'Text', Icon: TextToolIcon },
-  { id: 'icons', label: 'Stickers', Icon: StickerToolIcon },
-  { id: 'trim', label: 'Trim', Icon: TrimToolIcon },
-  { id: 'adjust', label: 'Adjust', Icon: AdjustToolIcon },
+const TOOLS = [
+  { id: 'text', label: 'Text', icon: <span className="text-lg font-bold leading-none" aria-hidden="true">Aa</span> },
+  { id: 'stickers', label: 'Stickers', icon: <Icon><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4 4 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Icon> },
+  { id: 'filters', label: 'Filters', icon: <Icon><circle cx="9" cy="9" r="5.5" /><circle cx="15" cy="15" r="5.5" /></Icon> },
+  { id: 'speed', label: 'Speed', icon: <Icon><path d="M12 14l4-4" /><path d="M3.3 17a9 9 0 1 1 17.4 0" /></Icon> },
 ]
 
-const SIZES = ['small', 'medium', 'large']
-
-// Preset color circles plus a dashed "custom" swatch that wraps a hidden
-// native <input type="color"> -- clicking it opens the OS color picker the
-// same way the plain input used to, without needing its own always-visible
-// square. Shared by text color and the new background-pill color.
-function ColorSwatchRow({ label, presets, value, onChange, hideLabel = false }) {
-  return (
-    <div>
-      {!hideLabel && <p className="text-xs font-medium text-secondary mb-1.5">{label}</p>}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {presets.map((color) => (
-          <button
-            key={color}
-            type="button"
-            onClick={() => onChange(color)}
-            aria-label={`${label}: ${color}`}
-            aria-pressed={value === color}
-            className={`h-8 w-8 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-card transition-transform active:scale-90 ${
-              value === color ? 'ring-moss' : 'ring-transparent'
-            }`}
-            style={{ backgroundColor: color, boxShadow: '0 0 0 1px var(--color-hairline) inset' }}
-          />
-        ))}
-        <label className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-hairline text-secondary hover:text-ink" title="Custom color">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 20l9-9-4-4-9 9v4h4z" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L18 8l-3-3z" />
-          </svg>
-          <input
-            type="color"
-            aria-label={`${label}: custom`}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-        </label>
-      </div>
-    </div>
-  )
+// Keeps the preview the video's own shape, as large as fits, so overlays
+// placed on it land in the same spot during playback.
+function useFitBox(areaRef, aspect) {
+  const [box, setBox] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const area = areaRef.current
+    if (!area) return undefined
+    function measure() {
+      const style = window.getComputedStyle(area)
+      const width = area.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0)
+      const height = area.clientHeight - parseFloat(style.paddingTop || 0) - parseFloat(style.paddingBottom || 0)
+      if (!width || !height) return
+      const fitWidth = Math.min(width, height * aspect)
+      setBox({ width: Math.floor(fitWidth), height: Math.floor(fitWidth / aspect) })
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(area)
+    return () => observer.disconnect()
+  }, [areaRef, aspect])
+  return box
 }
 
-// A basic Instagram-style editor for one video resource: drag text/sticker
-// overlays onto the preview, trim in/out points, and adjust color/speed --
-// all stored as data (content_resources.video_edit) and applied at
-// playback time by EditedVideoPlayer, never burned into the video itself.
-// Editing here is org-library-scoped (see ResourceLibrarySection.jsx),
-// since the resource is shared across every course it's linked into --
-// one edit, applied everywhere the video plays, same "no duplication"
-// rule as the resource itself.
-export default function VideoEditorModal({ resource, onClose, onSaved }) {
-  const initialEdit = useMemo(() => normalizeVideoEdit(resource.video_edit), [resource.video_edit])
+// The current frame of the preview, drawn once -- the picture each filter
+// tile shows itself on.
+function FrameThumb({ videoRef, filter }) {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || !video.videoWidth) return
+    canvas.width = 120
+    canvas.height = Math.round((120 * video.videoHeight) / video.videoWidth)
+    try {
+      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
+    } catch {
+      // Leaves the tile blank.
+    }
+  }, [videoRef])
+  return <canvas ref={canvasRef} aria-hidden="true" className="h-full w-full bg-white/10 object-cover" style={{ filter: buildFilterCss(filter) }} />
+}
+
+// A full-screen, story-style editor for one video. Editing a saved resource
+// (resource + onSaved) stores the edit on it (content_resources.video_edit,
+// 0087); editing a fresh recording (file + onApply) hands the edit back so
+// it can be saved with the upload. Either way nothing is burned into the
+// video: trim, filter, speed, sound and overlays are applied at playback by
+// EditedVideoPlayer.
+export default function VideoEditorModal({ resource, file, title, onClose, onSaved, onApply, closeLabel = 'Close editor' }) {
+  // Made and revoked together in one effect, so a remount (React's strict
+  // mode does one) never keeps a URL that's already been revoked.
+  const [fileUrl, setFileUrl] = useState(null)
+  useEffect(() => {
+    if (!file) return undefined
+    const url = URL.createObjectURL(file)
+    setFileUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+  const editingFile = Boolean(file)
+  const src = editingFile ? fileUrl ?? undefined : contentFileUrl(resource)
+
+  const initialEdit = useMemo(() => normalizeVideoEdit(resource?.video_edit ?? null), [resource?.video_edit])
   const [edit, setEdit] = useState(initialEdit)
+  // The edit as it was when opened, with the video's length filled in once
+  // it's known -- what "Edited" and Restore Original compare against.
+  const [baseline, setBaseline] = useState(initialEdit)
   const [past, setPast] = useState([])
   const [future, setFuture] = useState([])
   const [duration, setDuration] = useState(null)
+  const [aspect, setAspect] = useState(16 / 9)
   const [currentTime, setCurrentTime] = useState(0)
-  const [tab, setTab] = useState('text')
+  const [playing, setPlaying] = useState(false)
+  const [tool, setTool] = useState(null)
+  const [fineTune, setFineTune] = useState(false)
   const [selectedOverlayId, setSelectedOverlayId] = useState(null)
+  const [textEntry, setTextEntry] = useState(null) // { overlay, isNew }
+  const [dragging, setDragging] = useState(false)
+  const [overBin, setOverBin] = useState(false)
+  const [guides, setGuides] = useState({ vertical: false, horizontal: false })
+  const [toast, setToast] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
-  const videoRef = useRef(null)
-  const previewRef = useRef(null)
-  const dragStartEditRef = useRef(null)
 
+  const videoRef = useRef(null)
+  const areaRef = useRef(null)
+  const stageRef = useRef(null)
+  const binRef = useRef(null)
+  const editRef = useRef(edit)
+  const gestureStartRef = useRef(null)
+  const pointersRef = useRef(new Map())
+  const overlayGestureRef = useRef(null)
+  const swipeRef = useRef(null)
+  const toastTimerRef = useRef(null)
+
+  useEffect(() => {
+    editRef.current = edit
+  }, [edit])
+
+  const box = useFitBox(areaRef, aspect)
   const selectedOverlay = edit.overlays.find((o) => o.id === selectedOverlayId) ?? null
   const trim = useTrimPlayback(edit)
-  const dirty = JSON.stringify(edit) !== JSON.stringify(initialEdit)
+  const dirty = JSON.stringify(edit) !== JSON.stringify(baseline)
+  const activePreset = presetIdFor(edit.filter)
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = edit.muted
+  }, [edit.muted])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = edit.playbackRate
+  }, [edit.playbackRate])
+  useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
 
   function changeEdit(updater, { record = true } = {}) {
     setEdit((current) => {
@@ -131,6 +167,21 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
       }
       return next
     })
+  }
+
+  // A drag or pinch is one step in the undo history, however many moves it
+  // took: the edit as it was when it began is recorded once it ends.
+  function beginGesture() {
+    if (!gestureStartRef.current) gestureStartRef.current = editRef.current
+  }
+
+  function endGesture() {
+    const before = gestureStartRef.current
+    gestureStartRef.current = null
+    if (before && JSON.stringify(before) !== JSON.stringify(editRef.current)) {
+      setPast((items) => [...items.slice(-49), before])
+      setFuture([])
+    }
   }
 
   function undo() {
@@ -151,28 +202,75 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
 
   function requestClose() {
     if (saving) return
+    if (textEntry) return
     if (dirty) setConfirmDiscard(true)
     else onClose()
   }
 
-  function handleLoadedMetadata(e) {
-    const d = e.currentTarget.duration
+  function applyDuration(d) {
     setDuration(d)
-    changeEdit((prev) => ({
+    // Anything added before the length was known ran to 0; stretch it to
+    // the whole video.
+    const withLength = (prev) => ({
       ...prev,
       trimEnd: prev.trimEnd == null ? d : prev.trimEnd,
-      // Any overlay added before metadata loaded got created with
-      // endTime: 0 (duration wasn't known yet) -- back-fill it to the
-      // whole video now rather than leaving it permanently invisible.
       overlays: prev.overlays.map((o) => (o.endTime === 0 ? { ...o, endTime: d } : o)),
-    }), { record: false })
+    })
+    changeEdit(withLength, { record: false })
+    setBaseline(withLength)
   }
 
-  function updateOverlay(id, patch) {
+  function handleLoadedMetadata(e) {
+    const video = e.currentTarget
+    if (video.videoWidth && video.videoHeight) setAspect(video.videoWidth / video.videoHeight)
+    if (!Number.isFinite(video.duration)) {
+      // A fresh WebM recording often reports no length until it's been
+      // read to the end; seeking far ahead makes the browser work it out.
+      const settle = () => {
+        if (!Number.isFinite(video.duration)) return
+        video.removeEventListener('durationchange', settle)
+        video.currentTime = 0
+        applyDuration(video.duration)
+      }
+      video.addEventListener('durationchange', settle)
+      video.currentTime = 1e9
+      return
+    }
+    applyDuration(video.duration)
+    trim.handleLoadedMetadata(e)
+  }
+
+  function showToast(text) {
+    setToast(text)
+    window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 1200)
+  }
+
+  function togglePlay() {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) {
+      const end = edit.trimEnd ?? duration
+      if (end != null && video.currentTime >= end - 0.05) video.currentTime = edit.trimStart
+      const played = video.play()
+      if (played?.catch) played.catch(() => {})
+    } else {
+      video.pause()
+    }
+  }
+
+  function seek(time) {
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = time
+    setCurrentTime(time)
+  }
+
+  function updateOverlay(id, patch, options) {
     changeEdit((prev) => ({
       ...prev,
       overlays: prev.overlays.map((o) => (o.id === id ? { ...o, ...patch } : o)),
-    }))
+    }), options)
   }
 
   function addOverlay(overlay) {
@@ -185,40 +283,187 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
     setSelectedOverlayId((current) => (current === id ? null : current))
   }
 
-  function startDrag(e, id) {
+  function applyPreset(id) {
+    changeEdit((prev) => ({ ...prev, filter: presetFilter(id) }))
+  }
+
+  function chooseTool(id) {
+    if (id === 'text') {
+      videoRef.current?.pause()
+      setTool(null)
+      setTextEntry({
+        overlay: { ...createTextOverlay(edit.trimEnd ?? duration), content: '', startTime: edit.trimStart },
+        isNew: true,
+      })
+      return
+    }
+    setTool((current) => (current === id ? null : id))
+    setFineTune(false)
+  }
+
+  function finishText(draft) {
+    const { isNew } = textEntry
+    setTextEntry(null)
+    if (!draft.content.trim()) {
+      if (!isNew) removeOverlay(draft.id)
+      return
+    }
+    if (isNew) addOverlay(draft)
+    else updateOverlay(draft.id, draft)
+  }
+
+  function editText(overlay) {
+    videoRef.current?.pause()
+    setTextEntry({ overlay, isNew: false })
+  }
+
+  // --- The preview itself: tap to play or pause, swipe sideways to change
+  // filter.
+  function handleStagePointerDown(e) {
+    if (e.button !== undefined && e.button !== 0) return
+    swipeRef.current = { x: e.clientX, y: e.clientY }
+  }
+
+  function handleStagePointerUp(e) {
+    const start = swipeRef.current
+    swipeRef.current = null
+    if (!start) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const next = stepPreset(edit.filter, dx < 0 ? 1 : -1)
+      applyPreset(next)
+      showToast(FILTER_PRESETS.find((p) => p.id === next).label)
+      return
+    }
+    if (Math.hypot(dx, dy) <= TAP_DISTANCE) {
+      if (selectedOverlayId) setSelectedOverlayId(null)
+      else togglePlay()
+    }
+  }
+
+  // --- An overlay: drag to move (snapping to the centre), drag onto the bin
+  // to delete, two fingers to resize and turn, tap a selected caption to
+  // retype it.
+  function handleOverlayPointerDown(e, overlay) {
     e.stopPropagation()
-    setSelectedOverlayId(id)
-    dragStartEditRef.current = edit
-    e.currentTarget.setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const pointers = pointersRef.current
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.size === 1) {
+      beginGesture()
+      overlayGestureRef.current = {
+        moved: false,
+        startX: e.clientX,
+        startY: e.clientY,
+        // Where it was, so it moves with the finger from wherever it was
+        // grabbed rather than jumping its centre under it.
+        fromX: overlay.x,
+        fromY: overlay.y,
+        wasSelected: selectedOverlayId === overlay.id,
+      }
+      setSelectedOverlayId(overlay.id)
+    } else if (pointers.size === 2 && overlayGestureRef.current) {
+      overlayGestureRef.current.moved = true
+      overlayGestureRef.current.pinch = {
+        start: [...pointers.values()],
+        scale: overlay.scale ?? 1,
+        rotation: overlay.rotation ?? 0,
+      }
+    }
   }
 
-  function handleDragMove(e, id) {
-    if (e.buttons !== 1) return
-    const rect = previewRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const x = clamp(((e.clientX - rect.left) / rect.width) * 100, 2, 98)
-    const y = clamp(((e.clientY - rect.top) / rect.height) * 100, 2, 98)
-    changeEdit((prev) => ({
-      ...prev,
-      overlays: prev.overlays.map((o) => (o.id === id ? { ...o, x, y } : o)),
-    }), { record: false })
+  function handleOverlayPointerMove(e, overlay) {
+    const pointers = pointersRef.current
+    const gesture = overlayGestureRef.current
+    if (!pointers.has(e.pointerId) || !gesture) return
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (gesture.pinch && pointers.size >= 2) {
+      const now = [...pointers.values()].slice(0, 2)
+      updateOverlay(overlay.id, pinchTransform(gesture.pinch.start, now, gesture.pinch.scale, gesture.pinch.rotation), { record: false })
+      return
+    }
+    if (pointers.size !== 1 || gesture.pinch) return
+    if (!gesture.moved && Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY) < TAP_DISTANCE) return
+    gesture.moved = true
+    setDragging(true)
+    const rect = stageRef.current?.getBoundingClientRect()
+    if (!rect?.width) return
+    const snapped = snapToCentre(
+      clamp(gesture.fromX + ((e.clientX - gesture.startX) / rect.width) * 100, 2, 98),
+      clamp(gesture.fromY + ((e.clientY - gesture.startY) / rect.height) * 100, 2, 98),
+    )
+    setGuides(snapped.guides)
+    const bin = binRef.current?.getBoundingClientRect()
+    const onBin = Boolean(bin && e.clientX >= bin.left - 12 && e.clientX <= bin.right + 12 && e.clientY >= bin.top - 12 && e.clientY <= bin.bottom + 12)
+    setOverBin(onBin)
+    gesture.overBin = onBin
+    updateOverlay(overlay.id, { x: snapped.x, y: snapped.y }, { record: false })
   }
 
-  function finishDrag() {
-    const before = dragStartEditRef.current
-    dragStartEditRef.current = null
-    if (before && JSON.stringify(before) !== JSON.stringify(edit)) {
+  function handleOverlayPointerUp(e, overlay) {
+    const pointers = pointersRef.current
+    pointers.delete(e.pointerId)
+    const gesture = overlayGestureRef.current
+    if (gesture?.pinch && pointers.size < 2) gesture.pinch = null
+    if (pointers.size > 0) return
+    overlayGestureRef.current = null
+    setDragging(false)
+    setOverBin(false)
+    setGuides({ vertical: false, horizontal: false })
+    if (gesture?.moved && gesture.overBin) {
+      // Dropped on the bin: one undo step brings it back where it was.
+      const before = gestureStartRef.current ?? editRef.current
+      gestureStartRef.current = null
       setPast((items) => [...items.slice(-49), before])
       setFuture([])
+      setEdit((prev) => ({ ...prev, overlays: prev.overlays.filter((o) => o.id !== overlay.id) }))
+      setSelectedOverlayId(null)
+      return
+    }
+    endGesture()
+    if (gesture && !gesture.moved && gesture.wasSelected && overlay.kind === 'text') editText(overlay)
+  }
+
+  function handleOverlayKeyDown(e, overlay) {
+    const amount = e.shiftKey ? 5 : 1
+    const scale = overlay.scale ?? 1
+    const rotation = overlay.rotation ?? 0
+    const patch = {
+      ArrowLeft: { x: clamp(overlay.x - amount, 2, 98) },
+      ArrowRight: { x: clamp(overlay.x + amount, 2, 98) },
+      ArrowUp: { y: clamp(overlay.y - amount, 2, 98) },
+      ArrowDown: { y: clamp(overlay.y + amount, 2, 98) },
+      '+': { scale: clamp(scale + 0.1, OVERLAY_SCALE_MIN, OVERLAY_SCALE_MAX) },
+      '=': { scale: clamp(scale + 0.1, OVERLAY_SCALE_MIN, OVERLAY_SCALE_MAX) },
+      '-': { scale: clamp(scale - 0.1, OVERLAY_SCALE_MIN, OVERLAY_SCALE_MAX) },
+      '[': { rotation: rotation - 15 },
+      ']': { rotation: rotation + 15 },
+    }[e.key]
+    if (patch) {
+      e.preventDefault()
+      updateOverlay(overlay.id, patch)
+      return
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault()
+      removeOverlay(overlay.id)
+    } else if (e.key === 'Enter' && overlay.kind === 'text') {
+      e.preventDefault()
+      editText(overlay)
     }
   }
 
   async function handleSave() {
+    if (editingFile) {
+      onApply?.(meaningfulEdit(edit, duration))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       const saved = await updateVideoEdit(resource.id, edit)
-      onSaved(saved)
+      onSaved?.(saved)
       onClose()
     } catch (err) {
       setError(err.message)
@@ -227,610 +472,348 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
     }
   }
 
+  const iconButton = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-90 disabled:opacity-30'
+  const railButton = (active) => `${iconButton} backdrop-blur ${active ? 'bg-white text-black' : 'bg-black/45 hover:bg-white/15'}`
+  const displayTitle = title ?? resource?.title
+  const scaleBy = (overlay, step) => clamp((overlay.scale ?? 1) + step, OVERLAY_SCALE_MIN, OVERLAY_SCALE_MAX)
+
   return (
     <AccessibleDialog
       labelledBy="video-editor-dialog-title"
       onClose={requestClose}
-      overlayClassName="p-0 sm:p-4"
-      panelClassName="relative flex h-full w-full flex-col overflow-hidden bg-card sm:h-[min(92vh,900px)] sm:max-w-6xl sm:rounded-2xl sm:border sm:border-hairline"
+      closeOnBackdrop={false}
+      overlayClassName="p-0!"
+      panelClassName="relative flex h-full w-full flex-col overflow-hidden bg-black text-white focus:outline-none"
     >
-        <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-card px-3 py-3 shadow-sm sm:flex-nowrap sm:gap-3 sm:px-6">
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={saving}
-            aria-label="Close editor"
-            title="Close"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-60"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
-              <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-            </svg>
+      <header className="relative z-20 flex items-center gap-1 px-2 py-2 sm:gap-1.5 sm:px-4">
+        <button type="button" onClick={requestClose} disabled={saving} aria-label={closeLabel} title={closeLabel} className={`${iconButton} hover:bg-white/10`}>
+          <Icon size={20}><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></Icon>
+        </button>
+        <div className="min-w-0 flex-1 px-1">
+          <div className="flex items-center gap-2">
+            <h2 id="video-editor-dialog-title" className="truncate text-base font-semibold">Edit Video</h2>
+            {dirty && <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium">Edited</span>}
+          </div>
+          {displayTitle && <p className="truncate text-xs text-white/60">{displayTitle}</p>}
+        </div>
+        <button type="button" onClick={undo} disabled={!past.length || saving} aria-label="Undo" title="Undo" className={`${iconButton} hover:bg-white/10`}>
+          <Icon size={19}><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Icon>
+        </button>
+        <button type="button" onClick={redo} disabled={!future.length || saving} aria-label="Redo" title="Redo" className={`${iconButton} hover:bg-white/10`}>
+          <Icon size={19}><path d="M15 14 20 9l-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></Icon>
+        </button>
+        {dirty && (
+          <button type="button" onClick={() => changeEdit(baseline)} disabled={saving} aria-label="Restore Original" title="Restore original" className={`${iconButton} hover:bg-white/10`}>
+            <Icon size={19}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Icon>
           </button>
-          <div className="order-2 min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
-            <div className="flex items-center gap-2">
-              <h2 id="video-editor-dialog-title" className="truncate font-display text-xl text-ink">Edit Video</h2>
-              {dirty && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-xs font-medium text-ink">Edited</span>}
-            </div>
-            <p className="truncate text-xs text-secondary sm:text-sm">{resource.title}</p>
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            <button type="button" onClick={undo} disabled={!past.length || saving} aria-label="Undo" title="Undo"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-30">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-              </svg>
-            </button>
-            <button type="button" onClick={redo} disabled={!future.length || saving} aria-label="Redo" title="Redo"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-30">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M15 14 20 9l-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !dirty}
-              className="min-h-11 rounded-full bg-moss px-5 text-sm font-semibold text-paper shadow-sm transition-transform hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-            >
-              {saving ? 'Saving…' : 'Done'}
-            </button>
-          </div>
-        </header>
-
-        <div className="grid min-h-0 flex-1 grid-rows-[minmax(240px,45%)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)] lg:grid-rows-1">
-          <section className="flex min-h-0 flex-col bg-black" aria-label="Video preview and timeline">
-            <div className="flex min-h-0 flex-1 items-center justify-center p-0 sm:p-4">
-
-        <div
-          ref={previewRef}
-          className="relative max-h-full w-full overflow-hidden bg-black sm:rounded-xl"
+        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || (!editingFile && !dirty)}
+          className="ml-1 min-h-11 rounded-full bg-white px-5 text-sm font-semibold text-black transition-transform hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
         >
-          {/* See EditedVideoPlayer.jsx -- without this, mobile Safari pops
-              playback into its own native fullscreen layer, where the
-              overlay div below (and dragging) can't reach it. */}
+          {saving ? 'Saving…' : editingFile ? 'Use video' : 'Done'}
+        </button>
+      </header>
+
+      <div ref={areaRef} className="relative flex min-h-0 flex-1 items-center justify-center py-1 pl-2 pr-16 sm:px-16">
+        <div
+          ref={stageRef}
+          className="relative touch-none select-none overflow-hidden rounded-xl bg-black"
+          style={{ width: box.width || '100%', height: box.height || '100%' }}
+          onPointerDown={handleStagePointerDown}
+          onPointerUp={handleStagePointerUp}
+          onPointerCancel={() => { swipeRef.current = null }}
+        >
+          {/* playsInline: otherwise mobile Safari plays it in its own
+              fullscreen layer, where overlays can't be shown or dragged. */}
           <video
             ref={videoRef}
-            src={contentFileUrl(resource)}
-            controls
+            src={src}
             playsInline
-            onLoadedMetadata={(e) => {
-              handleLoadedMetadata(e)
-              trim.handleLoadedMetadata(e)
-            }}
+            preload="auto"
+            aria-label="Video preview. Tap to play or pause, swipe sideways to change filter."
+            onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={(e) => {
               trim.handleTimeUpdate(e)
               setCurrentTime(e.currentTarget.currentTime)
             }}
             onSeeking={trim.handleSeeking}
             onEnded={trim.handleNativeEnded}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
             style={{ filter: buildFilterCss(edit.filter) }}
-            className="w-full max-h-[45vh] block"
+            className="block h-full w-full object-contain"
           />
-          {/* pointer-events-none on the layer itself -- otherwise this
-              full-size transparent div, sitting above the <video> in
-              stacking order, would swallow every click meant for the
-              browser's native controls (play, scrub, fullscreen) even in
-              the empty space between overlays. Each overlay item opts back
-              in with pointer-events-auto so dragging still works. */}
-          <div className="absolute inset-0 pointer-events-none">
+
+          {guides.vertical && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-sky-300" aria-hidden="true" />}
+          {guides.horizontal && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-sky-300" aria-hidden="true" />}
+
+          {/* The layer lets taps through to the preview; each overlay opts
+              back in so it can be dragged. */}
+          <div className="pointer-events-none absolute inset-0">
             {edit.overlays.map((o) => {
-              // Scrubbing/playing the preview shows overlays exactly like
-              // real playback would (see EditedVideoPlayer) -- that's the
-              // "slide yourself and see the edits in place" behavior. The
-              // one exception is whichever overlay is currently selected:
-              // it stays visible (dimmed if outside its own window) so it's
-              // always draggable, rather than vanishing out from under you
-              // the moment you scrub away from its time range.
               const inWindow = currentTime >= o.startTime && currentTime <= o.endTime
               const isSelected = selectedOverlayId === o.id
+              // The selected one stays (dimmed) outside its time so it can
+              // still be moved.
               if (!inWindow && !isSelected) return null
               return (
                 <div
                   key={o.id}
-                  onPointerDown={(e) => startDrag(e, o.id)}
-                  onPointerMove={(e) => handleDragMove(e, o.id)}
-                  onPointerUp={finishDrag}
-                  onPointerCancel={finishDrag}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${o.kind === 'text' ? 'Text' : 'Sticker'} overlay: ${o.content}. Use arrow keys to move.`}
-                  onKeyDown={(e) => {
-                    const amount = e.shiftKey ? 5 : 1
-                    const movement = {
-                      ArrowLeft: { x: clamp(o.x - amount, 2, 98) },
-                      ArrowRight: { x: clamp(o.x + amount, 2, 98) },
-                      ArrowUp: { y: clamp(o.y - amount, 2, 98) },
-                      ArrowDown: { y: clamp(o.y + amount, 2, 98) },
-                    }[e.key]
-                    if (movement) {
-                      e.preventDefault()
-                      updateOverlay(o.id, movement)
-                    }
-                  }}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded pointer-events-auto transition-[opacity,box-shadow] ${
-                    isSelected ? 'ring-2 ring-gold ring-offset-2 ring-offset-black/40' : ''
-                  } ${!inWindow ? 'opacity-40' : ''}`}
-                  style={{ left: `${o.x}%`, top: `${o.y}%` }}
+                  aria-pressed={isSelected}
+                  aria-label={`${o.kind === 'text' ? 'Text' : 'Sticker'} overlay: ${o.content}. Arrow keys move it, plus and minus resize it, square brackets turn it${o.kind === 'text' ? ', Enter edits it' : ''}, Delete removes it.`}
+                  onPointerDown={(e) => handleOverlayPointerDown(e, o)}
+                  onPointerMove={(e) => handleOverlayPointerMove(e, o)}
+                  onPointerUp={(e) => handleOverlayPointerUp(e, o)}
+                  onPointerCancel={(e) => handleOverlayPointerUp(e, o)}
+                  onDoubleClick={() => o.kind === 'text' && editText(o)}
+                  onFocus={() => setSelectedOverlayId(o.id)}
+                  onKeyDown={(e) => handleOverlayKeyDown(e, o)}
+                  className={`pointer-events-auto absolute max-w-[85%] cursor-move touch-none rounded-lg px-1 text-center transition-opacity focus:outline-none ${
+                    isSelected ? 'outline-2 outline-offset-4 outline-dashed outline-white/80' : ''
+                  } ${!inWindow ? 'opacity-40' : ''} ${dragging && overBin && isSelected ? 'opacity-50' : ''}`}
+                  style={{ left: `${o.x}%`, top: `${o.y}%`, transform: overlayTransform(o) }}
                 >
-                  {o.kind === 'text' ? (
-                    <span
-                      style={{
-                        color: o.color,
-                        fontSize: OVERLAY_SIZE_PX[o.size],
-                        backgroundColor: o.background || undefined,
-                        padding: o.background ? '0.25em 0.6em' : undefined,
-                        borderRadius: o.background ? '999px' : undefined,
-                      }}
-                      className={`font-bold whitespace-pre-wrap ${o.background ? '' : '[text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'}`}
-                    >
-                      {o.content}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: OVERLAY_SIZE_PX[o.size] }}>{o.content}</span>
-                  )}
+                  <VideoOverlayContent overlay={o} />
                 </div>
               )
             })}
           </div>
+
+          {dragging && (
+            <div
+              ref={binRef}
+              className={`pointer-events-none absolute bottom-4 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border-2 transition-transform ${
+                overBin ? 'scale-125 border-red-500 bg-red-500 text-white' : 'border-white/80 bg-black/50 text-white'
+              }`}
+              aria-hidden="true"
+            >
+              <Icon size={22}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Icon>
+            </div>
+          )}
+
+          {!playing && !dragging && !selectedOverlayId && duration != null && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>
+              </span>
+            </div>
+          )}
+
+          {toast && (
+            <p className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/60 px-4 py-1.5 text-sm font-semibold" role="status">
+              {toast}
+            </p>
+          )}
         </div>
-            </div>
 
-            <div className="border-t border-white/20 bg-[#111] px-4 py-3 text-white sm:px-6">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-medium text-white/80">Video Timeline</p>
-                {duration && <p className="text-xs tabular-nums text-white/60">{formatTime(currentTime)} / {formatTime(duration)}</p>}
-              </div>
-              {duration ? (
-                <TimelineRangeSlider
-                  duration={duration}
-                  start={edit.trimStart}
-                  end={edit.trimEnd ?? duration}
-                  currentTime={currentTime}
-                  label="Video trim"
-                  dark
-                  onChange={({ start, end }) => changeEdit((prev) => ({ ...prev, trimStart: start, trimEnd: end }))}
-                />
-              ) : <p className="text-xs text-white/60">Loading video…</p>}
-            </div>
-          </section>
-
-          <aside className="min-h-0 overflow-y-auto overscroll-contain rounded-t-2xl bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.08)] lg:rounded-none lg:shadow-none" aria-label="Editing tools">
-            {/* Purely a visual cue that this panel is a bottom sheet on
-                mobile (where the grid stacks video-on-top) -- there's no
-                swipe-to-dismiss gesture behind it, closing still only
-                happens via the header's Close button. */}
-            <div className="flex justify-center pt-2 lg:hidden">
-              <div className="h-1 w-10 rounded-full bg-hairline" />
-            </div>
-            <div className="p-4 sm:p-6">
-
-        {edit.overlays.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap mt-3">
-            {edit.overlays.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setSelectedOverlayId(o.id)}
-                aria-pressed={selectedOverlayId === o.id}
-                className={`min-h-11 rounded-full border px-3 text-xs font-medium transition-transform active:scale-95 ${
-                  selectedOverlayId === o.id
-                    ? 'border-gold bg-gold/10 text-ink'
-                    : 'border-hairline text-secondary hover:text-ink'
-                }`}
-              >
-                {o.kind === 'text' ? `“${o.content.slice(0, 12)}${o.content.length > 12 ? '…' : ''}”` : o.content}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-paper p-1.5" role="tablist" aria-label="Video editing tools">
-          {TABS.map(({ id, label, Icon }) => (
+        <nav className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2 sm:right-4" aria-label="Video editing tools">
+          {TOOLS.map(({ id, label, icon }) => (
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
-              role="tab"
-              aria-selected={tab === id}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-xs font-medium transition-all active:scale-95 ${
-                tab === id ? 'bg-moss text-paper shadow-sm' : 'text-secondary hover:bg-card hover:text-ink'
-              }`}
+              onClick={() => chooseTool(id)}
+              aria-pressed={id === 'text' ? undefined : tool === id}
+              aria-label={id === 'text' ? 'Add Text' : label}
+              title={label}
+              className={railButton(tool === id)}
             >
-              <Icon />
-              {label}
+              {icon}
             </button>
           ))}
-        </div>
+          <button
+            type="button"
+            onClick={() => changeEdit((prev) => ({ ...prev, muted: !prev.muted }))}
+            aria-pressed={edit.muted}
+            aria-label="Mute"
+            title={edit.muted ? 'Sound off' : 'Sound on'}
+            className={railButton(edit.muted)}
+          >
+            <Icon>
+              <path d="M11 5 6 9H3v6h3l5 4z" />
+              {edit.muted
+                ? <><line x1="22" y1="9" x2="16" y2="15" /><line x1="16" y1="9" x2="22" y2="15" /></>
+                : <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />}
+            </Icon>
+          </button>
+        </nav>
+      </div>
 
-        <div className="pt-4 space-y-4">
-          {tab === 'text' && (
-            <button
-              type="button"
-              onClick={() => addOverlay(createTextOverlay(edit.trimEnd ?? duration))}
-              className="flex min-h-11 items-center gap-2 rounded-full bg-moss px-5 text-sm font-semibold text-paper shadow-sm transition-transform hover:opacity-90 active:scale-95"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add Text
-            </button>
-          )}
-
-          {tab === 'icons' && (
-            <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6" aria-label="Stickers">
+      <div className="relative z-20 space-y-2.5 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-6">
+        {tool === 'stickers' && (
+          <section aria-label="Stickers" className="rounded-2xl bg-white/10 p-2.5">
+            <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-12">
               {STICKER_EMOJI.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
-                  onClick={() => addOverlay(createIconOverlay(emoji, edit.trimEnd ?? duration))}
-                  className="flex aspect-square min-h-11 items-center justify-center rounded-full bg-paper text-2xl shadow-sm transition-transform hover:bg-hairline/40 active:scale-90"
+                  onClick={() => {
+                    addOverlay(createIconOverlay(emoji, edit.trimEnd ?? duration))
+                    setTool(null)
+                  }}
+                  className="flex aspect-square min-h-10 items-center justify-center rounded-xl text-2xl transition-transform hover:bg-white/10 active:scale-90"
                   aria-label={`Add ${emoji} sticker`}
                 >
                   {emoji}
                 </button>
               ))}
             </div>
-          )}
+          </section>
+        )}
 
-          {tab === 'trim' && (
-            <TrimTab
-              edit={edit}
-              duration={duration}
-              currentTime={currentTime}
-              onChange={(patch) => changeEdit((prev) => ({ ...prev, ...patch }))}
-              getCurrentTime={() => videoRef.current?.currentTime ?? 0}
-            />
-          )}
-
-          {tab === 'adjust' && (
-            <AdjustTab
-              edit={edit}
-              onFilterChange={(patch) => changeEdit((prev) => ({ ...prev, filter: { ...prev.filter, ...patch } }))}
-              onSpeedChange={(playbackRate) => {
-                changeEdit((prev) => ({ ...prev, playbackRate }))
-                if (videoRef.current) videoRef.current.playbackRate = playbackRate
-              }}
-            />
-          )}
-
-          {selectedOverlay && (
-            <div className="rounded-2xl border border-hairline bg-card p-4 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink">
-                  Editing {selectedOverlay.kind === 'text' ? 'text' : 'sticker'}
-                </p>
+        {tool === 'filters' && (
+          <section aria-label="Filters" className="space-y-2.5">
+            <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter presets">
+              {FILTER_PRESETS.map((preset) => (
                 <button
+                  key={preset.id}
                   type="button"
-                  onClick={() => removeOverlay(selectedOverlay.id)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-red-700 transition-transform hover:bg-red-700/10 active:scale-90"
-                  aria-label="Delete overlay"
-                  title="Delete"
+                  onClick={() => applyPreset(preset.id)}
+                  aria-pressed={activePreset === preset.id}
+                  className="flex w-16 shrink-0 flex-col items-center gap-1 text-[11px] font-medium"
                 >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                  </svg>
+                  <span className={`block h-16 w-16 overflow-hidden rounded-xl border-2 ${activePreset === preset.id ? 'border-white' : 'border-transparent'}`}>
+                    <FrameThumb videoRef={videoRef} filter={presetFilter(preset.id)} />
+                  </span>
+                  {preset.label}
                 </button>
-              </div>
-
-              {selectedOverlay.kind === 'text' && (
-                <>
-                  <textarea
-                    aria-label="Overlay text"
-                    value={selectedOverlay.content}
-                    onChange={(e) => updateOverlay(selectedOverlay.id, { content: e.target.value })}
-                    rows={2}
-                    className="w-full rounded-xl border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                  <ColorSwatchRow
-                    label="Text color"
-                    presets={TEXT_COLOR_PRESETS}
-                    value={selectedOverlay.color}
-                    onChange={(color) => updateOverlay(selectedOverlay.id, { color })}
-                  />
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium text-secondary">Background pill</span>
-                      <button
-                        type="button"
-                        onClick={() => updateOverlay(selectedOverlay.id, { background: selectedOverlay.background ? null : TEXT_BACKGROUND_PRESETS[0] })}
-                        aria-pressed={Boolean(selectedOverlay.background)}
-                        className={`min-h-8 rounded-full px-3 text-xs font-medium transition-colors ${
-                          selectedOverlay.background ? 'bg-moss text-paper' : 'bg-paper text-secondary hover:text-ink'
-                        }`}
-                      >
-                        {selectedOverlay.background ? 'On' : 'Off'}
-                      </button>
-                    </div>
-                    {selectedOverlay.background && (
-                      <ColorSwatchRow
-                        label="Background color"
-                        presets={TEXT_BACKGROUND_PRESETS}
-                        value={selectedOverlay.background}
-                        onChange={(background) => updateOverlay(selectedOverlay.id, { background })}
-                        hideLabel
-                      />
-                    )}
-                  </div>
-                </>
-              )}
-
-              <div>
-                <p className="text-xs font-medium text-secondary mb-1.5">Size</p>
-                <div className="flex items-center gap-1.5">
-                  {SIZES.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => updateOverlay(selectedOverlay.id, { size })}
-                      aria-pressed={selectedOverlay.size === size}
-                      className={`min-h-9 rounded-full border px-3.5 text-xs font-medium capitalize transition-transform active:scale-95 ${
-                        selectedOverlay.size === size
-                          ? 'border-moss bg-moss text-paper'
-                          : 'border-hairline text-ink hover:bg-paper'
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-secondary mb-1.5">Show on video from…until</p>
-                {duration ? (
-                  <TimelineRangeSlider
-                    duration={duration}
-                    start={selectedOverlay.startTime}
-                    end={selectedOverlay.endTime}
-                    currentTime={currentTime}
-                    label={`${selectedOverlay.kind === 'text' ? 'Text' : 'Sticker'} timing`}
-                    onChange={({ start, end }) => updateOverlay(selectedOverlay.id, { startTime: start, endTime: end })}
-                  />
-                ) : (
-                  <p className="text-xs text-secondary">Loading video…</p>
-                )}
-              </div>
+              ))}
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setFineTune((open) => !open)}
+              aria-expanded={fineTune}
+              className="min-h-9 rounded-full bg-white/10 px-3.5 text-xs font-medium hover:bg-white/15"
+            >
+              Fine-tune
+            </button>
+            {fineTune && (
+              <div className="grid gap-3 rounded-2xl bg-white/10 p-3 sm:grid-cols-3">
+                {[
+                  { key: 'brightness', label: 'Brightness' },
+                  { key: 'contrast', label: 'Contrast' },
+                  { key: 'saturate', label: 'Saturation' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="block text-xs">
+                    <span className="mb-1 flex justify-between"><span className="font-medium">{label}</span><span className="font-mono text-white/60">{edit.filter[key]}%</span></span>
+                    <input
+                      type="range"
+                      min={50}
+                      max={150}
+                      value={edit.filter[key]}
+                      onPointerDown={beginGesture}
+                      onPointerUp={endGesture}
+                      onChange={(e) => changeEdit((prev) => ({ ...prev, filter: { ...prev.filter, [key]: Number(e.target.value) } }), { record: !gestureStartRef.current })}
+                      className="w-full accent-white"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tool === 'speed' && (
+          <section aria-label="Playback speed" className="flex flex-wrap items-center gap-1.5">
+            {PLAYBACK_RATES.map((rate) => (
+              <button
+                key={rate}
+                type="button"
+                onClick={() => changeEdit((prev) => ({ ...prev, playbackRate: rate }))}
+                aria-pressed={edit.playbackRate === rate}
+                className={`min-h-10 rounded-full px-4 text-sm font-medium transition-transform active:scale-95 ${
+                  edit.playbackRate === rate ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/15'
+                }`}
+              >
+                {rate}×
+              </button>
+            ))}
+          </section>
+        )}
+
+        {!tool && selectedOverlay && (
+          <section aria-label={`Selected ${selectedOverlay.kind === 'text' ? 'text' : 'sticker'}`} className="flex flex-wrap items-center gap-1.5">
+            {selectedOverlay.kind === 'text' && (
+              <button type="button" onClick={() => editText(selectedOverlay)} className="min-h-10 rounded-full bg-white/10 px-4 text-sm font-medium hover:bg-white/15">
+                Edit text
+              </button>
+            )}
+            <button type="button" aria-label="Smaller" onClick={() => updateOverlay(selectedOverlay.id, { scale: scaleBy(selectedOverlay, -0.15) })} className={`${iconButton} bg-white/10 hover:bg-white/15`}>
+              <Icon size={18}><line x1="5" y1="12" x2="19" y2="12" /></Icon>
+            </button>
+            <button type="button" aria-label="Bigger" onClick={() => updateOverlay(selectedOverlay.id, { scale: scaleBy(selectedOverlay, 0.15) })} className={`${iconButton} bg-white/10 hover:bg-white/15`}>
+              <Icon size={18}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>
+            </button>
+            <button type="button" aria-label="Turn left" onClick={() => updateOverlay(selectedOverlay.id, { rotation: (selectedOverlay.rotation ?? 0) - 15 })} className={`${iconButton} bg-white/10 hover:bg-white/15`}>
+              <Icon size={18}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Icon>
+            </button>
+            <button type="button" aria-label="Turn right" onClick={() => updateOverlay(selectedOverlay.id, { rotation: (selectedOverlay.rotation ?? 0) + 15 })} className={`${iconButton} bg-white/10 hover:bg-white/15`}>
+              <Icon size={18}><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></Icon>
+            </button>
+            <button type="button" aria-label="Delete overlay" onClick={() => removeOverlay(selectedOverlay.id)} className={`${iconButton} bg-white/10 text-red-300 hover:bg-red-500/20`}>
+              <Icon size={18}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Icon>
+            </button>
+            <p className="hidden text-xs text-white/60 sm:block">Drag to move · pinch to resize and turn · drag to the bin to delete</p>
+          </section>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={togglePlay} disabled={!duration} aria-label={playing ? 'Pause' : 'Play'} className={`${iconButton} bg-white/10 hover:bg-white/15`}>
+            {playing
+              ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+              : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>}
+          </button>
+          <p className="font-mono text-xs tabular-nums text-white/70">
+            {formatTime(currentTime)}{duration ? ` / ${formatTime(duration)}` : ''}
+          </p>
+          {error && <p className="ml-auto text-xs text-red-300" role="alert">Couldn’t save your edit. {error}</p>}
         </div>
 
-        {error && <p className="mt-4 text-sm text-red-700" role="alert">Couldn’t save your edit. {error}</p>}
+        <FilmstripTimeline
+          src={src}
+          duration={duration}
+          currentTime={currentTime}
+          trimStart={edit.trimStart}
+          trimEnd={edit.trimEnd}
+          overlays={edit.overlays}
+          selectedId={selectedOverlayId}
+          onSeek={seek}
+          onSelectOverlay={setSelectedOverlayId}
+          onGestureStart={beginGesture}
+          onGestureEnd={endGesture}
+          onTrimChange={({ start, end }, record) => changeEdit((prev) => ({ ...prev, trimStart: start, trimEnd: end }), { record })}
+          onOverlayTimeChange={(id, { start, end }, record) => updateOverlay(id, { startTime: start, endTime: end }, { record })}
+        />
 
-              <div className="mt-6 rounded-lg bg-paper p-3 text-xs leading-relaxed text-secondary">
-                Your edits are non-destructive and update this shared video everywhere it is used.
-              </div>
-              {dirty && (
-                <button
-                  type="button"
-                  onClick={() => changeEdit(initialEdit)}
-                  className="mt-3 min-h-11 rounded-full px-3 text-sm font-medium text-secondary transition-transform hover:bg-paper hover:text-ink active:scale-95"
-                >
-                  Restore Original
-                </button>
-              )}
-            </div>
-          </aside>
-        </div>
+        {!editingFile && (
+          <p className="text-[11px] text-white/50">Edits don’t change the uploaded file and apply everywhere this video is used.</p>
+        )}
+      </div>
 
-        <p className="sr-only" aria-live="polite">{saving ? 'Saving video edit' : error ? 'Video edit could not be saved' : ''}</p>
+      <p className="sr-only" aria-live="polite">{saving ? 'Saving video edit' : error ? 'Video edit could not be saved' : ''}</p>
 
-        {confirmDiscard && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 p-4">
-            <div role="alertdialog" aria-modal="true" aria-labelledby="discard-title" className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl">
-              <h3 id="discard-title" className="font-display text-lg text-ink">Discard Your Changes?</h3>
-              <p className="mt-2 text-sm text-secondary">Your video has unsaved edits. You can keep editing or discard them and return to the library.</p>
-              <div className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setConfirmDiscard(false)} className="min-h-11 rounded-full border border-hairline px-4 text-sm font-medium text-ink transition-transform hover:bg-paper active:scale-95" autoFocus>
-                  Keep Editing
-                </button>
-                <button type="button" onClick={onClose} className="min-h-11 rounded-full bg-red-700 px-4 text-sm font-medium text-white transition-transform hover:opacity-90 active:scale-95">
-                  Discard
-                </button>
-              </div>
+      {textEntry && <TextEntryOverlay overlay={textEntry.overlay} onDone={finishText} />}
+
+      {confirmDiscard && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 p-4">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="discard-title" className="w-full max-w-sm rounded-2xl bg-card p-5 text-ink shadow-xl">
+            <h3 id="discard-title" className="font-display text-lg text-ink">Discard Your Changes?</h3>
+            <p className="mt-2 text-sm text-secondary">Your video has unsaved edits. You can keep editing, or discard them.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmDiscard(false)} className="min-h-11 rounded-full border border-hairline px-4 text-sm font-medium text-ink transition-transform hover:bg-paper active:scale-95" autoFocus>
+                Keep Editing
+              </button>
+              <button type="button" onClick={onClose} className="min-h-11 rounded-full bg-red-700 px-4 text-sm font-medium text-white transition-transform hover:opacity-90 active:scale-95">
+                Discard
+              </button>
             </div>
           </div>
-        )}
-    </AccessibleDialog>
-  )
-}
-
-function TrimTab({ edit, duration, currentTime, onChange, getCurrentTime }) {
-  if (!duration) return <p className="text-sm text-secondary">Loading video…</p>
-  return (
-    <div>
-      <TimelineRangeSlider
-        duration={duration}
-        start={edit.trimStart}
-        end={edit.trimEnd ?? duration}
-        currentTime={currentTime}
-        label="Video trim"
-        onChange={({ start, end }) => onChange({ trimStart: start, trimEnd: end })}
-      />
-      <div className="flex items-center gap-2 mt-2">
-        <button
-          type="button"
-          onClick={() => onChange({ trimStart: clamp(getCurrentTime(), 0, (edit.trimEnd ?? duration) - MIN_RANGE_GAP) })}
-          className="min-h-9 rounded-full bg-paper px-3.5 text-xs font-medium text-moss transition-transform hover:bg-hairline/40 active:scale-95"
-        >
-          Set Start Here
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange({ trimEnd: clamp(getCurrentTime(), edit.trimStart + MIN_RANGE_GAP, duration) })}
-          className="min-h-9 rounded-full bg-paper px-3.5 text-xs font-medium text-moss transition-transform hover:bg-hairline/40 active:scale-95"
-        >
-          Set End Here
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Shared by the Trim tab (trimStart/trimEnd) and each selected overlay's
-// visibility window (startTime/endTime) -- a horizontal track with two
-// pointer-draggable handles, plus a playhead tick synced to the preview
-// video's currentTime for context. Replaces a pair of plain number inputs
-// that fought typing (their `value` was a freshly `.toFixed(1)`-formatted
-// string on every keystroke, resetting the cursor mid-edit) with direct
-// manipulation instead -- same drag-via-pointer-capture technique already
-// used for positioning overlays on the video canvas above.
-const MIN_RANGE_GAP = 0.1
-
-function TimelineRangeSlider({ duration, start, end, currentTime, onChange, label = 'Timeline range', dark = false }) {
-  const trackRef = useRef(null)
-
-  function timeAtClientX(clientX) {
-    const rect = trackRef.current?.getBoundingClientRect()
-    if (!rect || !rect.width) return 0
-    return clamp(((clientX - rect.left) / rect.width) * duration, 0, duration)
-  }
-
-  function handleMove(e, which) {
-    if (e.buttons !== 1) return
-    const t = timeAtClientX(e.clientX)
-    if (which === 'start') onChange({ start: clamp(t, 0, end - MIN_RANGE_GAP), end })
-    else onChange({ start, end: clamp(t, start + MIN_RANGE_GAP, duration) })
-  }
-
-  function handleKeyDown(e, which) {
-    const step = e.shiftKey ? 1 : 0.1
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
-    e.preventDefault()
-    if (which === 'start') {
-      const next = e.key === 'Home' ? 0 : e.key === 'End' ? end - MIN_RANGE_GAP : start + (e.key === 'ArrowLeft' ? -step : step)
-      onChange({ start: clamp(next, 0, end - MIN_RANGE_GAP), end })
-    } else {
-      const next = e.key === 'Home' ? start + MIN_RANGE_GAP : e.key === 'End' ? duration : end + (e.key === 'ArrowLeft' ? -step : step)
-      onChange({ start, end: clamp(next, start + MIN_RANGE_GAP, duration) })
-    }
-  }
-
-  const startPct = (start / duration) * 100
-  const endPct = (end / duration) * 100
-  const playheadPct = clamp((currentTime / duration) * 100, 0, 100)
-
-  return (
-    <div>
-      <div ref={trackRef} className="relative h-7" style={{ touchAction: 'none' }}>
-        <div className={`absolute top-1/2 -translate-y-1/2 w-full h-2 rounded-full ${dark ? 'bg-white/15' : 'bg-hairline'}`} />
-        <div
-          className="absolute top-1/2 -translate-y-1/2 h-2 rounded-full bg-gradient-to-r from-moss to-emerald-400 shadow-[0_0_10px_rgba(74,103,65,0.6)]"
-          style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
-        />
-        <div
-          className="absolute top-0 bottom-0 w-0.5 rounded-full bg-gold shadow-[0_0_6px_var(--color-gold)]"
-          style={{ left: `${playheadPct}%` }}
-          title={`Playhead: ${formatTime(currentTime)}`}
-        />
-        {[
-          { key: 'start', pct: startPct },
-          { key: 'end', pct: endPct },
-        ].map(({ key, pct }) => (
-          <button
-            key={key}
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              e.currentTarget.setPointerCapture(e.pointerId)
-            }}
-            onPointerMove={(e) => handleMove(e, key)}
-            onKeyDown={(e) => handleKeyDown(e, key)}
-            role="slider"
-            aria-label={`${label} ${key}`}
-            aria-valuemin={0}
-            aria-valuemax={duration}
-            aria-valuenow={key === 'start' ? start : end}
-            aria-valuetext={formatTime(key === 'start' ? start : end)}
-            className={`absolute top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full bg-transparent transition-transform active:scale-110 before:absolute before:left-1/2 before:top-1/2 before:h-6 before:w-6 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border-2 before:bg-moss before:shadow-[0_2px_8px_rgba(0,0,0,0.4)] cursor-ew-resize ${dark ? 'before:border-white' : 'before:border-card'}`}
-            style={{ left: `${pct}%` }}
-          />
-        ))}
-      </div>
-      <div className={`flex items-center justify-between text-[10px] font-mono mt-0.5 ${dark ? 'text-white/60' : 'text-secondary'}`}>
-        <span>{formatTime(start)}</span>
-        <span>{formatTime(end)}</span>
-      </div>
-    </div>
-  )
-}
-
-const FILTER_CONTROLS = [
-  { key: 'brightness', label: 'Brightness' },
-  { key: 'contrast', label: 'Contrast' },
-  { key: 'saturate', label: 'Saturation' },
-]
-
-function AdjustTab({ edit, onFilterChange, onSpeedChange }) {
-  return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-hairline bg-card p-4 shadow-sm space-y-4">
-        {FILTER_CONTROLS.map(({ key, label }) => {
-          const pct = ((edit.filter[key] - 50) / 100) * 100
-          return (
-            <div key={key}>
-              <div className="flex items-center justify-between text-sm text-ink mb-1">
-                <label htmlFor={`video-filter-${key}`} className="font-medium">{label}</label>
-                <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-mono text-secondary">{edit.filter[key]}%</span>
-              </div>
-              <input
-                id={`video-filter-${key}`}
-                type="range"
-                min={50}
-                max={150}
-                value={edit.filter[key]}
-                onChange={(e) => onFilterChange({ [key]: Number(e.target.value) })}
-                className="w-full accent-moss"
-                style={{ background: `linear-gradient(to right, var(--color-moss) ${pct}%, var(--color-hairline) ${pct}%)`, height: '6px', borderRadius: '999px', appearance: 'none' }}
-              />
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onFilterChange({ grayscale: edit.filter.grayscale > 0 ? 0 : 100 })}
-          aria-pressed={edit.filter.grayscale > 0}
-          className={`min-h-10 rounded-full border px-4 text-sm font-medium transition-transform active:scale-95 ${
-            edit.filter.grayscale > 0 ? 'border-moss bg-moss text-paper' : 'border-hairline text-ink hover:bg-paper'
-          }`}
-        >
-          Grayscale
-        </button>
-        <button
-          type="button"
-          onClick={() => onFilterChange({ sepia: edit.filter.sepia > 0 ? 0 : 100 })}
-          aria-pressed={edit.filter.sepia > 0}
-          className={`min-h-10 rounded-full border px-4 text-sm font-medium transition-transform active:scale-95 ${
-            edit.filter.sepia > 0 ? 'border-moss bg-moss text-paper' : 'border-hairline text-ink hover:bg-paper'
-          }`}
-        >
-          Sepia
-        </button>
-      </div>
-
-      <div>
-        <p className="text-sm font-medium text-ink mb-1.5">Playback speed</p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {PLAYBACK_RATES.map((rate) => (
-            <button
-              key={rate}
-              type="button"
-              onClick={() => onSpeedChange(rate)}
-              aria-pressed={edit.playbackRate === rate}
-              className={`min-h-11 rounded-full border px-3.5 text-xs font-medium transition-transform active:scale-95 ${
-                edit.playbackRate === rate
-                  ? 'border-moss bg-moss text-paper'
-                  : 'border-hairline text-ink hover:bg-paper'
-              }`}
-            >
-              {rate}×
-            </button>
-          ))}
         </div>
-      </div>
-    </div>
+      )}
+    </AccessibleDialog>
   )
 }

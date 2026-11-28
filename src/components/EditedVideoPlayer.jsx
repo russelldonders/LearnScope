@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { contentFileUrl } from '../lib/courseContent'
-import { OVERLAY_SIZE_PX, buildFilterCss, normalizeVideoEdit, useTrimPlayback } from '../lib/videoEdit'
+import { buildFilterCss, normalizeVideoEdit, overlayTransform, useTrimPlayback } from '../lib/videoEdit'
+import VideoOverlayContent from './VideoOverlayContent'
 
 // Read-only playback of a video resource's stored edit (trim/filter/speed/
 // overlays) -- the counterpart to VideoEditorModal.jsx, which writes that
@@ -29,6 +30,7 @@ export default function EditedVideoPlayer({ resource, onEnded, className = '', c
         src={contentFileUrl(resource)}
         controls={controls}
         playsInline
+        muted={edit.muted}
         onLoadedMetadata={trim.handleLoadedMetadata}
         onTimeUpdate={(e) => {
           trim.handleTimeUpdate(e)
@@ -44,25 +46,10 @@ export default function EditedVideoPlayer({ resource, onEnded, className = '', c
           {visibleOverlays.map((o) => (
             <div
               key={o.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2 select-none max-w-[80%] text-center"
-              style={{ left: `${o.x}%`, top: `${o.y}%` }}
+              className="absolute select-none max-w-[80%] text-center"
+              style={{ left: `${o.x}%`, top: `${o.y}%`, transform: overlayTransform(o) }}
             >
-              {o.kind === 'text' ? (
-                <span
-                  style={{
-                    color: o.color,
-                    fontSize: OVERLAY_SIZE_PX[o.size],
-                    backgroundColor: o.background || undefined,
-                    padding: o.background ? '0.25em 0.6em' : undefined,
-                    borderRadius: o.background ? '999px' : undefined,
-                  }}
-                  className={`font-bold whitespace-pre-wrap ${o.background ? '' : '[text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'}`}
-                >
-                  {o.content}
-                </span>
-              ) : (
-                <span style={{ fontSize: OVERLAY_SIZE_PX[o.size] }}>{o.content}</span>
-              )}
+              <VideoOverlayContent overlay={o} />
             </div>
           ))}
         </div>

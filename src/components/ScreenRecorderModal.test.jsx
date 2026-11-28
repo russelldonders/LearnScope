@@ -80,7 +80,7 @@ describe('ScreenRecorderModal', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Screen recording is not supported')
   })
 
-  it('records, previews, and returns a video file', async () => {
+  async function recordAndStop(onRecorded = vi.fn(), onClose = vi.fn()) {
     const videoTrack = Object.assign(fakeTrack(), { kind: 'video' })
     const displayStream = fakeStream({ video: [videoTrack] })
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -90,21 +90,39 @@ describe('ScreenRecorderModal', () => {
         getUserMedia: vi.fn(),
       },
     })
-    const onRecorded = vi.fn()
-    const onClose = vi.fn()
     render(<ScreenRecorderModal onClose={onClose} onRecorded={onRecorded} />)
 
     fireEvent.click(screen.getByRole('checkbox', { name: /include microphone narration/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Choose screen and record' }))
     expect(await screen.findByText('Recording in progress')).toBeInTheDocument()
-
     fireEvent.click(screen.getByText('Stop recording'))
-    expect(await screen.findByText('Recording ready')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Use recording' }))
+    return { onRecorded, onClose }
+  }
+
+  it('opens the recording straight in the editor and returns it', async () => {
+    const { onRecorded, onClose } = await recordAndStop()
+
+    expect(await screen.findByRole('heading', { name: 'Edit Video' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Use video' }))
 
     await waitFor(() => expect(onRecorded).toHaveBeenCalledOnce())
     expect(onRecorded.mock.calls[0][0]).toBeInstanceOf(File)
     expect(onRecorded.mock.calls[0][0].type).toContain('video/webm')
+    expect(onRecorded.mock.calls[0][1]).toEqual({ edit: null })
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('comes back to the review step when the editor is closed', async () => {
+    const { onRecorded } = await recordAndStop()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close editor' }))
+    expect(screen.getByText('Recording ready')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('heading', { name: 'Edit Video' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use recording' }))
+    expect(onRecorded).toHaveBeenCalledOnce()
+    expect(onRecorded.mock.calls[0][1]).toEqual({ edit: null })
   })
 })

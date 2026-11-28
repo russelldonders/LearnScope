@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ScreenRecorderModal from '../../components/ScreenRecorderModal'
+import CameraRecorderModal from '../../components/CameraRecorderModal'
 import PageBuilderModal from '../../components/PageBuilderModal'
-import { linkResourceToCourse, uploadVideoResource, uploadScreenRecordingResource, uploadFileResource, uploadScormResource, uploadXapiResource, uploadCmi5Resource, addWebResource, addExternalVideoResource, listLtiTools, createLtiResource } from '../../lib/courseContent'
+import { linkResourceToCourse, uploadVideoResource, uploadScreenRecordingResource, uploadFileResource, uploadScormResource, uploadXapiResource, uploadCmi5Resource, addWebResource, addExternalVideoResource, listLtiTools, createLtiResource, updateVideoEdit } from '../../lib/courseContent'
 import { RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 
 // Attach-existing / upload-new / build-a-page, moved from the now-removed
@@ -25,6 +26,10 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
   const [uploading, setUploading] = useState(false)
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
   const [recordedFileName, setRecordedFileName] = useState('')
+  const [showCameraRecorder, setShowCameraRecorder] = useState(false)
+  // An edit made on a recording before it's uploaded, saved onto the new
+  // resource once the upload has made it.
+  const [pendingVideoEdit, setPendingVideoEdit] = useState(null)
   const [webUrl, setWebUrl] = useState('')
   const [selectedFileName, setSelectedFileName] = useState('')
   const [dragging, setDragging] = useState(false)
@@ -38,13 +43,27 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
     listLtiTools(organisationId).then(setLtiTools).catch(() => {})
   }, [organisationId])
 
-  function setRecordedFile(file) {
+  function setRecordedFile(file, { edit = null } = {}) {
     if (!fileInputRef.current) return
     const transfer = new DataTransfer()
     transfer.items.add(file)
     fileInputRef.current.files = transfer.files
     setRecordedFileName(file.name)
+    setPendingVideoEdit(edit)
     if (!uploadTitle.trim()) setUploadTitle('Screen recording')
+  }
+
+  function setCameraRecording(file, { edit = null } = {}) {
+    setChosenFile(file)
+    setPendingVideoEdit(edit)
+    if (!uploadTitle.trim()) setUploadTitle('Camera recording')
+  }
+
+  // Filming in the page where the browser allows it, so the recording can
+  // go straight into the editor; otherwise the device's own camera app.
+  function takeVideo() {
+    if (navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined') setShowCameraRecorder(true)
+    else cameraInputRef.current?.click()
   }
 
   // Shared by drag-drop and "Take video" -- both hand this a File that isn't
@@ -63,6 +82,7 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
   function handleFileInputChange(e) {
     const file = e.target.files?.[0]
     if (file) setSelectedFileName(file.name)
+    setPendingVideoEdit(null)
   }
 
   function handleDragEnter(e) {
@@ -89,7 +109,10 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
     dragCounterRef.current = 0
     setDragging(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) setChosenFile(file)
+    if (file) {
+      setChosenFile(file)
+      setPendingVideoEdit(null)
+    }
   }
 
   async function handleAttach() {
@@ -168,6 +191,9 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
               : uploadType === 'xapi'
                 ? await uploadXapiResource(organisationId, userId, file, uploadTitle)
                 : await uploadCmi5Resource(organisationId, userId, file, uploadTitle)
+      if (pendingVideoEdit && (uploadType === 'video' || uploadType === 'screen_recording')) {
+        await updateVideoEdit(resource.id, pendingVideoEdit)
+      }
       await linkResourceToCourse(courseId, resource.id, section.id)
       await onChanged()
       onClose()
@@ -326,6 +352,7 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
                   setUploadType(e.target.value)
                   if (fileInputRef.current) fileInputRef.current.value = ''
                   setRecordedFileName('')
+                  setPendingVideoEdit(null)
                   setSelectedFileName('')
                   setWebUrl('')
                 }}
@@ -433,7 +460,7 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
                     {uploadType === 'video' && (
                       <button
                         type="button"
-                        onClick={() => cameraInputRef.current?.click()}
+                        onClick={takeVideo}
                         className="inline-flex items-center gap-1.5 rounded-md border border-moss text-moss px-3 py-1.5 text-sm font-medium hover:bg-moss/5"
                       >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -470,6 +497,7 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
                     onChange={(e) => {
                       const file = e.target.files?.[0]
                       if (file) setChosenFile(file)
+                      setPendingVideoEdit(null)
                     }}
                     className="hidden"
                   />
@@ -496,6 +524,9 @@ export function AddResourceModal({ section, courseId, organisationId, userId, av
 
           {showScreenRecorder && (
             <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
+          )}
+          {showCameraRecorder && (
+            <CameraRecorderModal onClose={() => setShowCameraRecorder(false)} onRecorded={setCameraRecording} />
           )}
 
           <div className="flex justify-end gap-2 mt-5">

@@ -1,22 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
+import VideoEditorModal from './VideoEditorModal'
+import { recordingMimeType, recordingFile } from '../lib/mediaRecording'
 
 const MAX_RECORDING_SECONDS = 15 * 60
-
-function supportedMimeType() {
-  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return ''
-  return [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-    'video/mp4;codecs=avc1.424028,mp4a.40.2',
-    'video/mp4',
-  ].find((type) => MediaRecorder.isTypeSupported(type)) || ''
-}
-
-function fileExtension(mimeType) {
-  return mimeType.startsWith('video/mp4') ? 'mp4' : 'webm'
-}
 
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60)
@@ -118,7 +105,7 @@ export default function ScreenRecorderModal({ onClose, onRecorded }) {
       }
 
       const recordingStream = await buildRecordingStream(displayStream, microphoneStream)
-      const mimeType = supportedMimeType()
+      const mimeType = recordingMimeType()
       const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined)
       recorderRef.current = recorder
 
@@ -128,19 +115,16 @@ export default function ScreenRecorderModal({ onClose, onRecorded }) {
       recorder.addEventListener('stop', () => {
         clearTimer()
         stopTracks()
-        const finalMimeType = recorder.mimeType || mimeType || 'video/webm'
-        const blob = new Blob(chunksRef.current, { type: finalMimeType })
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-        const file = new File([blob], `screen-recording-${timestamp}.${fileExtension(finalMimeType)}`, {
-          type: finalMimeType,
-        })
-        const url = URL.createObjectURL(blob)
+        const file = recordingFile(chunksRef.current, recorder.mimeType || mimeType, 'screen-recording')
+        const url = URL.createObjectURL(file)
         setRecordedFile(file)
         setPreviewUrl((current) => {
           if (current) URL.revokeObjectURL(current)
           return url
         })
-        setStatus('preview')
+        // Straight into the editor, the way a story app opens what you
+        // just filmed; closing it comes back to the review step.
+        setStatus('editing')
       })
       recorder.addEventListener('error', () => {
         clearTimer()
@@ -193,9 +177,9 @@ export default function ScreenRecorderModal({ onClose, onRecorded }) {
     setStatus('ready')
   }
 
-  function useRecording() {
+  function acceptRecording(edit = null) {
     if (!recordedFile) return
-    onRecorded(recordedFile)
+    onRecorded(recordedFile, { edit })
     onClose()
   }
 
@@ -210,6 +194,17 @@ export default function ScreenRecorderModal({ onClose, onRecorded }) {
   }
 
   const active = status === 'recording' || status === 'paused'
+
+  if (status === 'editing' && recordedFile) {
+    return (
+      <VideoEditorModal
+        file={recordedFile}
+        title="Screen recording"
+        onApply={(edit) => acceptRecording(edit)}
+        onClose={() => setStatus('preview')}
+      />
+    )
+  }
 
   return (
     <AccessibleDialog
@@ -309,7 +304,10 @@ export default function ScreenRecorderModal({ onClose, onRecorded }) {
               <button type="button" onClick={recordAgain} className="rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:border-moss">
                 Record again
               </button>
-              <button type="button" onClick={useRecording} className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90">
+              <button type="button" onClick={() => setStatus('editing')} className="rounded-md border border-moss text-moss py-2 px-3 text-sm font-medium hover:bg-moss/5">
+                Edit
+              </button>
+              <button type="button" onClick={() => acceptRecording()} className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90">
                 Use recording
               </button>
             </div>

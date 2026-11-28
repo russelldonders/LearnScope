@@ -16,6 +16,7 @@ import {
   contentFileUrl,
   listLtiTools,
   createLtiResource,
+  updateVideoEdit,
 } from '../lib/courseContent'
 import ScormPlayer from './ScormPlayer'
 import XapiPlayer from './XapiPlayer'
@@ -25,6 +26,7 @@ import ConfirmDialog from './ConfirmDialog'
 import EditedVideoPlayer from './EditedVideoPlayer'
 import VideoEditorModal from './VideoEditorModal'
 import ScreenRecorderModal from './ScreenRecorderModal'
+import CameraRecorderModal from './CameraRecorderModal'
 import PageBuilderModal from './PageBuilderModal'
 import PageContent from './PageContent'
 import { useRowSelection, useSortedPage } from '../lib/useSortedPage'
@@ -75,6 +77,10 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
   const [videoUrl, setVideoUrl] = useState('')
   const [editingResource, setEditingResource] = useState(null)
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
+  const [showCameraRecorder, setShowCameraRecorder] = useState(false)
+  // An edit made on a recording before it's uploaded, saved onto the new
+  // resource once the upload has made it.
+  const [pendingVideoEdit, setPendingVideoEdit] = useState(null)
   const [historyForId, setHistoryForId] = useState(null)
   const [versionHistory, setVersionHistory] = useState([])
   const [editingPage, setEditingPage] = useState(null)
@@ -190,12 +196,15 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
     setUploading(true)
     setError(null)
     try {
-      if (type === 'video') await uploadVideoResource(organisationId, userId, file, title)
-      else if (type === 'screen_recording') await uploadScreenRecordingResource(organisationId, userId, file, title)
+      let created = null
+      if (type === 'video') created = await uploadVideoResource(organisationId, userId, file, title)
+      else if (type === 'screen_recording') created = await uploadScreenRecordingResource(organisationId, userId, file, title)
       else if (type === 'file') await uploadFileResource(organisationId, userId, file, title)
       else if (type === 'scorm') await uploadScormResource(organisationId, userId, file, title)
       else if (type === 'xapi') await uploadXapiResource(organisationId, userId, file, title)
       else await uploadCmi5Resource(organisationId, userId, file, title)
+      if (created && pendingVideoEdit) await updateVideoEdit(created.id, pendingVideoEdit)
+      setPendingVideoEdit(null)
       setTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
       setFileName('')
@@ -220,6 +229,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
     e.preventDefault()
     setDragActive(false)
     setSelectedFile(e.dataTransfer.files?.[0])
+    setPendingVideoEdit(null)
   }
 
   async function handleDelete() {
@@ -380,6 +390,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
               setType(e.target.value)
               if (fileInputRef.current) fileInputRef.current.value = ''
               setFileName('')
+              setPendingVideoEdit(null)
               setVideoUrl('')
               setSelectedLtiToolId('')
             }}
@@ -504,9 +515,25 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
             ref={fileInputRef}
             type="file"
             accept={type === 'scorm' || type === 'xapi' || type === 'cmi5' ? '.zip' : type === 'video' ? 'video/*' : undefined}
-            onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
+            onChange={(e) => {
+              setFileName(e.target.files?.[0]?.name || '')
+              setPendingVideoEdit(null)
+            }}
             className="sr-only"
           />
+          {type === 'video' && (
+            <button
+              type="button"
+              onClick={() => setShowCameraRecorder(true)}
+              className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-moss px-3 py-1.5 text-sm font-medium text-moss hover:bg-moss/5"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M23 7l-7 5 7 5V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" />
+              </svg>
+              Record with camera
+            </button>
+          )}
         </div>
         )}
         <button
@@ -662,9 +689,21 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
       {showScreenRecorder && (
         <ScreenRecorderModal
           onClose={() => setShowScreenRecorder(false)}
-          onRecorded={(file) => {
+          onRecorded={(file, { edit = null } = {}) => {
             setSelectedFile(file)
+            setPendingVideoEdit(edit)
             if (!title.trim()) setTitle('Screen recording')
+          }}
+        />
+      )}
+
+      {showCameraRecorder && (
+        <CameraRecorderModal
+          onClose={() => setShowCameraRecorder(false)}
+          onRecorded={(file, { edit = null } = {}) => {
+            setSelectedFile(file)
+            setPendingVideoEdit(edit)
+            if (!title.trim()) setTitle('Camera recording')
           }}
         />
       )}
